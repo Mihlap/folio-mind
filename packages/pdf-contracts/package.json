@@ -1,0 +1,16 @@
+{
+  "name": "@folio-mind/pdf-contracts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

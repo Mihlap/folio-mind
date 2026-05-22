@@ -1,0 +1,19 @@
+import { configureStore } from '@reduxjs/toolkit';
+import './api/authApi.js';
+import { baseApi } from './api/baseApi.js';
+import { authSlice } from './slices/authSlice.js';
+import { uiSlice } from './slices/uiSlice.js';
+
+export const createAppStore = () =>
+  configureStore({
+    reducer: {
+      auth: authSlice.reducer,
+      ui: uiSlice.reducer,
+      [baseApi.reducerPath]: baseApi.reducer,
+    },
+    middleware: (getDefault) => getDefault().concat(baseApi.middleware),
+  });
+
+export type AppStore = ReturnType<typeof createAppStore>;
+export type RootState = ReturnType<AppStore['getState']>;
+export type AppDispatch = AppStore['dispatch'];

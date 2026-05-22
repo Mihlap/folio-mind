@@ -1,0 +1,23 @@
+{
+  "name": "@folio-mind/observability",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/resources": "^1.30.0",
+    "@opentelemetry/sdk-node": "^0.57.0",
+    "@opentelemetry/sdk-trace-base": "^1.30.0",
+    "@opentelemetry/semantic-conventions": "^1.30.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

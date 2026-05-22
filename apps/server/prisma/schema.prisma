@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  users     User[]
+  documents Document[]
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String?
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime   @default(now())
+  documents    Document[]
+  auditLogs    AuditLog[]
+}
+
+model Document {
+  id        String            @id @default(cuid())
+  title     String
+  tenantId  String
+  ownerId   String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  owner     User              @relation(fields: [ownerId], references: [id])
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  versions  DocumentVersion[]
+
+  @@index([tenantId, updatedAt])
+}
+
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version    Int
+  s3Key      String
+  size       BigInt   @default(0)
+  sha256     String?
+  mimeType   String   @default("application/pdf")
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+
+  @@unique([documentId, version])
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  type      String
+  status    String   @default("queued")
+  payload   Json?
+  tenantId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  tenantId   String
+  documentId String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
