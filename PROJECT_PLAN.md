@@ -727,7 +727,7 @@ folio-mind/
 
 ## 9. План для заказчика (Word)
 
-Текстовая версия для презентаций и печати: `Folio Mind Plan.docx` (обновляется скриптом `scripts/update-folio-mind-plan-docx.ps1`). Технический источник истины — этот `PROJECT_PLAN.md`; после изменений здесь — при необходимости пересобрать docx.
+Текстовая версия для презентаций и печати: [docs/Folio_Mind_Plan_content.md](./docs/Folio_Mind_Plan_content.md) и [docs/Folio Mind Plan [PPOS93].docx](./docs/Folio%20Mind%20Plan%20%5BPPOS93%5D.docx). Технический источник истины — этот `PROJECT_PLAN.md`; после изменений здесь — синхронизировать markdown и при необходимости обновить docx.
 
 ---
 
