@@ -1,14 +1,21 @@
 import { initTracing, withSpan } from '@folio-mind/observability';
 import { Worker } from 'bullmq';
+import { processAiChatJob } from './jobs/ai-chat.js';
+import { processAiSummaryJob } from './jobs/ai-summary.js';
+import { processGeneratePreviewsJob, processPreviewPagesJob } from './jobs/generate-previews.js';
+import { loadWorkerEnv } from './lib/env.js';
 import { loadAppEnv } from './lib/load-env.js';
 import type { WorkerJobPayload } from './lib/job-types.js';
+import { initWorkerS3 } from './lib/s3.js';
 import { createRedisConnection, QUEUE_NAMES } from './queues.js';
 
 loadAppEnv();
 initTracing('folio-mind-worker');
 
-const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
-const connection = createRedisConnection(redisUrl);
+const env = loadWorkerEnv();
+initWorkerS3(env);
+
+const connection = createRedisConnection(env.REDIS_URL);
 
 function logJob(queue: string, jobId: string | undefined, data: WorkerJobPayload) {
   const requestId = data.requestId ?? '—';
@@ -25,10 +32,15 @@ function createPreviewWorker() {
         'job.id': String(job.id),
       }, async () => {
         logJob('preview', job.id, data);
+        if (job.name === 'generate-previews') {
+          await processGeneratePreviewsJob(env, data);
+        } else if (job.name === 'preview-pages') {
+          await processPreviewPagesJob(env, data);
+        }
         return { ok: true };
       });
     },
-    { connection, concurrency: 2 },
+    { connection, concurrency: env.PREVIEW_WORKER_CONCURRENCY },
   );
 }
 
@@ -42,10 +54,15 @@ function createAiWorker() {
         'job.id': String(job.id),
       }, async () => {
         logJob('ai', job.id, data);
+        if (job.name === 'summary') {
+          await processAiSummaryJob(env, data);
+        } else if (job.name === 'chat') {
+          await processAiChatJob(env, data);
+        }
         return { ok: true };
       });
     },
-    { connection, concurrency: 1 },
+    { connection, concurrency: env.AI_WORKER_CONCURRENCY },
   );
 }
 
@@ -55,7 +72,9 @@ const aiWorker = createAiWorker();
 previewWorker.on('failed', (job, err) => console.error('[preview] failed', job?.id, err));
 aiWorker.on('failed', (job, err) => console.error('[ai] failed', job?.id, err));
 
-console.log('Worker started: queues preview, ai');
+console.log(
+  `Worker started: queues preview (concurrency=${env.PREVIEW_WORKER_CONCURRENCY}), ai (concurrency=${env.AI_WORKER_CONCURRENCY})`,
+);
 
 async function shutdown() {
   await Promise.all([previewWorker.close(), aiWorker.close()]);

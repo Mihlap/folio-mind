@@ -25,6 +25,21 @@ model User {
   createdAt    DateTime   @default(now())
   documents    Document[]
   auditLogs    AuditLog[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@unique([tokenHash])
 }
 
 model Document {
@@ -51,6 +66,7 @@ model DocumentVersion {
   sha256     String?
   mimeType   String   @default("application/pdf")
   status     String   @default("pending")
+  pageCount  Int?
   createdAt  DateTime @default(now())
 
   @@unique([documentId, version])

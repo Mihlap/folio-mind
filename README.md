@@ -69,7 +69,7 @@ pnpm dev
 
 ## Фаза 0 (статус)
 
-Готово: монорепо, compose, Prisma + auth JWT, MinIO init, BullMQ заготовки, OTEL/request-id, rate-limit, юридические черновики.
+Готово: монорепо, compose, Prisma + auth JWT, MinIO init, BullMQ заготовки, OTEL/request-id, rate-limit, документация в `docs/` (в т.ч. юридические черновики).
 
 Отложено: **CI** (GitHub Actions) — по запросу.
 

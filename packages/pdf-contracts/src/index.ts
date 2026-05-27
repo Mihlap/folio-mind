@@ -1,3 +1,14 @@
+export {
+  FILES_ROOT,
+  S3_PREFIX,
+  assertS3KeyUnderFilesRoot,
+  extractedTextKey,
+  exportReportKey,
+  previewPageKey,
+  resolveS3Key,
+  type S3PrefixKey,
+} from './s3-paths.js';
+
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';

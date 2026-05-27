@@ -1,0 +1,24 @@
+{
+  "name": "@folio-mind/ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^4.10.38"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.11",
+    "react": "^19.0.0",
+    "typescript": "^5.8.2"
+  }
+}

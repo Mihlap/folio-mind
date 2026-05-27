@@ -19,8 +19,7 @@ export function RegisterPage() {
       const res = await register({ email, password, name: name || undefined }).unwrap();
       dispatch(setCredentials(res));
       navigate('/app');
-    } catch {
-      /* shown below */
+    } catch {  
     }
   }
 

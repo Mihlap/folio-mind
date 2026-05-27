@@ -16,7 +16,20 @@ export const authApi = baseApi.injectEndpoints({
     health: build.query<{ status: string; timestamp: string }, void>({
       query: () => '/health',
     }),
+    forgotPassword: build.mutation<{ ok: true }, { email: string }>({
+      query: (body) => ({ url: '/auth/forgot-password', method: 'POST', body }),
+    }),
+    resetPassword: build.mutation<{ ok: true }, { token: string; newPassword: string }>({
+      query: (body) => ({ url: '/auth/reset-password', method: 'POST', body }),
+    }),
   }),
 });
 
-export const { useRegisterMutation, useLoginMutation, useMeQuery, useHealthQuery } = authApi;
+export const {
+  useRegisterMutation,
+  useLoginMutation,
+  useMeQuery,
+  useHealthQuery,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+} = authApi;

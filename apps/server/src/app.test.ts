@@ -7,6 +7,9 @@ const testEnv = {
   API_HOST: '127.0.0.1',
   JWT_SECRET: 'test-secret-min-32-characters-long',
   CORS_ORIGIN: 'http://localhost:5173',
+  FRONTEND_URL: 'http://localhost:5173',
+  PASSWORD_RESET_TOKEN_TTL_MINUTES: 30,
+  SMTP_SECURE: false,
   REDIS_URL: 'redis://localhost:6379',
   DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://folio:folio@localhost:5434/folio_mind',
   S3_REGION: 'ru-1',
@@ -15,6 +18,14 @@ const testEnv = {
   GIGACHAT_SCOPE: 'GIGACHAT_API_PERS',
   GIGACHAT_MODEL: 'GigaChat',
   GIGACHAT_TIMEOUT: 180,
+  YANDEX_MODEL: 'yandexgpt/latest',
+  AI_TENANT_DAILY_REQUESTS: 100,
+  PREVIEW_INITIAL_PAGES: 15,
+  PREVIEW_MAX_PAGES: 200,
+  PREVIEW_THUMB_BATCH: 20,
+  PREVIEW_JOB_TIMEOUT_MS: 300_000,
+  AI_JOB_TIMEOUT_MS: 180_000,
+  QUEUE_WARN_WAITING: 50,
 };
 
 describe('API /health', () => {

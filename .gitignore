@@ -24,8 +24,6 @@ secrets/
 # Local dev / machine-specific scripts (WSL, Docker, Postgres setup)
 /scripts/
 
-/docs/
-
 # IDE / editor
 .cursor/
 .vscode/settings.json

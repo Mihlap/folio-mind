@@ -18,7 +18,7 @@ export function LoginPage() {
       dispatch(setCredentials(res));
       navigate('/app');
     } catch {
-      /* shown below */
+   
     }
   }
 
@@ -37,6 +37,11 @@ export function LoginPage() {
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? 'Вход…' : 'Войти'}
         </Button>
+        <div className="text-center text-sm">
+          <Link to="/forgot-password" className="font-medium text-folio-600 hover:underline">
+            Забыли пароль?
+          </Link>
+        </div>
       </form>
       <p className="mt-6 text-center text-sm text-slate-500">
         Нет аккаунта?{' '}
@@ -60,11 +65,18 @@ function AuthLayout({
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-folio-50 via-white to-slate-100 px-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-200/50">
-        <Link to="/" className="font-display text-2xl text-folio-950">
-          Folio Mind
-        </Link>
-        <h1 className="mt-6 text-2xl font-semibold text-slate-900">{title}</h1>
-        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        <div className="text-center">
+          <Link
+            to="/"
+            className="font-display text-3xl font-semibold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-folio-700 via-folio-950 to-slate-900"
+          >
+            РазУм
+          </Link>
+          <h1 className="mt-6 text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
+          <p className="mt-1 inline-block rounded-xl bg-folio-50 px-3 py-1 text-sm font-medium text-folio-950">
+            {subtitle}
+          </p>
+        </div>
         <div className="mt-8">{children}</div>
       </div>
     </div>
