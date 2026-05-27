@@ -1,7 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '../store.js';
 
-const baseUrl =
+export const apiBaseUrl =
   (typeof import.meta !== 'undefined' &&
     (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL) ||
   (typeof process !== 'undefined' && process.env.VITE_API_URL) ||
@@ -10,7 +10,7 @@ const baseUrl =
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
-    baseUrl,
+    baseUrl: apiBaseUrl,
     prepareHeaders: (headers, { getState }) => {
       const token = (getState() as RootState).auth.token;
       if (token) headers.set('Authorization', `Bearer ${token}`);

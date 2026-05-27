@@ -8,15 +8,24 @@
     "build": "tsup src/index.ts --format esm",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postinstall": "prisma generate --schema=../server/prisma/schema.prisma"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@folio-mind/ai-providers": "workspace:*",
     "@folio-mind/observability": "workspace:*",
+    "@folio-mind/pdf-contracts": "workspace:*",
+    "@napi-rs/canvas": "^0.1.65",
+    "@prisma/client": "^6.5.0",
     "bullmq": "^5.41.0",
     "dotenv": "^16.4.7",
-    "ioredis": "^5.5.0"
+    "ioredis": "^5.5.0",
+    "pdfjs-dist": "^4.10.38",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
+    "prisma": "^6.5.0",
     "@types/node": "^22.13.10",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",

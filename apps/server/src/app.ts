@@ -12,7 +12,9 @@ import { GLOBAL_RATE_LIMIT } from './lib/rate-limits.js';
 import { prismaPlugin } from './plugins/prisma.js';
 import { requestIdPlugin } from './plugins/request-id.js';
 import { tracingPlugin } from './plugins/tracing.js';
+import { aiRoutes } from './routes/ai.js';
 import { authRoutes } from './routes/auth.js';
+import { documentRoutes } from './routes/documents.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 
@@ -66,11 +68,13 @@ export async function buildApp(options: BuildAppOptions) {
 
   if (!options.skipDatabase && options.env.DATABASE_URL) {
     await app.register(prismaPlugin);
-    await app.register(healthRoutes);
-    await app.register(authRoutes);
+    await app.register(healthRoutes, { env: options.env });
+    await app.register(authRoutes, { env: options.env });
     await app.register(meRoutes);
+    await app.register(documentRoutes, { env: options.env });
+    await app.register(aiRoutes, { env: options.env });
   } else if (options.skipDatabase) {
-    await app.register(healthRoutes);
+    await app.register(healthRoutes, { env: options.env });
   }
 
   return app;

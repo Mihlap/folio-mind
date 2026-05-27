@@ -2,6 +2,14 @@ import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import type { Env } from '../lib/env.js';
+import { AUTH_PASSWORD_RESET_RATE_LIMIT } from '../lib/rate-limits.js';
+import {
+  buildPasswordResetUrl,
+  createPasswordResetToken,
+  sha256Hex,
+} from '../lib/password-reset.js';
+import { createMailer } from '../lib/mailer.js';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -15,8 +23,18 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-export const authRoutes: FastifyPluginAsync = async (app) => {
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(10),
+  newPassword: z.string().min(8),
+});
+
+export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const env = opts.env;
 
   r.post(
     '/auth/register',
@@ -117,6 +135,95 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           tenantId: user.tenantId,
         },
       };
+    },
+  );
+
+  r.post(
+    '/auth/forgot-password',
+    {
+      config: { rateLimit: AUTH_PASSWORD_RESET_RATE_LIMIT },
+      schema: {
+        body: forgotPasswordSchema,
+        response: {
+          200: z.object({ ok: z.literal(true) }),
+          503: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const email = request.body.email.toLowerCase().trim();
+      const user = await app.prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        return { ok: true as const };
+      }
+
+      const { token, tokenHash, expiresAt } = createPasswordResetToken(env);
+      await app.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      const url = buildPasswordResetUrl(env, token);
+      try {
+        const mailer = createMailer(env, request.log);
+        await mailer.sendPasswordResetEmail({ to: email, resetUrl: url });
+      } catch (err) {
+        request.log.error({ err, email }, 'password reset email failed');
+        return reply.code(503).send({
+          error:
+            'Не удалось отправить письмо. Проверьте SMTP_HOST=smtp.mail.ru и пароль ящика folio_mind@mail.ru',
+        });
+      }
+
+      return { ok: true as const };
+    },
+  );
+
+  r.post(
+    '/auth/reset-password',
+    {
+      config: { rateLimit: AUTH_PASSWORD_RESET_RATE_LIMIT },
+      schema: {
+        body: resetPasswordSchema,
+        response: {
+          200: z.object({ ok: z.literal(true) }),
+          400: z.object({ error: z.string() }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const token = request.body.token.trim();
+      const tokenHash = sha256Hex(token);
+
+      const record = await app.prisma.passwordResetToken.findUnique({
+        where: { tokenHash },
+      });
+
+      if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+        return reply.code(400).send({ error: 'Ссылка для сброса пароля недействительна или устарела' });
+      }
+
+      const passwordHash = await hashPassword(request.body.newPassword);
+
+      await app.prisma.$transaction([
+        app.prisma.user.update({
+          where: { id: record.userId },
+          data: { passwordHash },
+        }),
+        app.prisma.passwordResetToken.update({
+          where: { id: record.id },
+          data: { usedAt: new Date() },
+        }),   
+        app.prisma.passwordResetToken.updateMany({
+          where: { userId: record.userId, usedAt: null },
+          data: { usedAt: new Date() },
+        }),
+      ]);
+
+      return { ok: true as const };
     },
   );
 };

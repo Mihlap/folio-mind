@@ -7,6 +7,8 @@
 | [ROADMAP.md](./ROADMAP.md) | Фазы разработки 0–4 |
 | [DEPLOY.md](./DEPLOY.md) | Порты, окружение, S3, прод |
 | [PDF_LICENSES.md](./PDF_LICENSES.md) | Лицензии PDF-стека |
+| [AI_SETUP.md](./AI_SETUP.md) | GigaChat / YandexGPT, переключение провайдеров |
+| [PASSWORD_RESET.md](./PASSWORD_RESET.md) | Восстановление пароля (forgot/reset) |
 | [Folio_Mind_Plan_content.md](./Folio_Mind_Plan_content.md) | План для заказчика (текст для Word) |
 | [Folio Mind Plan [PPOS93].docx](./Folio%20Mind%20Plan%20%5BPPOS93%5D.docx) | Исходный план заказчика (Word) |
 | [legal/](./legal/) | Privacy, DPA, субпроцессоры (черновики) |

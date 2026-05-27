@@ -28,6 +28,29 @@ const envSchema = z.object({
 
   YANDEX_FOLDER_ID: z.string().optional(),
   YANDEX_IAM_TOKEN: z.string().optional(),
+  YANDEX_MODEL: z.string().default('yandexgpt/latest'),
+
+  AI_TENANT_DAILY_REQUESTS: z.coerce.number().int().min(1).default(100),
+
+  PREVIEW_INITIAL_PAGES: z.coerce.number().int().min(1).default(15),
+  PREVIEW_MAX_PAGES: z.coerce.number().int().min(1).default(200),
+  PREVIEW_THUMB_BATCH: z.coerce.number().int().min(1).default(20),
+  PREVIEW_JOB_TIMEOUT_MS: z.coerce.number().int().min(10_000).default(300_000),
+  AI_JOB_TIMEOUT_MS: z.coerce.number().int().min(10_000).default(180_000),
+  QUEUE_WARN_WAITING: z.coerce.number().int().min(1).default(50),
+
+  FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+  PASSWORD_RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(30),
+
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().optional(),
+  SMTP_SECURE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

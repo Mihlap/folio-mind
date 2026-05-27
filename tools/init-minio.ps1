@@ -1,7 +1,3 @@
-# Initialize MinIO bucket for local dev (prefixes under folioFiles/ — see apps/server/src/lib/s3-paths.ts).
-# Requires: docker compose up -d minio
-# Usage: powershell -ExecutionPolicy Bypass -File .\tools\init-minio.ps1
-
 $ErrorActionPreference = 'Stop'
 $bucket = 'folio-mind'
 $endpoint = 'http://localhost:9000'
@@ -25,7 +21,15 @@ docker run --rm --network folio-mind_default minio/mc:latest /bin/sh -c @"
 mc alias set local http://minio:9000 minio miniosecret
 mc mb -p local/$bucket || true
 mc anonymous set download local/$bucket || true
-echo OK bucket=$bucket
+for p in folioFiles/originals folioFiles/previews folioFiles/processing folioFiles/exports folioFiles/media folioFiles/rag-sources; do
+  echo '' | mc pipe local/$bucket/`$p/.keep || true
+done
 "@
+
+$corsFile = Join-Path $PSScriptRoot 'minio-cors.json'
+if (Test-Path $corsFile) {
+  docker run --rm --network folio-mind_default -v "${corsFile}:/tmp/cors.json" minio/mc:latest /bin/sh -c "mc alias set local http://minio:9000 minio miniosecret && mc cors set local/$bucket /tmp/cors.json"
+  Write-Host "MinIO CORS configured for localhost:5173"
+}
 
 Write-Host "MinIO bucket '$bucket' is ready."

@@ -38,12 +38,17 @@
 
 **Цель:** сценарий v1 — договор → просмотр → ИИ → отчёт + чат.
 
-- [ ] Presigned upload в S3, список документов (курсорная пагинация)
-- [ ] Viewer PDF.js, виртуализация страниц, превью из worker
-- [ ] Версии документов (immutable s3Key)
-- [ ] ИИ: GigaChat/Yandex через очередь, кэш, лимиты tenant
-- [ ] Аудит действий, экспорт отчёта проверки
-- [ ] Нагрузочный smoke: upload + preview + viewer на 50+ стр.
+- [x] Presigned upload в S3, список документов (курсорная пагинация), `POST /documents` + `complete`
+- [x] Базовый viewer PDF.js (`packages/ui`), маршрут `/app/documents/:id`
+- [x] ИИ: фабрика GigaChat/Yandex, `GET /ai/providers`, `POST /ai/complete`, summary через очередь (stub worker)
+- [x] Аудит: создание/просмотр/скачивание в `AuditLog`
+- [x] Viewer: виртуализация (continuous scroll), поиск по тексту, zoom, `viewerSlice`
+- [x] Worker: `generate-previews` (миниатюры PNG → S3) + `extract-text` (text.json → S3)
+- [x] Viewer: полоса миниатюр (presigned URLs)
+- [x] Версии: UI истории, новая версия upload
+- [x] ИИ: пересказ через очередь (worker → GigaChat/Yandex), кэш Redis, polling статуса в UI
+- [x] ИИ: чат-панель (очередь + polling), экспорт отчёта (Markdown → S3), лимиты tenant, выбор провайдера
+- [x] Нагрузочный smoke: `pnpm smoke:phase1` — upload + preview + file на 50+ стр. (скрипт `tools/smoke-phase1.mjs`)
 
 **Критерий:** PDF 10+ МБ загружается, превью асинхронно, ИИ не блокирует API.
 

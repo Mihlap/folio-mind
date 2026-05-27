@@ -1,14 +1,18 @@
 import { configureStore } from '@reduxjs/toolkit';
 import './api/authApi.js';
+import './api/documentsApi.js';
+import './api/aiApi.js';
 import { baseApi } from './api/baseApi.js';
 import { authSlice } from './slices/authSlice.js';
 import { uiSlice } from './slices/uiSlice.js';
+import { viewerSlice } from './slices/viewerSlice.js';
 
 export const createAppStore = () =>
   configureStore({
     reducer: {
       auth: authSlice.reducer,
       ui: uiSlice.reducer,
+      viewer: viewerSlice.reducer,
       [baseApi.reducerPath]: baseApi.reducer,
     },
     middleware: (getDefault) => getDefault().concat(baseApi.middleware),

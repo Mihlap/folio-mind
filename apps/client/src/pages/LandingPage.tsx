@@ -8,7 +8,7 @@ export function LandingPage() {
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <span className="font-display text-2xl text-folio-950">Folio Mind</span>
+        <span className="font-display text-2xl text-folio-950">РазУм</span>
         <div className="flex gap-3">
           <Link to="/login">
             <Button variant="ghost">Вход</Button>
@@ -42,7 +42,7 @@ export function LandingPage() {
             </Button>
           </Link>
         </div>
-        {health && (
+        {import.meta.env.DEV && health && (
           <p className="mt-8 text-xs text-slate-400">
             API: {health.status} · {new Date(health.timestamp).toLocaleTimeString('ru')}
           </p>

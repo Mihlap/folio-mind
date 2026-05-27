@@ -53,7 +53,10 @@ services:
       mc alias set local http://minio:9000 minio miniosecret;
       mc mb -p local/folio-mind || true;
       mc anonymous set download local/folio-mind || true;
-      echo 'MinIO ready: bucket folio-mind, app prefixes folioFiles/originals|previews|processing|exports|media';
+      for p in folioFiles/originals folioFiles/previews folioFiles/processing folioFiles/exports folioFiles/media folioFiles/rag-sources; do
+        echo '' | mc pipe local/folio-mind/$$p/.keep || true;
+      done;
+      echo 'MinIO ready: bucket folio-mind, objects under folioFiles/*';
       exit 0;
       "
 

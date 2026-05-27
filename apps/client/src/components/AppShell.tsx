@@ -16,7 +16,7 @@ export function AppShell() {
     <div className="flex min-h-screen bg-slate-50">
       <aside className="flex w-64 flex-col border-r border-slate-200 bg-white">
         <div className="border-b border-slate-100 px-5 py-6">
-          <span className="font-display text-2xl text-folio-950">Folio Mind</span>
+          <span className="font-display text-2xl text-folio-950">РазУм</span>
           <p className="mt-1 truncate text-xs text-slate-500">{me?.email}</p>
         </div>
         <nav className="flex-1 space-y-1 p-3">

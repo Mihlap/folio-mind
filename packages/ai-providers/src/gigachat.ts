@@ -17,6 +17,61 @@ export class GigaChatProvider implements LLMProvider {
     this.config = config ?? readGigaChatConfigFromEnv();
   }
 
+  async completeWithPdf(params: {
+    prompt: string;
+    system?: string;
+    pdf: Buffer;
+    filename?: string;
+    maxTokens?: number;
+  }): Promise<CompletionResponse> {
+    if (!this.config?.credentials) {
+      return {
+        text: `[GigaChat stub] PDF: ${params.filename ?? 'document.pdf'}`,
+        model: 'gigachat-stub',
+      };
+    }
+
+    const client = this.createClient();
+    const filename = params.filename ?? 'document.pdf';
+    const file = new File([params.pdf], filename, { type: 'application/pdf' });
+
+    let fileId: string | undefined;
+    try {
+      const uploaded = await client.uploadFile(file, 'general');
+      fileId = uploaded.id;
+
+      const completion = await client.chat({
+        messages: [
+          ...(params.system ? [{ role: 'system' as const, content: params.system }] : []),
+          {
+            role: 'user' as const,
+            content: params.prompt,
+            attachments: [uploaded.id],
+          },
+        ],
+        temperature: 0.6,
+        ...(params.maxTokens ? { max_tokens: params.maxTokens } : {}),
+        function_call: 'auto',
+      });
+
+      const text = completion.choices?.[0]?.message?.content?.trim() ?? '';
+      if (!text) throw new Error('GigaChat: пустой ответ модели');
+
+      return {
+        text,
+        model: this.config.model ?? 'GigaChat',
+      };
+    } finally {
+      if (fileId) {
+        try {
+          await client.deleteFile(fileId);
+        } catch {
+    
+        }
+      }
+    }
+  }
+
   async complete(params: CompletionRequest): Promise<CompletionResponse> {
     if (!this.config?.credentials) {
       return {
@@ -26,14 +81,7 @@ export class GigaChatProvider implements LLMProvider {
       };
     }
 
-    const client = new GigaChat({
-      credentials: this.config.credentials,
-      scope: this.config.scope ?? 'GIGACHAT_API_PERS',
-      model: this.config.model ?? 'GigaChat',
-      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-      timeout: this.config.timeout ?? 180,
-    });
-
+    const client = this.createClient();
     const completion = await client.chat({
       messages: [
         ...(params.system ? [{ role: 'system' as const, content: params.system }] : []),
@@ -54,6 +102,19 @@ export class GigaChatProvider implements LLMProvider {
 
   async healthCheck(): Promise<boolean> {
     return Boolean(this.config?.credentials);
+  }
+
+  private createClient(): GigaChat {
+    if (!this.config?.credentials) {
+      throw new Error('GigaChat credentials are not configured');
+    }
+    return new GigaChat({
+      credentials: this.config.credentials,
+      scope: this.config.scope ?? 'GIGACHAT_API_PERS',
+      model: this.config.model ?? 'GigaChat',
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      timeout: this.config.timeout ?? 180,
+    });
   }
 }
 
