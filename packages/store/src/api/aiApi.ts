@@ -69,12 +69,17 @@ export const aiApi = baseApi.injectEndpoints({
     }),
     exportReport: build.mutation<
       { url: string; key: string },
-      { documentId: string; versionId: string; chatMessages?: ChatMessage[] }
+      {
+        documentId: string;
+        versionId: string;
+        chatMessages?: ChatMessage[];
+        format?: 'md' | 'pdf' | 'word';
+      }
     >({
-      query: ({ documentId, versionId, chatMessages }) => ({
+      query: ({ documentId, versionId, chatMessages, format = 'word' }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/export`,
         method: 'POST',
-        body: { chatMessages },
+        body: { chatMessages, format },
       }),
     }),
     getJob: build.query<

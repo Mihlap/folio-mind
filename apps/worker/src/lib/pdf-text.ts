@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument, GlobalWorkerOptions, VerbosityLevel } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const require = createRequire(import.meta.url);
 const pdfjsPkgDir = dirname(require.resolve('pdfjs-dist/package.json'));
@@ -19,7 +19,9 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   const task = getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
+    disableFontFace: true,
     standardFontDataUrl,
+    verbosity: VerbosityLevel.ERRORS,
   });
   const pdf = await task.promise;
 

@@ -1,7 +1,9 @@
+import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { exportReportKey } from '@folio-mind/pdf-contracts';
+import { exportReportKey, exportReportPdfKey, exportReportWordKey } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../lib/document-access.js';
 import { getCachedSummary } from '../lib/ai-cache.js';
 import { AiLimitError, checkAndIncrementAiUsage, getAiUsageToday } from '../lib/ai-limits.js';
@@ -12,11 +14,13 @@ import { getPresignedGetUrl, isS3Configured, putObjectByKey } from '../lib/s3.js
 import { resolveDefaultProvider, type AIProviderName } from '@folio-mind/ai-providers';
 
 const errorBody = z.object({ error: z.string() });
+const require = createRequire(import.meta.url);
 
 const chatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   content: z.string().max(16_000),
 });
+
 
 function buildReportMarkdown(params: {
   title: string;
@@ -45,6 +49,117 @@ function buildReportMarkdown(params: {
 
   lines.push('', '---', '_Сгенерировано Folio Mind / РазУм_');
   return lines.join('\n');
+}
+
+function buildWordHtml(params: {
+  title: string;
+  version: number;
+  summary: string;
+  chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}): string {
+  const escapeHtml = (value: string) =>
+    value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+
+  const chatHtml =
+    params.chatMessages.length === 0
+      ? ''
+      : `<h2>Диалог с ИИ</h2>${params.chatMessages
+          .map(
+            (msg) =>
+              `<h3>${msg.role === 'user' ? 'Вопрос' : 'Ответ'}</h3><p>${escapeHtml(msg.content).replaceAll('\n', '<br/>')}</p>`,
+          )
+          .join('')}`;
+
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Arial, sans-serif; color: #111827; line-height: 1.45; }
+    h1 { font-size: 24px; margin-bottom: 12px; }
+    h2 { font-size: 18px; margin-top: 18px; margin-bottom: 8px; }
+    h3 { font-size: 15px; margin-top: 12px; margin-bottom: 6px; }
+    .meta { color: #4b5563; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Отчёт по документу: ${escapeHtml(params.title)}</h1>
+  <div class="meta">Версия: ${params.version}</div>
+  <div class="meta">Дата: ${new Date().toISOString()}</div>
+  <h2>Пересказ</h2>
+  <p>${escapeHtml(params.summary).replaceAll('\n', '<br/>')}</p>
+  ${chatHtml}
+  <hr />
+  <p style="color:#6b7280;">Сгенерировано Folio Mind / РазУм</p>
+</body>
+</html>`;
+}
+
+async function buildPdfReport(params: {
+  title: string;
+  version: number;
+  summary: string;
+  chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}): Promise<Buffer> {
+  const PdfKitModule = require('pdfkit');
+  const PDFDocument = PdfKitModule?.default ?? PdfKitModule;
+  return await new Promise<Buffer>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('PDF generation timeout')), 15000);
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 48 });
+      const chunks: Buffer[] = [];
+
+      const fontCandidates = ['C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/segoeui.ttf'];
+      const fontPath = fontCandidates.find((candidate) => existsSync(candidate));
+      if (fontPath) {
+        doc.font(fontPath);
+      }
+
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => {
+        clearTimeout(timeout);
+        resolve(Buffer.concat(chunks));
+      });
+      doc.on('error', (error: Error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+
+      doc.fontSize(18).text(`Отчёт по документу: ${params.title}`);
+      doc.moveDown(0.4);
+      doc.fillColor('#4B5563').fontSize(10).text(`Версия: ${params.version}`);
+      doc.text(`Дата: ${new Date().toISOString()}`);
+      doc.fillColor('#111827');
+
+      doc.moveDown(1);
+      doc.fontSize(14).text('Пересказ');
+      doc.moveDown(0.3);
+      doc.fontSize(11).text(params.summary, { lineGap: 2 });
+
+      if (params.chatMessages.length > 0) {
+        doc.moveDown(1);
+        doc.fontSize(14).text('Диалог с ИИ');
+        for (const msg of params.chatMessages) {
+          doc.moveDown(0.6);
+          doc.fontSize(12).text(msg.role === 'user' ? 'Вопрос' : 'Ответ');
+          doc.moveDown(0.2);
+          doc.fontSize(11).text(msg.content, { lineGap: 2 });
+        }
+      }
+
+      doc.moveDown(1.2);
+      doc.fillColor('#6B7280').fontSize(9).text('Сгенерировано Folio Mind / РазУм');
+      doc.end();
+    } catch (error) {
+      clearTimeout(timeout);
+      reject(error);
+    }
+  });
 }
 
 export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
@@ -308,6 +423,7 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         }),
         body: z.object({
           chatMessages: z.array(chatMessageSchema).max(50).optional(),
+          format: z.enum(['md', 'pdf', 'word']).default('word'),
         }),
         response: {
           200: z.object({ url: z.string(), key: z.string() }),
@@ -342,19 +458,41 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
 
-      const markdown = buildReportMarkdown({
+      const reportPayload = {
         title: document.title,
         version: version.version,
         summary: cached.summary,
         chatMessages: request.body.chatMessages ?? [],
-      });
+      };
+      const markdown = buildReportMarkdown(reportPayload);
 
-      const key = exportReportKey(documentId, versionId);
-      await putObjectByKey({
-        key,
-        body: Buffer.from(markdown, 'utf8'),
-        contentType: 'text/markdown; charset=utf-8',
-      });
+      const format = request.body.format ?? 'md';
+      const key =
+        format === 'word'
+          ? exportReportWordKey(documentId, versionId)
+          : format === 'pdf'
+            ? exportReportPdfKey(documentId, versionId)
+            : exportReportKey(documentId, versionId);
+
+      const payload =
+        format === 'word'
+          ? {
+              key,
+              body: Buffer.from(buildWordHtml(reportPayload), 'utf8'),
+              contentType: 'application/msword; charset=utf-8',
+            }
+          : format === 'pdf'
+            ? {
+                key,
+                body: await buildPdfReport(reportPayload),
+                contentType: 'application/pdf',
+              }
+            : {
+                key,
+                body: Buffer.from(markdown, 'utf8'),
+                contentType: 'text/markdown; charset=utf-8',
+              };
+      await putObjectByKey(payload);
 
       const url = await getPresignedGetUrl({ key, expiresInSeconds: 3600 });
 

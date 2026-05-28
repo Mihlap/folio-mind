@@ -51,6 +51,9 @@ export function PdfViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<pdfjs.PDFDocumentProxy | null>(null);
+  const suppressObserverUntilRef = useRef(0);
+  const lastPageUpdateSourceRef = useRef<'external' | 'observer'>('external');
+  const visibilityRatioRef = useRef<Map<number, number>>(new Map());
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [containerWidth, setContainerWidth] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +65,9 @@ export function PdfViewer({
   const [searchMatches, setSearchMatches] = useState<PdfSearchMatch[]>([]);
 
   const goToPage = useCallback(
-    (next: number) => {
+    (next: number, source: 'external' | 'observer' = 'external') => {
       const clamped = Math.max(1, Math.min(numPages || next, next));
+      lastPageUpdateSourceRef.current = source;
       if (onPageChange) onPageChange(clamped);
       else setInternalPage(clamped);
     },
@@ -72,12 +76,17 @@ export function PdfViewer({
 
   const computeScale = useCallback(
     (pageWidth: number) => {
-      const fitScale = containerWidth > 0 ? containerWidth / pageWidth : 1;
+      const fitScale = containerWidth > 0 ? ((containerWidth - 6) / pageWidth) * 0.995 : 1;
       const base = clamp(fitScale, 0.2, 2.5);
       return zoomMode === 'custom' ? clamp(base * customScale, 0.2, 2.5) : base;
     },
     [containerWidth, zoomMode, customScale],
   );
+
+  useEffect(() => {
+    if (page === undefined) return;
+    lastPageUpdateSourceRef.current = 'external';
+  }, [page]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -101,11 +110,13 @@ export function PdfViewer({
     setPdfReady(false);
     setInternalPage(1);
     onPageChange?.(1);
+    suppressObserverUntilRef.current = Date.now() + 1200;
     setNumPages(0);
     setSearchMatches([]);
     onSearchMatches?.([]);
     pdfRef.current = null;
     pageRefs.current.clear();
+    visibilityRatioRef.current.clear();
     setVisiblePages(new Set([1]));
 
     void loadingTask.promise
@@ -153,13 +164,20 @@ export function PdfViewer({
   useEffect(() => {
     if (searchMatches.length === 0) return;
     const match = searchMatches[activeMatchIndex];
-    if (match) goToPage(match.page);
+    if (match) {
+      suppressObserverUntilRef.current = Date.now() + 1800;
+      goToPage(match.page, 'external');
+    }
   }, [activeMatchIndex, searchMatches, goToPage]);
 
   useEffect(() => {
     if (displayMode !== 'continuous' || !scrollRef.current) return;
+    if (lastPageUpdateSourceRef.current === 'observer') return;
     const el = pageRefs.current.get(pageNum);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) {
+      suppressObserverUntilRef.current = Date.now() + 900;
+      el.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }
   }, [pageNum, displayMode]);
 
   useEffect(() => {
@@ -173,23 +191,29 @@ export function PdfViewer({
             const pageAttr = entry.target.getAttribute('data-page');
             const p = pageAttr ? Number(pageAttr) : 0;
             if (!p) continue;
-            if (entry.isIntersecting) next.add(p);
+            if (entry.isIntersecting) {
+              next.add(p);
+              visibilityRatioRef.current.set(p, entry.intersectionRatio);
+            } else {
+              visibilityRatioRef.current.delete(p);
+              next.delete(p);
+            }
           }
           return next;
         });
 
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .map((e) => Number(e.target.getAttribute('data-page')))
-          .filter((p) => p > 0)
-          .sort((a, b) => a - b);
+        const visible = Array.from(visibilityRatioRef.current.entries())
+          .map(([pageValue, ratio]) => ({ page: pageValue, ratio }))
+          .sort((a, b) => b.ratio - a.ratio);
 
         if (visible.length > 0) {
-          const center = visible[Math.floor(visible.length / 2)];
-          if (center !== pageNum) goToPage(center);
+          if (Date.now() < suppressObserverUntilRef.current) return;
+          const preferred = visible.find((item) => item.ratio >= 0.2);
+          const mostVisiblePage = (preferred ?? visible[0])?.page;
+          if (mostVisiblePage && mostVisiblePage !== pageNum) goToPage(mostVisiblePage, 'observer');
         }
       },
-      { root: scrollRef.current, rootMargin: '200px 0px', threshold: 0.01 },
+      { root: scrollRef.current, rootMargin: '0px', threshold: [0.01, 0.15, 0.35, 0.55, 0.75] },
     );
 
     for (const el of pageRefs.current.values()) observer.observe(el);
@@ -211,9 +235,13 @@ export function PdfViewer({
           pdfReady={pdfReady}
           searchQuery={searchQuery}
           highlight={activeMatch?.page === pageNum}
+          showTextLayer={Boolean(searchQuery.trim())}
         />
       ) : (
-        <div ref={scrollRef} className="max-h-[75vh] overflow-y-auto rounded-lg bg-slate-100 p-2">
+        <div
+          ref={scrollRef}
+          className="max-h-[75vh] overflow-x-hidden overflow-y-auto rounded-lg bg-slate-100 p-2"
+        >
           {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => (
             <div
               key={pageNumber}
@@ -234,6 +262,7 @@ export function PdfViewer({
                   searchQuery={searchQuery}
                   highlight={activeMatch?.page === pageNumber}
                   showLabel={numPages > 1}
+                  showTextLayer={Boolean(searchQuery.trim())}
                 />
               ) : (
                 <PagePlaceholder pageNumber={pageNumber} containerWidth={containerWidth} />
@@ -297,6 +326,7 @@ function PdfPage({
   searchQuery,
   highlight,
   showLabel,
+  showTextLayer,
 }: {
   pdf: pdfjs.PDFDocumentProxy | null;
   pageNumber: number;
@@ -306,6 +336,7 @@ function PdfPage({
   searchQuery: string;
   highlight: boolean;
   showLabel?: boolean;
+  showTextLayer?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
@@ -347,16 +378,17 @@ function PdfPage({
         await renderTask.promise;
         if (cancelled) return;
 
-        const textContent = await page.getTextContent();
-        const textLayerInstance = new pdfjs.TextLayer({
-          textContentSource: textContent,
-          container: textLayer,
-          viewport: page.getViewport({ scale: cssScale }),
-        });
-        await textLayerInstance.render();
-
-        if (searchQuery.trim()) {
-          highlightTextLayer(textLayer, searchQuery.trim());
+        if (showTextLayer) {
+          const textContent = await page.getTextContent();
+          const textLayerInstance = new pdfjs.TextLayer({
+            textContentSource: textContent,
+            container: textLayer,
+            viewport: page.getViewport({ scale: cssScale }),
+          });
+          await textLayerInstance.render();
+          if (searchQuery.trim()) {
+            highlightTextLayer(textLayer, searchQuery.trim());
+          }
         }
         if (highlight) {
           wrapperRef.current?.classList.add('ring-2', 'ring-amber-400');
@@ -373,7 +405,7 @@ function PdfPage({
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pdf, pageNumber, containerWidth, computeScale, pdfReady, searchQuery, highlight]);
+  }, [pdf, pageNumber, containerWidth, computeScale, pdfReady, searchQuery, highlight, showTextLayer]);
 
   return (
     <div ref={wrapperRef} className="relative inline-block rounded bg-white shadow-sm">
@@ -383,7 +415,9 @@ function PdfPage({
       <canvas ref={canvasRef} className="block" />
       <div
         ref={textLayerRef}
-        className="textLayer pointer-events-none absolute inset-0 overflow-hidden opacity-30"
+        className={`textLayer pointer-events-none absolute inset-0 overflow-hidden ${
+          showTextLayer ? 'opacity-30' : 'opacity-0'
+        }`}
         aria-hidden
       />
       {pageError && <p className="p-2 text-xs text-red-600">{pageError}</p>}

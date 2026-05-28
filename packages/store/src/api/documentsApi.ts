@@ -145,6 +145,16 @@ export const documentsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
     }),
+    deleteDocumentVersion: build.mutation<void, { documentId: string; versionId: string }>({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
     getVersionPreviews: build.query<
       {
         pageCount: number;
@@ -180,6 +190,7 @@ export const {
   useCompleteUploadMutation,
   useUploadVersionFileMutation,
   useDeleteDocumentMutation,
+  useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
   useGetVersionPreviewsQuery,
 } = documentsApi;

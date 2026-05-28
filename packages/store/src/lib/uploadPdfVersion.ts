@@ -31,11 +31,22 @@ export async function uploadPdfVersion(
     return { ...result, via: 'presigned' };
   } catch (err) {
     if (!isLikelyCorsOrNetworkError(err)) throw err;
-    const result = await args.fallbackProxyUpload({
-      documentId: args.documentId,
-      versionId: args.versionId,
-      file: args.file,
-    });
-    return { ...result, via: 'proxy' };
+    args.onProgress?.(10);
+    let smoothProgress = 10;
+    const timer = setInterval(() => {
+      smoothProgress = Math.min(95, smoothProgress + 5);
+      args.onProgress?.(smoothProgress);
+    }, 250);
+    try {
+      const result = await args.fallbackProxyUpload({
+        documentId: args.documentId,
+        versionId: args.versionId,
+        file: args.file,
+      });
+      args.onProgress?.(100);
+      return { ...result, via: 'proxy' };
+    } finally {
+      clearInterval(timer);
+    }
   }
 }

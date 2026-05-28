@@ -77,6 +77,7 @@ export {
   useUploadVersionFileMutation,
 
   useDeleteDocumentMutation,
+  useDeleteDocumentVersionMutation,
 
   useLazyGetDownloadUrlQuery,
 

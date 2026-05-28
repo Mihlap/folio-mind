@@ -3,9 +3,15 @@ import {
   uploadPdfVersion,
   useCompleteUploadMutation,
   useCreateDocumentVersionMutation,
+  useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
   useUploadVersionFileMutation,
 } from '@folio-mind/store';
+import { DeleteDocumentButton } from './DeleteDocumentButton.js';
+
+async function waitMs(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'не загружен',
@@ -13,6 +19,17 @@ const STATUS_LABEL: Record<string, string> = {
   ready: 'готов',
   failed: 'ошибка',
 };
+
+function getDisplayStatus(status: string): string {
+  if (status === 'processing') return 'готов к просмотру';
+  return STATUS_LABEL[status] ?? status;
+}
+
+function getUploadStage(progress: number | null): string {
+  if (progress === null || progress <= 0) return 'Подготовка…';
+  if (progress < 100) return 'Загрузка файла в хранилище…';
+  return 'Подтверждение загрузки…';
+}
 
 export type DocumentVersionItem = {
   id: string;
@@ -39,19 +56,27 @@ export function DocumentVersionsPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [showUploadDone, setShowUploadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createVersion] = useCreateDocumentVersionMutation();
   const [completeUpload] = useCompleteUploadMutation();
   const [uploadVersionFile] = useUploadVersionFileMutation();
+  const [deleteVersion, { isLoading: deletingVersion }] = useDeleteDocumentVersionMutation();
   const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
 
   async function handleNewVersion(file: File) {
+    let latestProgress = 0;
+    const handleProgress = (percent: number) => {
+      latestProgress = percent;
+      setUploadProgress(percent);
+    };
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       setError('Только PDF');
       return;
     }
     setError(null);
     setUploading(true);
+    setShowUploadDone(false);
     setUploadProgress(0);
     try {
       const created = await createVersion({
@@ -68,10 +93,12 @@ export function DocumentVersionsPanel({
         uploadUrl: created.uploadUrl,
         completeUpload: (args) => completeUpload(args).unwrap(),
         fallbackProxyUpload: (args) => uploadVersionFile(args).unwrap(),
-        onProgress: setUploadProgress,
+        onProgress: handleProgress,
       });
 
       onSelectVersion(created.versionId);
+      setShowUploadDone(true);
+      await waitMs(350);
     } catch (e) {
       const msg =
         e && typeof e === 'object' && 'data' in e && typeof (e as { data: unknown }).data === 'string'
@@ -81,7 +108,11 @@ export function DocumentVersionsPanel({
             : 'Не удалось загрузить версию';
       setError(msg);
     } finally {
+      if (latestProgress === 100) {
+        await waitMs(150);
+      }
       setUploading(false);
+      setShowUploadDone(false);
       setUploadProgress(null);
       if (inputRef.current) inputRef.current.value = '';
     }
@@ -93,6 +124,19 @@ export function DocumentVersionsPanel({
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch {
       setError('Не удалось получить ссылку на скачивание');
+    }
+  }
+
+  async function handleDeleteVersion(versionId: string, versionNumber: number) {
+    const ok = window.confirm(
+      `Удалить версию ${versionNumber}?\n\nБудут удалены файл, превью и пересказ этой версии. Восстановить нельзя.`,
+    );
+    if (!ok) return;
+    try {
+      setError(null);
+      await deleteVersion({ documentId, versionId }).unwrap();
+    } catch {
+      setError('Не удалось удалить версию');
     }
   }
 
@@ -127,6 +171,11 @@ export function DocumentVersionsPanel({
       </div>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {uploading && uploadProgress !== null && (
+        <p className="mt-2 text-xs text-slate-500">
+          {showUploadDone && uploadProgress === 100 ? '✓ Готово' : getUploadStage(uploadProgress)}
+        </p>
+      )}
 
       <ul className="mt-4 divide-y divide-slate-100">
         {versions.map((v, index) => {
@@ -166,7 +215,7 @@ export function DocumentVersionsPanel({
                   </span>
                 )}
                 <span className="mt-0.5 block text-xs text-slate-500">
-                  {date} · {STATUS_LABEL[v.status] ?? v.status} · {sizeMb} МБ
+                  {date} · {getDisplayStatus(v.status)} · {sizeMb} МБ
                 </span>
               </button>
               {v.status !== 'pending_upload' && (
@@ -178,6 +227,12 @@ export function DocumentVersionsPanel({
                   Скачать
                 </button>
               )}
+              <DeleteDocumentButton
+                title={`Удалить версию ${v.version}`}
+                disabled={deletingVersion || versions.length <= 1}
+                onClick={() => void handleDeleteVersion(v.id, v.version)}
+                variant="list"
+              />
             </li>
           );
         })}

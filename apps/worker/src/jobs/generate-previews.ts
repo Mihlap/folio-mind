@@ -64,14 +64,6 @@ export async function processGeneratePreviewsJob(
     }
 
     const pdfBuffer = await getObjectBuffer(s3Key);
-    const text = await extractTextFromPdf(pdfBuffer);
-    const textKey = extractedTextKey(documentId, versionId);
-    await putObjectBuffer({
-      key: textKey,
-      body: Buffer.from(JSON.stringify({ text, extractedAt: new Date().toISOString() }), 'utf8'),
-      contentType: 'application/json',
-    });
-
     const { pageCount, previews, initialPages } = await renderPdfPreviews(pdfBuffer);
     for (const preview of previews) {
       await putObjectBuffer({
@@ -86,6 +78,22 @@ export async function processGeneratePreviewsJob(
       data: { status: 'ready', pageCount },
     });
 
+    const textKey = extractedTextKey(documentId, versionId);
+    let textExtracted = true;
+    let textError: string | null = null;
+    try {
+      const text = await withTimeout(extractTextFromPdf(pdfBuffer), 20_000, 'Extract text');
+      await putObjectBuffer({
+        key: textKey,
+        body: Buffer.from(JSON.stringify({ text, extractedAt: new Date().toISOString() }), 'utf8'),
+        contentType: 'application/json',
+      });
+    } catch (err) {
+      textExtracted = false;
+      textError = err instanceof Error ? err.message : 'Text extraction failed';
+      // Превью уже готовы, документ можно открыть; не валим job из-за проблем шрифтов/текста.
+    }
+
     await prisma.job.update({
       where: { id: jobId },
       data: {
@@ -97,7 +105,9 @@ export async function processGeneratePreviewsJob(
           pageCount,
           previewPages: previews.length,
           initialPages,
-          textKey,
+          textKey: textExtracted ? textKey : null,
+          textExtracted,
+          textError,
         },
       },
     });

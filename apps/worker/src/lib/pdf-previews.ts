@@ -2,7 +2,7 @@ import { createCanvas } from '@napi-rs/canvas';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument, GlobalWorkerOptions, VerbosityLevel } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const require = createRequire(import.meta.url);
 const pdfjsPkgDir = dirname(require.resolve('pdfjs-dist/package.json'));
@@ -39,7 +39,9 @@ async function openPdf(buffer: Buffer) {
   const task = getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
+    disableFontFace: true,
     standardFontDataUrl: `${pathToFileURL(join(pdfjsPkgDir, 'standard_fonts')).href}/`,
+    verbosity: VerbosityLevel.ERRORS,
   });
   return task.promise;
 }

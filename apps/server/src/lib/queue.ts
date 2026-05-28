@@ -36,7 +36,6 @@ function getQueues(env: Env) {
         removeOnFail: 100,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
-        timeout: env.PREVIEW_JOB_TIMEOUT_MS,
       },
     });
   }
@@ -48,7 +47,6 @@ function getQueues(env: Env) {
         removeOnFail: 100,
         attempts: 2,
         backoff: { type: 'exponential', delay: 3000 },
-        timeout: env.AI_JOB_TIMEOUT_MS,
       },
     });
   }
@@ -121,7 +119,6 @@ export async function enqueuePreviewPagesJob(
 
   await previewQueue.add('preview-pages', payload, {
     jobId: dedupeId,
-    timeout: env.PREVIEW_JOB_TIMEOUT_MS,
   });
   return true;
 }

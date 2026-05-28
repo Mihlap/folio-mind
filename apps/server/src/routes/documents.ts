@@ -9,8 +9,10 @@ import type { Env } from '../lib/env.js';
 import { clampPreviewRange } from '../lib/preview-config.js';
 import { UPLOAD_RATE_LIMIT } from '../lib/rate-limits.js';
 import { enqueuePreviewJob, enqueuePreviewPagesJob } from '../lib/queue.js';
-import { previewPageKey } from '@folio-mind/pdf-contracts';
+import { extractedTextKey, exportReportKey, exportReportWordKey, previewPageKey } from '@folio-mind/pdf-contracts';
 import {
+  deleteObjectByKey,
+  deleteObjectsByPrefix,
   deleteDocumentArtifacts,
   getObjectReadable,
   getPresignedGetUrl,
@@ -504,6 +506,65 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         }),
         nextCursor: hasMore && last ? encodeCursor(last.updatedAt, last.id) : null,
       };
+    },
+  );
+
+  r.delete(
+    '/documents/:documentId/versions/:versionId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        response: {
+          204: z.null(),
+          400: errorBody,
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+
+      if (document.versions.length <= 1) {
+        return reply.code(400).send({ error: 'Нельзя удалить единственную версию документа' });
+      }
+
+      if (isS3Configured()) {
+        try {
+          await deleteObjectByKey(version.s3Key);
+          await deleteObjectByKey(extractedTextKey(documentId, versionId));
+          await deleteObjectByKey(exportReportKey(documentId, versionId));
+          await deleteObjectByKey(exportReportWordKey(documentId, versionId));
+          await deleteObjectsByPrefix(resolveS3Key('previews', `${documentId}/${versionId}`));
+        } catch {
+          // часть объектов могла отсутствовать
+        }
+      }
+
+      await deleteCachedSummaries(env, [versionId]);
+      await app.prisma.documentVersion.delete({ where: { id: versionId } });
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_delete',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: { versionId },
+        },
+      });
+
+      return reply.status(204).send(null);
     },
   );
 

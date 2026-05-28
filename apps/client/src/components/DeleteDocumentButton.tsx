@@ -29,7 +29,7 @@ export function DeleteDocumentButton({
       }
     >
       <TrashIcon size={isList ? 17 : 18} />
-      <span className="sr-only">Удалить документ</span>
+      <span className="sr-only">{title}</span>
     </button>
   );
 }

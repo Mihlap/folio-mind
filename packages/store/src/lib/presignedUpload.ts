@@ -8,15 +8,19 @@ export async function putFileToPresignedUrl(
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl);
     xhr.setRequestHeader('Content-Type', contentType);
+    onProgress?.(1);
 
     xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && onProgress) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      }
+      if (!onProgress) return;
+      const total = event.lengthComputable && event.total > 0 ? event.total : file.size;
+      if (!total || total <= 0) return;
+      const percent = Math.max(1, Math.min(99, Math.round((event.loaded / total) * 100)));
+      onProgress(percent);
     };
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
         resolve();
         return;
       }
