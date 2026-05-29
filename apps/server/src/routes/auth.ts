@@ -20,6 +20,8 @@ import {
   buildVerifyEmailUrl,
   createEmailVerificationToken,
 } from '../lib/auth/email-verification.js';
+import { renderVerifyEmailHtmlPage } from '../lib/auth/verify-email-html.js';
+import { verifyEmailWithToken } from '../lib/auth/verify-email-token.js';
 import { createMailer } from '../lib/email/mailer.js';
 import { normalizeEmail } from '../lib/email/email.js';
 import { validateEmailForRegistration } from '../lib/email/email-validation.js';
@@ -216,66 +218,46 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
     },
   );
 
+  r.get('/auth/verify-email', async (request, reply) => {
+    const query = request.query as { token?: string };
+    const token = query.token?.trim() ?? '';
+
+    if (!token) {
+      return reply
+        .type('text/html; charset=utf-8')
+        .send(renderVerifyEmailHtmlPage('error', 'В ссылке нет токена.'));
+    }
+
+    const result = await verifyEmailWithToken(app.prisma, token);
+    if (!result.ok) {
+      return reply
+        .type('text/html; charset=utf-8')
+        .send(renderVerifyEmailHtmlPage('error'));
+    }
+
+    return reply.type('text/html; charset=utf-8').send(renderVerifyEmailHtmlPage('success'));
+  });
+
   r.post(
     '/auth/verify-email',
     {
       schema: {
         body: verifyEmailSchema,
         response: {
-          200: z.object({
-            ok: z.literal(true),
-            token: z.string(),
-            user: authUserSchema,
-          }),
+          200: z.object({ ok: z.literal(true) }),
           400: authErrorSchema,
         },
       },
     },
     async (request, reply) => {
-      const token = request.body.token.trim();
-      const tokenHash = sha256Hex(token);
-
-      const record = await app.prisma.emailVerificationToken.findUnique({
-        where: { tokenHash },
-        include: { user: true },
-      });
-
-      if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+      const result = await verifyEmailWithToken(app.prisma, request.body.token);
+      if (!result.ok) {
         return reply.code(400).send({
           error: 'INVALID_TOKEN',
           message: 'Ссылка недействительна или устарела',
         });
       }
-
-      const verifiedAt = new Date();
-      const user = await app.prisma.$transaction(async (tx) => {
-        await tx.emailVerificationToken.update({
-          where: { id: record.id },
-          data: { usedAt: verifiedAt },
-        });
-        await tx.emailVerificationToken.updateMany({
-          where: { userId: record.userId, usedAt: null },
-          data: { usedAt: verifiedAt },
-        });
-        return tx.user.update({
-          where: { id: record.userId },
-          data: { emailVerifiedAt: verifiedAt },
-        });
-      });
-
-      const jwt = await issueAuthToken(reply, user);
-
-      return {
-        ok: true as const,
-        token: jwt,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          tenantId: user.tenantId,
-          emailVerified: true,
-        },
-      };
+      return { ok: true as const };
     },
   );
 

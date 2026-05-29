@@ -1,4 +1,5 @@
 import type { Env } from '../config/env.js';
+import { getApiPublicOrigin } from '../config/api-public-origin.js';
 
 export type OAuthProviderId = 'google' | 'yandex';
 
@@ -8,16 +9,8 @@ export type OAuthProfile = {
   name: string | null;
 };
 
-function apiOrigin(env: Env): string {
-  const port = env.PORT;
-  if (env.NODE_ENV === 'production') {
-    return env.API_PUBLIC_URL?.replace(/\/+$/, '') ?? `http://${env.API_HOST}:${port}`;
-  }
-  return `http://localhost:${port}`;
-}
-
 export function getOAuthRedirectUri(env: Env, provider: OAuthProviderId): string {
-  return `${apiOrigin(env)}/auth/oauth/${provider}/callback`;
+  return `${getApiPublicOrigin(env)}/auth/oauth/${provider}/callback`;
 }
 
 export function isOAuthConfigured(env: Env, provider: OAuthProviderId): boolean {

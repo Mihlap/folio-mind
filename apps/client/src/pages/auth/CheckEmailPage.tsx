@@ -63,7 +63,8 @@ export function CheckEmailPage() {
     <AuthLayout title="Проверьте почту" subtitle="Подтвердите регистрацию">
       <p className="text-sm text-slate-600">
         Мы отправили ссылку на <strong>{email || 'ваш email'}</strong>. Откройте письмо и нажмите
-        «Подтвердить email». После подтверждения эта страница обновится автоматически.
+        «Подтвердить email» — откроется страница с подтверждением. Эта вкладка обновится
+        автоматически.
       </p>
       <form onSubmit={onResend} className="mt-6 space-y-3">
         <label className="block">

@@ -23,7 +23,7 @@ export const authApi = baseApi.injectEndpoints({
     requestMagicLink: build.mutation<{ ok: true }, { email: string; captchaToken?: string }>({
       query: (body) => ({ url: '/auth/magic-link', method: 'POST', body }),
     }),
-    verifyMagicLink: build.mutation<VerifyEmailResponse, { token: string }>({
+    verifyMagicLink: build.mutation<AuthResponse, { token: string }>({
       query: (body) => ({ url: '/auth/magic-link/verify', method: 'POST', body }),
     }),
     login: build.mutation<AuthResponse, LoginBody>({

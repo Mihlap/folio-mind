@@ -37,8 +37,6 @@ export type VerifyEmailBody = {
 
 export type VerifyEmailResponse = {
   ok: true;
-  token: string;
-  user: AuthUser;
 };
 
 export type LoginBody = {

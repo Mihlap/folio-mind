@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { setCredentials, useVerifyEmailMutation } from '@folio-mind/store';
-import { useAppDispatch } from '../../hooks/index.js';
-import { Button } from '../../components/ui/Button.js';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useVerifyEmailMutation } from '@folio-mind/store';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { notifyEmailVerified } from '../../lib/auth/authCrossTab.js';
@@ -11,22 +9,18 @@ export function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
   const [verifyEmail, { isLoading, error }] = useVerifyEmailMutation();
-  const dispatch = useAppDispatch();
-  const navigate = useNavigate();
   const [done, setDone] = useState(false);
 
   useEffect(() => {
     if (!token) return;
     void verifyEmail({ token })
       .unwrap()
-      .then((res) => {
-        dispatch(setCredentials({ token: res.token, user: res.user }));
+      .then(() => {
         notifyEmailVerified();
         setDone(true);
-        navigate('/app', { replace: true });
       })
       .catch(() => {});
-  }, [token, verifyEmail, dispatch, navigate]);
+  }, [token, verifyEmail]);
 
   if (!token) {
     return (
@@ -41,8 +35,16 @@ export function VerifyEmailPage() {
 
   if (done) {
     return (
-      <AuthLayout title="Готово" subtitle="Email подтверждён">
-        <p className="text-sm text-slate-600">Перенаправляем в приложение…</p>
+      <AuthLayout title="Спасибо!" subtitle="Почта подтверждена">
+        <p className="text-sm text-slate-600">
+          Можете закрыть эту вкладку и вернуться на страницу регистрации или войти в аккаунт.
+        </p>
+        <Link
+          to="/login"
+          className="mt-6 flex w-full items-center justify-center rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-folio-600/25 hover:bg-folio-700"
+        >
+          Войти
+        </Link>
       </AuthLayout>
     );
   }
@@ -56,9 +58,12 @@ export function VerifyEmailPage() {
         </p>
       )}
       {!isLoading && error && (
-        <Button type="button" className="mt-4 w-full" onClick={() => navigate('/login')}>
+        <Link
+          to="/login"
+          className="mt-4 flex w-full items-center justify-center rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700"
+        >
           На страницу входа
-        </Button>
+        </Link>
       )}
     </AuthLayout>
   );
