@@ -3,12 +3,12 @@ import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { findDocumentForUser, getAuthUser } from '../lib/document-access.js';
-import { deleteCachedSummaries } from '../lib/ai-cache.js';
-import type { Env } from '../lib/env.js';
-import { clampPreviewRange } from '../lib/preview-config.js';
-import { UPLOAD_RATE_LIMIT } from '../lib/rate-limits.js';
-import { enqueuePreviewJob, enqueuePreviewPagesJob } from '../lib/queue.js';
+import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
+import { deleteCachedSummaries } from '../lib/ai/ai-cache.js';
+import type { Env } from '../lib/config/env.js';
+import { clampPreviewRange } from '../lib/documents/preview-config.js';
+import { UPLOAD_RATE_LIMIT } from '../lib/auth/rate-limits.js';
+import { enqueuePreviewJob, enqueuePreviewPagesJob } from '../lib/queue/queue.js';
 import { extractedTextKey, exportReportKey, exportReportWordKey, previewPageKey } from '@folio-mind/pdf-contracts';
 import {
   deleteObjectByKey,
@@ -21,7 +21,7 @@ import {
   putObjectByKey,
   resolveS3Key,
   s3ObjectExists,
-} from '../lib/s3.js';
+} from '../lib/storage/s3.js';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const uploadRateLimit = { rateLimit: UPLOAD_RATE_LIMIT };
@@ -780,18 +780,17 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         return reply.code(404).send({ error: 'Version not available' });
       }
 
-      if (version.status === 'processing') {
-        return { pageCount: 0, pages: [], status: 'processing' as const };
-      }
-
+      const isProcessing = version.status === 'processing';
       const pageCount = version.pageCount ?? 0;
-      if (!pageCount) {
+      const scanLimit = pageCount > 0 ? pageCount : env.PREVIEW_MAX_PAGES;
+
+      if (!isProcessing && pageCount === 0) {
         return { pageCount: 0, pages: [], status: 'unavailable' as const };
       }
 
       const { from, to } = clampPreviewRange(
         env,
-        pageCount,
+        scanLimit,
         request.query.from,
         request.query.to,
       );
@@ -807,6 +806,18 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         } else {
           missing.push(page);
         }
+      }
+
+      if (isProcessing) {
+        if (pages.length === 0) {
+          return { pageCount: 0, pages: [], status: 'processing' as const };
+        }
+        return {
+          pageCount: pageCount || to,
+          pages,
+          status: 'partial' as const,
+          ...(missing.length > 0 ? { pendingPages: missing } : {}),
+        };
       }
 
       if (missing.length > 0) {

@@ -1,9 +1,9 @@
 import { initTracing } from '@folio-mind/observability';
 import { buildApp } from './app.js';
-import { loadEnv } from './lib/env.js';
-import { loadAppEnv } from './lib/load-env.js';
+import { loadEnv } from './lib/config/env.js';
+import { loadAppEnv } from './lib/config/load-env.js';
 import { FILES_ROOT } from '@folio-mind/pdf-contracts';
-import { initS3, isS3Configured } from './lib/s3.js';
+import { initS3, isS3Configured } from './lib/storage/s3.js';
 
 loadAppEnv();
 initTracing('folio-mind-api');

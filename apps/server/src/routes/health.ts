@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
-import type { Env } from '../lib/env.js';
-import { getQueueMetrics } from '../lib/queue.js';
+import type { Env } from '../lib/config/env.js';
+import { getQueueMetrics } from '../lib/queue/queue.js';
 
 export const healthRoutes: FastifyPluginAsync<{ env?: Env }> = async (app, opts) => {
   app.get('/health', async (request) => {

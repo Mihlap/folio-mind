@@ -26,6 +26,9 @@ const testEnv = {
   PREVIEW_JOB_TIMEOUT_MS: 300_000,
   AI_JOB_TIMEOUT_MS: 180_000,
   QUEUE_WARN_WAITING: 50,
+  EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: 60,
+  MAGIC_LINK_TOKEN_TTL_MINUTES: 15,
+  SKIP_EMAIL_MX_CHECK: true,
 };
 
 describe('API /health', () => {
@@ -52,13 +55,13 @@ describe('API /auth/register', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { email, password: 'password123', name: 'vv' },
+      payload: { email, password: 'Password123', name: 'vv' },
     });
 
     expect(res.statusCode).toBe(201);
-    const body = res.json() as { token: string; user: { email: string } };
-    expect(body.token).toBeTruthy();
-    expect(body.user.email).toBe(email);
+    const body = res.json() as { needsEmailVerification: boolean; email: string };
+    expect(body.needsEmailVerification).toBe(true);
+    expect(body.email).toBe(email.toLowerCase());
     await app.close();
   });
 });

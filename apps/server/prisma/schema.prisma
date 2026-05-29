@@ -16,16 +16,58 @@ model Tenant {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  name         String?
-  tenantId     String
-  tenant       Tenant     @relation(fields: [tenantId], references: [id])
-  createdAt    DateTime   @default(now())
-  documents    Document[]
-  auditLogs    AuditLog[]
+  id                String     @id @default(cuid())
+  email             String     @unique
+  passwordHash      String
+  name              String?
+  emailVerifiedAt   DateTime?
+  tenantId          String
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime   @default(now())
+  documents         Document[]
+  auditLogs         AuditLog[]
   passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  magicLinkTokens   MagicLinkToken[]
+  oauthAccounts     OAuthAccount[]
+}
+
+model MagicLinkToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model OAuthAccount {
+  id             String   @id @default(cuid())
+  provider       String
+  providerUserId String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
 }
 
 model PasswordResetToken {

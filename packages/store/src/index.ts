@@ -4,7 +4,7 @@ export { apiBaseUrl } from './api/baseApi.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
 export { putFileToPresignedUrl } from './lib/presignedUpload.js';
 
-export { authSlice, setCredentials, logout } from './slices/authSlice.js';
+export { authSlice, setCredentials, setToken, logout } from './slices/authSlice.js';
 
 export { uiSlice, toggleSidebar, setTheme } from './slices/uiSlice.js';
 
@@ -47,6 +47,14 @@ export {
   authApi,
 
   useRegisterMutation,
+
+  useVerifyEmailMutation,
+
+  useResendVerificationMutation,
+
+  useRequestMagicLinkMutation,
+
+  useVerifyMagicLinkMutation,
 
   useLoginMutation,
 

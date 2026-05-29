@@ -1,10 +1,30 @@
-import type { AuthResponse, LoginBody, RegisterBody, AuthUser } from '@folio-mind/api-client';
+import type {
+  AuthResponse,
+  LoginBody,
+  RegisterBody,
+  RegisterResponse,
+  AuthUser,
+  VerifyEmailBody,
+  VerifyEmailResponse,
+} from '@folio-mind/api-client';
 import { baseApi } from './baseApi.js';
 
 export const authApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
-    register: build.mutation<AuthResponse, RegisterBody>({
+    register: build.mutation<RegisterResponse, RegisterBody>({
       query: (body) => ({ url: '/auth/register', method: 'POST', body }),
+    }),
+    verifyEmail: build.mutation<VerifyEmailResponse, VerifyEmailBody>({
+      query: (body) => ({ url: '/auth/verify-email', method: 'POST', body }),
+    }),
+    resendVerification: build.mutation<{ ok: true }, { email: string }>({
+      query: (body) => ({ url: '/auth/resend-verification', method: 'POST', body }),
+    }),
+    requestMagicLink: build.mutation<{ ok: true }, { email: string; captchaToken?: string }>({
+      query: (body) => ({ url: '/auth/magic-link', method: 'POST', body }),
+    }),
+    verifyMagicLink: build.mutation<VerifyEmailResponse, { token: string }>({
+      query: (body) => ({ url: '/auth/magic-link/verify', method: 'POST', body }),
     }),
     login: build.mutation<AuthResponse, LoginBody>({
       query: (body) => ({ url: '/auth/login', method: 'POST', body }),
@@ -27,6 +47,10 @@ export const authApi = baseApi.injectEndpoints({
 
 export const {
   useRegisterMutation,
+  useVerifyEmailMutation,
+  useResendVerificationMutation,
+  useRequestMagicLinkMutation,
+  useVerifyMagicLinkMutation,
   useLoginMutation,
   useMeQuery,
   useHealthQuery,

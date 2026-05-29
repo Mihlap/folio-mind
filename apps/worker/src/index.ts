@@ -1,19 +1,28 @@
 import { initTracing, withSpan } from '@folio-mind/observability';
 import { Worker } from 'bullmq';
-import { processAiChatJob } from './jobs/ai-chat.js';
-import { processAiSummaryJob } from './jobs/ai-summary.js';
-import { processGeneratePreviewsJob, processPreviewPagesJob } from './jobs/generate-previews.js';
-import { loadWorkerEnv } from './lib/env.js';
-import { loadAppEnv } from './lib/load-env.js';
-import type { WorkerJobPayload } from './lib/job-types.js';
-import { initWorkerS3 } from './lib/s3.js';
-import { createRedisConnection, QUEUE_NAMES } from './queues.js';
+import { processAiChatJob } from './jobs/ai/ai-chat.js';
+import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
+import {
+  processGeneratePreviewsJob,
+  processPreviewPagesJob,
+} from './jobs/preview/generate-previews.js';
+import { loadWorkerEnv } from './lib/config/env.js';
+import { loadAppEnv } from './lib/config/load-env.js';
+import type { WorkerJobPayload } from './lib/config/job-types.js';
+import { initWorkerS3, isWorkerS3Configured } from './lib/storage/s3.js';
+import { createRedisConnection, QUEUE_NAMES } from './queue/queues.js';
 
 loadAppEnv();
 initTracing('folio-mind-worker');
 
 const env = loadWorkerEnv();
 initWorkerS3(env);
+
+if (!isWorkerS3Configured()) {
+  console.warn(
+    '[worker] S3 не настроен — превью не будут создаваться. Проверьте apps/server/.env (S3_*) и перезапустите worker.',
+  );
+}
 
 const connection = createRedisConnection(env.REDIS_URL);
 
@@ -27,18 +36,23 @@ function createPreviewWorker() {
     QUEUE_NAMES.preview,
     async (job) => {
       const data = job.data as WorkerJobPayload;
-      return withSpan('folio-mind-worker', 'preview', {
-        'folio.request_id': data.requestId ?? String(job.id),
-        'job.id': String(job.id),
-      }, async () => {
-        logJob('preview', job.id, data);
-        if (job.name === 'generate-previews') {
-          await processGeneratePreviewsJob(env, data);
-        } else if (job.name === 'preview-pages') {
-          await processPreviewPagesJob(env, data);
-        }
-        return { ok: true };
-      });
+      return withSpan(
+        'folio-mind-worker',
+        'preview',
+        {
+          'folio.request_id': data.requestId ?? String(job.id),
+          'job.id': String(job.id),
+        },
+        async () => {
+          logJob('preview', job.id, data);
+          if (job.name === 'generate-previews') {
+            await processGeneratePreviewsJob(env, data);
+          } else if (job.name === 'preview-pages') {
+            await processPreviewPagesJob(env, data);
+          }
+          return { ok: true };
+        },
+      );
     },
     { connection, concurrency: env.PREVIEW_WORKER_CONCURRENCY },
   );
@@ -49,18 +63,23 @@ function createAiWorker() {
     QUEUE_NAMES.ai,
     async (job) => {
       const data = job.data as WorkerJobPayload;
-      return withSpan('folio-mind-worker', 'ai', {
-        'folio.request_id': data.requestId ?? String(job.id),
-        'job.id': String(job.id),
-      }, async () => {
-        logJob('ai', job.id, data);
-        if (job.name === 'summary') {
-          await processAiSummaryJob(env, data);
-        } else if (job.name === 'chat') {
-          await processAiChatJob(env, data);
-        }
-        return { ok: true };
-      });
+      return withSpan(
+        'folio-mind-worker',
+        'ai',
+        {
+          'folio.request_id': data.requestId ?? String(job.id),
+          'job.id': String(job.id),
+        },
+        async () => {
+          logJob('ai', job.id, data);
+          if (job.name === 'summary') {
+            await processAiSummaryJob(env, data);
+          } else if (job.name === 'chat') {
+            await processAiChatJob(env, data);
+          }
+          return { ok: true };
+        },
+      );
     },
     { connection, concurrency: env.AI_WORKER_CONCURRENCY },
   );

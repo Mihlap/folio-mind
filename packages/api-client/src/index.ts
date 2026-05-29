@@ -3,6 +3,7 @@ export type AuthUser = {
   email: string;
   name: string | null;
   tenantId: string;
+  emailVerified?: boolean;
 };
 
 export type AuthResponse = {
@@ -21,9 +22,27 @@ export type RegisterBody = {
   password: string;
   name?: string;
   tenantName?: string;
+  captchaToken?: string;
+};
+
+export type RegisterResponse = {
+  needsEmailVerification: true;
+  email: string;
+  message: string;
+};
+
+export type VerifyEmailBody = {
+  token: string;
+};
+
+export type VerifyEmailResponse = {
+  ok: true;
+  token: string;
+  user: AuthUser;
 };
 
 export type LoginBody = {
   email: string;
   password: string;
+  captchaToken?: string;
 };

@@ -22,6 +22,13 @@ export const authSlice = createSlice({
         localStorage.setItem('folio_token', action.payload.token);
       }
     },
+    setToken: (state, action: PayloadAction<string>) => {
+      state.token = action.payload;
+      state.user = null;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('folio_token', action.payload);
+      }
+    },
     logout: (state) => {
       state.token = null;
       state.user = null;
@@ -32,4 +39,4 @@ export const authSlice = createSlice({
   },
 });
 
-export const { setCredentials, logout } = authSlice.actions;
+export const { setCredentials, setToken, logout } = authSlice.actions;
