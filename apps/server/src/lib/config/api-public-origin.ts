@@ -1,6 +1,5 @@
 import type { Env } from './env.js';
 
-/** Публичный origin API для ссылок в письмах и OAuth redirect URI. */
 export function getApiPublicOrigin(env: Env): string {
   const port = env.PORT;
   if (env.NODE_ENV === 'production') {

@@ -71,6 +71,10 @@ pnpm dev
 
 Готово: монорепо, compose, Prisma + auth JWT, MinIO init, BullMQ заготовки, OTEL/request-id, rate-limit, документация в `docs/` (в т.ч. юридические черновики).
 
-Отложено: **CI** (GitHub Actions) — по запросу.
+Отложено: нет критичных блокеров по фазе 0/1; CI (GitHub Actions) уже включён для PR.
+
+## Фаза 1 (статус)
+
+Фаза 1 формально закрыта: upload через presigned URL, viewer, превью/текст через worker, ИИ-очереди и smoke-проверка `pnpm smoke:phase1` пройдены.
 
 См. [docs/ROADMAP.md](./docs/ROADMAP.md).
