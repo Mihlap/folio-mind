@@ -2,6 +2,8 @@ import { initTracing, withSpan } from '@folio-mind/observability';
 import { Worker } from 'bullmq';
 import { processAiChatJob } from './jobs/ai/ai-chat.js';
 import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
+import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
+import { processSplitPagesJob } from './jobs/optimize/split-pages.js';
 import {
   processGeneratePreviewsJob,
   processPreviewPagesJob,
@@ -85,18 +87,47 @@ function createAiWorker() {
   );
 }
 
+function createOptimizeWorker() {
+  return new Worker(
+    QUEUE_NAMES.optimize,
+    async (job) => {
+      const data = job.data as WorkerJobPayload;
+      return withSpan(
+        'folio-mind-worker',
+        'optimize',
+        {
+          'folio.request_id': data.requestId ?? String(job.id),
+          'job.id': String(job.id),
+        },
+        async () => {
+          logJob('optimize', job.id, data);
+          if (job.name === 'split-pages') {
+            await processSplitPagesJob(env, data);
+          } else if (job.name === 'merge-versions') {
+            await processMergeVersionsJob(env, data);
+          }
+          return { ok: true };
+        },
+      );
+    },
+    { connection, concurrency: env.OPTIMIZE_WORKER_CONCURRENCY },
+  );
+}
+
 const previewWorker = createPreviewWorker();
 const aiWorker = createAiWorker();
+const optimizeWorker = createOptimizeWorker();
 
 previewWorker.on('failed', (job, err) => console.error('[preview] failed', job?.id, err));
 aiWorker.on('failed', (job, err) => console.error('[ai] failed', job?.id, err));
+optimizeWorker.on('failed', (job, err) => console.error('[optimize] failed', job?.id, err));
 
 console.log(
-  `Worker started: queues preview (concurrency=${env.PREVIEW_WORKER_CONCURRENCY}), ai (concurrency=${env.AI_WORKER_CONCURRENCY})`,
+  `Worker started: queues preview (concurrency=${env.PREVIEW_WORKER_CONCURRENCY}), ai (concurrency=${env.AI_WORKER_CONCURRENCY}), optimize (concurrency=${env.OPTIMIZE_WORKER_CONCURRENCY})`,
 );
 
 async function shutdown() {
-  await Promise.all([previewWorker.close(), aiWorker.close()]);
+  await Promise.all([previewWorker.close(), aiWorker.close(), optimizeWorker.close()]);
   await connection.quit();
   process.exit(0);
 }

@@ -51,6 +51,7 @@ export const documentsApi = baseApi.injectEndpoints({
           status: string;
           size: string;
           mimeType: string;
+          pageCount: number | null;
           createdAt: string;
         }>;
       },
@@ -179,6 +180,44 @@ export const documentsApi = baseApi.injectEndpoints({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/download-url`,
     }),
+    splitPages: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        version: number;
+        status: 'processing';
+      },
+      { documentId: string; versionId: string; pages: number[] }
+    >({
+      query: ({ documentId, versionId, pages }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/split`,
+        method: 'POST',
+        body: { pages },
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
+    mergeVersions: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        version: number;
+        status: 'processing';
+      },
+      { documentId: string; versionIds: string[] }
+    >({
+      query: ({ documentId, versionIds }) => ({
+        url: `/documents/${documentId}/operations/merge`,
+        method: 'POST',
+        body: { versionIds },
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
   }),
 });
 
@@ -193,4 +232,6 @@ export const {
   useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
   useGetVersionPreviewsQuery,
+  useSplitPagesMutation,
+  useMergeVersionsMutation,
 } = documentsApi;

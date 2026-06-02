@@ -5,6 +5,7 @@ import type { Env } from '../config/env.js';
 const QUEUE_NAMES = {
   preview: 'preview',
   ai: 'ai',
+  optimize: 'optimize',
 } as const;
 
 export type QueueCounts = {
@@ -18,6 +19,7 @@ export type QueueCounts = {
 let connection: IORedis | null = null;
 let previewQueue: Queue | null = null;
 let aiQueue: Queue | null = null;
+let optimizeQueue: Queue | null = null;
 
 function getConnection(redisUrl: string): IORedis {
   if (!connection) {
@@ -50,7 +52,18 @@ function getQueues(env: Env) {
       },
     });
   }
-  return { previewQueue, aiQueue };
+  if (!optimizeQueue) {
+    optimizeQueue = new Queue(QUEUE_NAMES.optimize, {
+      connection: conn,
+      defaultJobOptions: {
+        removeOnComplete: 200,
+        removeOnFail: 100,
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 3000 },
+      },
+    });
+  }
+  return { previewQueue, aiQueue, optimizeQueue };
 }
 
 async function readCounts(queue: Queue): Promise<QueueCounts> {
@@ -108,7 +121,7 @@ export async function enqueuePreviewPagesJob(
   },
 ): Promise<boolean> {
   const { previewQueue } = getQueues(env);
-  const dedupeId = `preview-pages:${payload.versionId}:${payload.fromPage}-${payload.toPage}`;
+  const dedupeId = `preview-pages-${payload.versionId}-${payload.fromPage}-${payload.toPage}`;
   const existing = await previewQueue.getJob(dedupeId);
   if (existing) {
     const state = await existing.getState();
@@ -137,4 +150,41 @@ export async function enqueueAiJob(
 ): Promise<void> {
   const { aiQueue } = getQueues(env);
   await aiQueue.add(payload.type, payload, { jobId: payload.jobId });
+}
+
+export async function enqueueSplitPagesJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    sourceVersionId: string;
+    targetVersionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    targetS3Key: string;
+    pages: number[];
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('split-pages', payload, { jobId: payload.jobId });
+}
+
+export async function enqueueMergeVersionsJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    targetVersionId: string;
+    tenantId: string;
+    sourceS3Keys: string[];
+    sourceVersionIds: string[];
+    targetS3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('merge-versions', payload, { jobId: payload.jobId });
 }

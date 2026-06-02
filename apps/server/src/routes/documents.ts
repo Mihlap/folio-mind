@@ -8,12 +8,16 @@ import { deleteCachedSummaries } from '../lib/ai/ai-cache.js';
 import type { Env } from '../lib/config/env.js';
 import { clampPreviewRange } from '../lib/documents/preview-config.js';
 import { UPLOAD_RATE_LIMIT } from '../lib/auth/rate-limits.js';
-import { enqueuePreviewJob, enqueuePreviewPagesJob } from '../lib/queue/queue.js';
-import { extractedTextKey, exportReportKey, exportReportWordKey, previewPageKey } from '@folio-mind/pdf-contracts';
 import {
-  deleteObjectByKey,
-  deleteObjectsByPrefix,
+  enqueuePreviewJob,
+  enqueuePreviewPagesJob,
+  enqueueMergeVersionsJob,
+  enqueueSplitPagesJob,
+} from '../lib/queue/queue.js';
+import { previewPageKey } from '@folio-mind/pdf-contracts';
+import {
   deleteDocumentArtifacts,
+  deleteVersionArtifacts,
   getObjectReadable,
   getPresignedGetUrl,
   getPresignedPutUrl,
@@ -41,6 +45,22 @@ const documentSchema = z.object({
       mimeType: z.string(),
     })
     .nullable(),
+});
+
+const splitPagesSchema = z.object({
+  pages: z
+    .array(z.number().int().min(1))
+    .min(1)
+    .max(500)
+    .refine((pages) => new Set(pages).size === pages.length, 'Номера страниц должны быть уникальны'),
+});
+
+const mergeVersionsSchema = z.object({
+  versionIds: z
+    .array(z.string().min(1))
+    .min(2)
+    .max(20)
+    .refine((ids) => new Set(ids).size === ids.length, 'versionIds must be unique'),
 });
 
 function buildOriginalKey(documentId: string, version: number, fileName: string) {
@@ -215,6 +235,240 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         versionId: version.id,
         uploadUrl,
         s3Key,
+      });
+    },
+  );
+
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/split',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        body: splitPagesSchema,
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            version: z.number(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const pages = [...request.body.pages].sort((a, b) => a - b);
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      if (!sourceVersion.pageCount || sourceVersion.pageCount <= 0) {
+        return reply.code(400).send({ error: 'Source version pageCount is unknown' });
+      }
+      if (pages[pages.length - 1]! > sourceVersion.pageCount) {
+        return reply.code(400).send({ error: 'Page index out of range' });
+      }
+
+      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
+      const targetS3Key = buildOriginalKey(
+        document.id,
+        nextVersionNumber,
+        `split-v${sourceVersion.version}.pdf`,
+      );
+
+      const [targetVersion, operationJob] = await app.prisma.$transaction([
+        app.prisma.documentVersion.create({
+          data: {
+            documentId: document.id,
+            version: nextVersionNumber,
+            s3Key: targetS3Key,
+            size: BigInt(0),
+            mimeType: sourceVersion.mimeType,
+            status: 'processing',
+          },
+        }),
+        app.prisma.job.create({
+          data: {
+            type: 'pdf-split',
+            status: 'queued',
+            tenantId: user.tenantId,
+            payload: {
+              documentId,
+              sourceVersionId: sourceVersion.id,
+              pages,
+            },
+          },
+        }),
+      ]);
+
+      await enqueueSplitPagesJob(env, {
+        jobId: `split-pages-${targetVersion.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        sourceVersionId: sourceVersion.id,
+        targetVersionId: targetVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Key: sourceVersion.s3Key,
+        targetS3Key,
+        pages,
+        requestId: request.requestId,
+      });
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_split',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            sourceVersionId: sourceVersion.id,
+            targetVersionId: targetVersion.id,
+            pages,
+            operationJobId: operationJob.id,
+          },
+        },
+      });
+
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId: targetVersion.id,
+        version: targetVersion.version,
+        status: 'processing',
+      });
+    },
+  );
+
+  r.post(
+    '/documents/:documentId/operations/merge',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+        }),
+        body: mergeVersionsSchema,
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            version: z.number(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+
+      const user = getAuthUser(request);
+      const { documentId } = request.params;
+      const { versionIds } = request.body;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const sourceVersions = versionIds.map((id) => {
+        const version = document.versions.find((v: { id: string }) => v.id === id);
+        return version ?? null;
+      });
+      if (sourceVersions.some((v) => v === null)) {
+        return reply.code(400).send({ error: 'One or more versions not found on this document' });
+      }
+      const readyVersions = sourceVersions as NonNullable<(typeof sourceVersions)[number]>[];
+      if (readyVersions.some((v) => v.status !== 'ready')) {
+        return reply.code(400).send({ error: 'All source versions must be ready' });
+      }
+      if (readyVersions.some((v) => !v.pageCount || v.pageCount <= 0)) {
+        return reply.code(400).send({ error: 'Source version pageCount is unknown' });
+      }
+
+      const totalPages = readyVersions.reduce((sum, v) => sum + (v.pageCount ?? 0), 0);
+      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
+      const targetS3Key = buildOriginalKey(
+        document.id,
+        nextVersionNumber,
+        `merge-v${readyVersions.map((v) => v.version).join('-')}.pdf`,
+      );
+
+      const [targetVersion, operationJob] = await app.prisma.$transaction([
+        app.prisma.documentVersion.create({
+          data: {
+            documentId: document.id,
+            version: nextVersionNumber,
+            s3Key: targetS3Key,
+            size: BigInt(0),
+            mimeType: readyVersions[0]!.mimeType,
+            status: 'processing',
+          },
+        }),
+        app.prisma.job.create({
+          data: {
+            type: 'pdf-merge',
+            status: 'queued',
+            tenantId: user.tenantId,
+            payload: {
+              documentId,
+              sourceVersionIds: versionIds,
+            },
+          },
+        }),
+      ]);
+
+      await enqueueMergeVersionsJob(env, {
+        jobId: `merge-versions-${targetVersion.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        targetVersionId: targetVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Keys: readyVersions.map((v) => v.s3Key),
+        sourceVersionIds: versionIds,
+        targetS3Key,
+        requestId: request.requestId,
+      });
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.versions_merged',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            sourceVersionIds: versionIds,
+            targetVersionId: targetVersion.id,
+            operationJobId: operationJob.id,
+            pageCount: totalPages,
+          },
+        },
+      });
+
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId: targetVersion.id,
+        version: targetVersion.version,
+        status: 'processing',
       });
     },
   );
@@ -541,13 +795,12 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
 
       if (isS3Configured()) {
         try {
-          await deleteObjectByKey(version.s3Key);
-          await deleteObjectByKey(extractedTextKey(documentId, versionId));
-          await deleteObjectByKey(exportReportKey(documentId, versionId));
-          await deleteObjectByKey(exportReportWordKey(documentId, versionId));
-          await deleteObjectsByPrefix(resolveS3Key('previews', `${documentId}/${versionId}`));
-        } catch {
-          // часть объектов могла отсутствовать
+          await deleteVersionArtifacts(documentId, versionId, version.s3Key);
+        } catch (err) {
+          request.log.warn(
+            { err, documentId, versionId, s3Key: version.s3Key },
+            'S3 cleanup incomplete for deleted version',
+          );
         }
       }
 
@@ -632,6 +885,7 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
                 status: z.string(),
                 size: z.string(),
                 mimeType: z.string(),
+                pageCount: z.number().nullable(),
                 createdAt: z.string(),
               }),
             ),
@@ -665,6 +919,7 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
           status: string;
           size: bigint;
           mimeType: string;
+          pageCount: number | null;
           createdAt: Date;
         }) => ({
           id: v.id,
@@ -672,6 +927,7 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
           status: v.status,
           size: v.size.toString(),
           mimeType: v.mimeType,
+          pageCount: v.pageCount ?? null,
           createdAt: v.createdAt.toISOString(),
         })),
       };
@@ -707,7 +963,25 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         return reply.code(404).send({ error: 'Version not available' });
       }
 
-      const { body, contentType, contentLength } = await getObjectReadable(version.s3Key);
+      let body: Awaited<ReturnType<typeof getObjectReadable>>['body'];
+      let contentType: string;
+      let contentLength: number | undefined;
+      try {
+        const object = await getObjectReadable(version.s3Key);
+        body = object.body;
+        contentType = object.contentType;
+        contentLength = object.contentLength;
+      } catch (err) {
+        const notFound =
+          typeof err === 'object' &&
+          err !== null &&
+          'name' in err &&
+          (err as { name: string }).name === 'NoSuchKey';
+        if (notFound && version.status === 'processing') {
+          return reply.code(404).send({ error: 'File is not ready yet' });
+        }
+        throw err;
+      }
 
       await app.prisma.auditLog.create({
         data: {

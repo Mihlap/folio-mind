@@ -51,6 +51,7 @@ export {
   useVerifyEmailMutation,
 
   useResendVerificationMutation,
+  useEmailVerificationStatusMutation,
 
   useRequestMagicLinkMutation,
 
@@ -90,6 +91,10 @@ export {
   useLazyGetDownloadUrlQuery,
 
   useGetVersionPreviewsQuery,
+
+  useSplitPagesMutation,
+
+  useMergeVersionsMutation,
 
 } from './api/documentsApi.js';
 

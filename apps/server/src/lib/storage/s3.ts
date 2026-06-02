@@ -136,7 +136,19 @@ export async function deleteObjectsByPrefix(prefix: string): Promise<void> {
   } while (continuationToken);
 }
 
-/** Оригиналы, превью и артефакты обработки документа. */
+export async function deleteVersionArtifacts(
+  documentId: string,
+  versionId: string,
+  originalS3Key: string,
+): Promise<void> {
+  if (originalS3Key && originalS3Key !== 'pending') {
+    await deleteObjectByKey(originalS3Key);
+  }
+  await deleteObjectsByPrefix(resolveS3Key('previews', `${documentId}/${versionId}`));
+  await deleteObjectsByPrefix(resolveS3Key('processing', `${documentId}/${versionId}`));
+  await deleteObjectsByPrefix(resolveS3Key('exports', `${documentId}/${versionId}`));
+}
+
 export async function deleteDocumentArtifacts(documentId: string): Promise<void> {
   await deleteObjectsByPrefix(resolveS3Key('originals', documentId));
   await deleteObjectsByPrefix(resolveS3Key('previews', documentId));

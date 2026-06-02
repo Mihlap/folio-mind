@@ -26,6 +26,7 @@ const envSchema = z.object({
   PREVIEW_MAX_PAGES: z.coerce.number().int().min(1).default(200),
   PREVIEW_JOB_TIMEOUT_MS: z.coerce.number().int().min(10_000).default(300_000),
   PREVIEW_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(2),
+  OPTIMIZE_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(1),
   AI_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(1),
 });
 

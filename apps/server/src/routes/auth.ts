@@ -61,6 +61,10 @@ const resendVerificationSchema = z.object({
   email: z.string().email(),
 });
 
+const emailVerificationStatusSchema = z.object({
+  email: z.string().email(),
+});
+
 const magicLinkRequestSchema = z.object({
   email: z.string().email(),
   captchaToken: z.string().optional(),
@@ -291,6 +295,26 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       }
 
       return { ok: true as const };
+    },
+  );
+
+  r.post(
+    '/auth/email-verification-status',
+    {
+      schema: {
+        body: emailVerificationStatusSchema,
+        response: {
+          200: z.object({ verified: z.boolean() }),
+        },
+      },
+    },
+    async (request) => {
+      const email = normalizeEmail(request.body.email);
+      const user = await app.prisma.user.findUnique({
+        where: { email },
+        select: { emailVerifiedAt: true },
+      });
+      return { verified: Boolean(user?.emailVerifiedAt) };
     },
   );
 

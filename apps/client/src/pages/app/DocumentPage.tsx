@@ -20,6 +20,7 @@ import {
   zoomOut,
 } from '@folio-mind/store';
 import { DocumentAiPanel } from '../../components/documents/DocumentAiPanel.js';
+import { DocumentPdfOperationsPanel } from '../../components/documents/DocumentPdfOperationsPanel.js';
 import { DocumentVersionsPanel } from '../../components/documents/DocumentVersionsPanel.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
 import { loadDocumentPdfUrl } from '../../lib/documents/documentPdf.js';
@@ -46,7 +47,15 @@ export function DocumentPage() {
   const { id } = useParams<{ id: string }>();
   const token = useAppSelector((s) => s.auth.token);
   const viewer = useAppSelector((s) => s.viewer);
-  const { data: doc, isLoading } = useGetDocumentQuery(id!, { skip: !id });
+  const { data: doc, isLoading, refetch: refetchDocument } = useGetDocumentQuery(id!, {
+    skip: !id,
+  });
+
+  useEffect(() => {
+    if (!doc?.versions.some((v) => v.status === 'processing')) return;
+    const timer = setInterval(() => void refetchDocument(), 2000);
+    return () => clearInterval(timer);
+  }, [doc?.versions, refetchDocument]);
   const { data: providersData } = useGetAiProvidersQuery();
   const [requestSummary, { isLoading: summaryRequestLoading }] = useRequestSummaryMutation();
   const [exportReport, { isLoading: exportLoading }] = useExportReportMutation();
@@ -169,35 +178,60 @@ export function DocumentPage() {
   useEffect(() => {
     if (!doc || !activeVersion || activeVersion.status === 'pending_upload') {
       setPdfUrl(null);
+      setPdfError(null);
+      return;
+    }
+
+    if (activeVersion.status === 'failed') {
+      setPdfUrl(null);
+      setPdfError('Версия не обработана — повторите операцию или удалите версию');
+      setPdfLoading(false);
       return;
     }
 
     let objectUrl: string | null = null;
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const maxAttempts = activeVersion.status === 'processing' ? 90 : 1;
 
-    setPdfLoading(true);
-    setPdfError(null);
+    const loadPdf = () => {
+      if (cancelled) return;
+      setPdfLoading(true);
+      if (attempt === 0) setPdfError(null);
 
-    void loadDocumentPdfUrl(doc.id, activeVersion.id, token)
-      .then((url) => {
-        if (cancelled) {
-          URL.revokeObjectURL(url);
-          return;
-        }
-        objectUrl = url;
-        setPdfUrl(url);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setPdfError(err instanceof Error ? err.message : 'Не удалось открыть PDF');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPdfLoading(false);
-      });
+      void loadDocumentPdfUrl(doc.id, activeVersion.id, token)
+        .then((url) => {
+          if (cancelled) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          objectUrl = url;
+          setPdfUrl(url);
+          setPdfLoading(false);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          attempt += 1;
+          if (attempt < maxAttempts && activeVersion.status === 'processing') {
+            retryTimer = setTimeout(loadPdf, 2000);
+            return;
+          }
+          setPdfError(
+            activeVersion.status === 'processing'
+              ? 'PDF ещё готовится. Проверьте, что worker запущен (pnpm dev).'
+              : 'Не удалось загрузить PDF для просмотра',
+          );
+          setPdfLoading(false);
+        });
+    };
+
+    loadPdf();
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       setPdfUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -250,6 +284,14 @@ export function DocumentPage() {
         documentId={doc.id}
         versions={versions}
         selectedVersionId={activeVersion?.id}
+        onSelectVersion={setSelectedVersionId}
+      />
+
+      <DocumentPdfOperationsPanel
+        documentId={doc.id}
+        versions={versions}
+        activeVersion={activeVersion}
+        viewerPage={viewerPage}
         onSelectVersion={setSelectedVersionId}
       />
 
@@ -361,12 +403,22 @@ export function DocumentPage() {
 
       <div className="mt-6 flex flex-col gap-4 lg:mt-8 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
-          {previews?.status === 'processing' && (
-            <p className="mb-3 text-center text-xs text-slate-500">Готовим миниатюры страниц…</p>
+          {activeVersion?.status === 'processing' && !pdfUrl && (
+            <p className="mb-3 text-center text-xs text-slate-500">
+              {pdfLoading ? 'Загружаем PDF…' : 'Ожидание worker — PDF появится через несколько секунд'}
+            </p>
           )}
-          {previews?.status === 'partial' && (
-            <p className="mb-3 text-center text-xs text-slate-500">Подгружаем миниатюры…</p>
-          )}
+          {pdfUrl &&
+            activeVersion?.status === 'ready' &&
+            (previews?.status === 'partial' ||
+              previews?.status === 'processing' ||
+              ((previews?.pageCount ?? 0) > 0 &&
+                (previews?.pages.length ?? 0) < Math.min(previews?.pageCount ?? 0, 15))) && (
+              <p className="mb-3 text-center text-xs text-slate-500">
+                Миниатюры: {previews?.pages.length ?? 0}
+                {previews?.pageCount ? ` / ${Math.min(previews.pageCount, 15)}` : ''} — PDF уже можно листать
+              </p>
+            )}
           {previews?.pages && previews.pages.length > 0 && (
             <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
               {previews.pages.map((thumb) => (

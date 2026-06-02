@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { setToken, useResendVerificationMutation } from '@folio-mind/store';
+import {
+  setToken,
+  useEmailVerificationStatusMutation,
+  useResendVerificationMutation,
+} from '@folio-mind/store';
 import { useAppDispatch } from '../../hooks/index.js';
 import { Button } from '../../components/ui/Button.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
@@ -17,6 +21,7 @@ export function CheckEmailPage() {
   const [email, setEmail] = useState(state.email ?? '');
   const [verifiedInOtherTab, setVerifiedInOtherTab] = useState(false);
   const [resend, { isLoading, isSuccess, error }] = useResendVerificationMutation();
+  const [checkVerificationStatus] = useEmailVerificationStatusMutation();
 
   useEffect(() => {
     function enterApp() {
@@ -38,6 +43,25 @@ export function CheckEmailPage() {
 
     return subscribeToAuthFromOtherTabs(enterApp);
   }, [dispatch, navigate]);
+
+  useEffect(() => {
+    const currentEmail = email.trim();
+    if (!currentEmail) return;
+    if (verifiedInOtherTab) return;
+
+    const interval = window.setInterval(() => {
+      void checkVerificationStatus({ email: currentEmail })
+        .unwrap()
+        .then((res) => {
+          if (res.verified) {
+            setVerifiedInOtherTab(true);
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [email, verifiedInOtherTab, checkVerificationStatus]);
 
   async function onResend(e: FormEvent) {
     e.preventDefault();

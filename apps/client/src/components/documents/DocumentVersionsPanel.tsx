@@ -37,6 +37,7 @@ export type DocumentVersionItem = {
   status: string;
   size: string;
   mimeType: string;
+  pageCount?: number | null;
   createdAt: string;
 };
 

@@ -20,6 +20,9 @@ export const authApi = baseApi.injectEndpoints({
     resendVerification: build.mutation<{ ok: true }, { email: string }>({
       query: (body) => ({ url: '/auth/resend-verification', method: 'POST', body }),
     }),
+    emailVerificationStatus: build.mutation<{ verified: boolean }, { email: string }>({
+      query: (body) => ({ url: '/auth/email-verification-status', method: 'POST', body }),
+    }),
     requestMagicLink: build.mutation<{ ok: true }, { email: string; captchaToken?: string }>({
       query: (body) => ({ url: '/auth/magic-link', method: 'POST', body }),
     }),
@@ -49,6 +52,7 @@ export const {
   useRegisterMutation,
   useVerifyEmailMutation,
   useResendVerificationMutation,
+  useEmailVerificationStatusMutation,
   useRequestMagicLinkMutation,
   useVerifyMagicLinkMutation,
   useLoginMutation,

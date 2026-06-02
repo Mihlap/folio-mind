@@ -1,4 +1,10 @@
-import { HeadObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { assertS3KeyUnderFilesRoot } from '@folio-mind/pdf-contracts';
 import type { Readable } from 'node:stream';
 import type { WorkerEnv } from '../config/env.js';
@@ -61,6 +67,17 @@ export async function putObjectBuffer(params: {
       Key: params.key,
       Body: params.body,
       ContentType: params.contentType,
+    }),
+  );
+}
+
+export async function deleteObjectByKey(key: string): Promise<void> {
+  if (!client) throw new Error('S3 is not configured');
+  assertS3KeyUnderFilesRoot(key);
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: bucketName,
+      Key: key,
     }),
   );
 }

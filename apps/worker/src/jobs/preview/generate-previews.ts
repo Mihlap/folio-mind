@@ -63,12 +63,37 @@ export async function processGeneratePreviewsJob(
       data: { status: 'processing' },
     });
 
+    const versionExists = await prisma.documentVersion.findUnique({
+      where: { id: versionId },
+      select: { id: true },
+    });
+    if (!versionExists) {
+      await prisma.job.update({
+        where: { id: jobId },
+        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+      });
+      return;
+    }
+
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
     }
 
     const pdfBuffer = await getObjectBuffer(s3Key);
     const { pageCount, previews, initialPages } = await renderPdfPreviews(pdfBuffer);
+
+    const versionExistsBeforeUpload = await prisma.documentVersion.findUnique({
+      where: { id: versionId },
+      select: { id: true },
+    });
+    if (!versionExistsBeforeUpload) {
+      await prisma.job.update({
+        where: { id: jobId },
+        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+      });
+      return;
+    }
+
     for (const preview of previews) {
       await putObjectBuffer({
         key: previewPageKey(documentId, versionId, preview.page),
@@ -83,20 +108,6 @@ export async function processGeneratePreviewsJob(
     });
 
     const textKey = extractedTextKey(documentId, versionId);
-    let textExtracted = true;
-    let textError: string | null = null;
-    try {
-      const text = await withTimeout(extractTextFromPdf(pdfBuffer), 20_000, 'Extract text');
-      await putObjectBuffer({
-        key: textKey,
-        body: Buffer.from(JSON.stringify({ text, extractedAt: new Date().toISOString() }), 'utf8'),
-        contentType: 'application/json',
-      });
-    } catch (err) {
-      textExtracted = false;
-      textError = err instanceof Error ? err.message : 'Text extraction failed';
-      // Превью уже готовы, документ можно открыть; не валим job из-за проблем шрифтов/текста.
-    }
 
     await prisma.job.update({
       where: { id: jobId },
@@ -109,12 +120,57 @@ export async function processGeneratePreviewsJob(
           pageCount,
           previewPages: previews.length,
           initialPages,
-          textKey: textExtracted ? textKey : null,
-          textExtracted,
-          textError,
+          textKey: null,
+          textExtracted: false,
+          textError: null,
         },
       },
     });
+
+    void (async () => {
+      try {
+        const text = await withTimeout(extractTextFromPdf(pdfBuffer), 20_000, 'Extract text');
+        await putObjectBuffer({
+          key: textKey,
+          body: Buffer.from(JSON.stringify({ text, extractedAt: new Date().toISOString() }), 'utf8'),
+          contentType: 'application/json',
+        });
+        await prisma.job.update({
+          where: { id: jobId },
+          data: {
+            payload: {
+              documentId,
+              versionId,
+              s3Key,
+              pageCount,
+              previewPages: previews.length,
+              initialPages,
+              textKey,
+              textExtracted: true,
+              textError: null,
+            },
+          },
+        });
+      } catch (err) {
+        const textError = err instanceof Error ? err.message : 'Text extraction failed';
+        await prisma.job.update({
+          where: { id: jobId },
+          data: {
+            payload: {
+              documentId,
+              versionId,
+              s3Key,
+              pageCount,
+              previewPages: previews.length,
+              initialPages,
+              textKey: null,
+              textExtracted: false,
+              textError,
+            },
+          },
+        });
+      }
+    })();
   };
 
   try {
@@ -161,12 +217,36 @@ export async function processPreviewPagesJob(
       data: { status: 'processing' },
     });
 
+    const versionExists = await prisma.documentVersion.findUnique({
+      where: { id: versionId },
+      select: { id: true },
+    });
+    if (!versionExists) {
+      await prisma.job.update({
+        where: { id: jobId },
+        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+      });
+      return;
+    }
+
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
     }
 
     const pdfBuffer = await getObjectBuffer(s3Key);
     const previews = await renderPdfPageRange(pdfBuffer, fromPage, cappedTo);
+
+    const versionExistsBeforeUpload = await prisma.documentVersion.findUnique({
+      where: { id: versionId },
+      select: { id: true },
+    });
+    if (!versionExistsBeforeUpload) {
+      await prisma.job.update({
+        where: { id: jobId },
+        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+      });
+      return;
+    }
 
     let uploaded = 0;
     for (const preview of previews) {
