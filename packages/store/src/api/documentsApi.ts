@@ -218,6 +218,33 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: documentId },
       ],
     }),
+    compareVersions: build.query<
+      {
+        baseVersionId: string;
+        compareVersionId: string;
+        baseVersion: number;
+        compareVersion: number;
+        summary: {
+          unchangedPages: number;
+          modifiedPages: number;
+          addedPages: number;
+          removedPages: number;
+        };
+        pages: Array<{
+          page: number;
+          status: 'unchanged' | 'modified' | 'added' | 'removed';
+          baseText?: string;
+          compareText?: string;
+          lines?: Array<{ type: 'equal' | 'insert' | 'delete'; text: string }>;
+        }>;
+      },
+      { documentId: string; baseVersionId: string; compareVersionId: string }
+    >({
+      query: ({ documentId, baseVersionId, compareVersionId }) => ({
+        url: `/documents/${documentId}/versions/compare`,
+        params: { baseVersionId, compareVersionId },
+      }),
+    }),
   }),
 });
 
@@ -234,4 +261,5 @@ export const {
   useGetVersionPreviewsQuery,
   useSplitPagesMutation,
   useMergeVersionsMutation,
+  useLazyCompareVersionsQuery,
 } = documentsApi;

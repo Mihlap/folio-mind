@@ -1,13 +1,17 @@
 import { initTracing, withSpan } from '@folio-mind/observability';
 import { Worker } from 'bullmq';
 import { processAiChatJob } from './jobs/ai/ai-chat.js';
+import { processAiSuggestionsJob } from './jobs/ai/ai-suggestions.js';
+import { processRagCompareJob } from './jobs/ai/rag-compare.js';
 import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
+import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accepted-suggestions.js';
 import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
 import { processSplitPagesJob } from './jobs/optimize/split-pages.js';
 import {
   processGeneratePreviewsJob,
   processPreviewPagesJob,
 } from './jobs/preview/generate-previews.js';
+import { processRagIndexJob } from './jobs/rag/rag-index.js';
 import { loadWorkerEnv } from './lib/config/env.js';
 import { loadAppEnv } from './lib/config/load-env.js';
 import type { WorkerJobPayload } from './lib/config/job-types.js';
@@ -51,6 +55,8 @@ function createPreviewWorker() {
             await processGeneratePreviewsJob(env, data);
           } else if (job.name === 'preview-pages') {
             await processPreviewPagesJob(env, data);
+          } else if (job.name === 'rag-index') {
+            await processRagIndexJob(env, data);
           }
           return { ok: true };
         },
@@ -78,6 +84,10 @@ function createAiWorker() {
             await processAiSummaryJob(env, data);
           } else if (job.name === 'chat') {
             await processAiChatJob(env, data);
+          } else if (job.name === 'suggestions') {
+            await processAiSuggestionsJob(env, data);
+          } else if (job.name === 'rag-compare') {
+            await processRagCompareJob(env, data);
           }
           return { ok: true };
         },
@@ -105,6 +115,8 @@ function createOptimizeWorker() {
             await processSplitPagesJob(env, data);
           } else if (job.name === 'merge-versions') {
             await processMergeVersionsJob(env, data);
+          } else if (job.name === 'apply-accepted-suggestions') {
+            await processApplyAcceptedSuggestionsJob(env, data);
           }
           return { ok: true };
         },

@@ -13,11 +13,13 @@ import { prismaPlugin } from './plugins/prisma.js';
 import { requestIdPlugin } from './plugins/request-id.js';
 import { tracingPlugin } from './plugins/tracing.js';
 import { aiRoutes } from './routes/ai.js';
+import { annotationRoutes } from './routes/annotations.js';
 import { authRoutes } from './routes/auth.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { documentRoutes } from './routes/documents.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
+import { ragRoutes } from './routes/rag.js';
 
 export type BuildAppOptions = {
   env: Env;
@@ -74,7 +76,9 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(oauthRoutes, { env: options.env });
     await app.register(meRoutes);
     await app.register(documentRoutes, { env: options.env });
+    await app.register(annotationRoutes);
     await app.register(aiRoutes, { env: options.env });
+    await app.register(ragRoutes, { env: options.env });
   } else if (options.skipDatabase) {
     await app.register(healthRoutes, { env: options.env });
   }

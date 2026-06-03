@@ -4,6 +4,7 @@ import { AppShell } from '../components/layout/AppShell.js';
 import { DocumentWorkspaceProvider } from '../context/document-workspace-context.js';
 import { DashboardPage } from '../pages/app/DashboardPage.js';
 import { DocumentPage } from '../pages/app/DocumentPage.js';
+import { RegulationsPage } from '../pages/app/RegulationsPage.js';
 import { LandingPage } from '../pages/public/LandingPage.js';
 import { LoginPage } from '../pages/auth/LoginPage.js';
 import { RegisterPage } from '../pages/auth/RegisterPage.js';
@@ -45,6 +46,7 @@ export function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="regulations" element={<RegulationsPage />} />
         <Route path="documents/:id" element={<DocumentPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -96,6 +96,8 @@ export {
 
   useMergeVersionsMutation,
 
+  useLazyCompareVersionsQuery,
+
 } from './api/documentsApi.js';
 
 export {
@@ -120,5 +122,44 @@ export {
 
   type ChatMessage,
 
+  useListAiSuggestionsQuery,
+
+  useRequestAiSuggestionsMutation,
+
+  useUpdateAiSuggestionMutation,
+  useApplyAcceptedSuggestionsMutation,
+
+  useRequestRagCompareMutation,
+
 } from './api/aiApi.js';
+
+export {
+
+  annotationsApi,
+
+  useListAnnotationsQuery,
+
+  useCreateAnnotationMutation,
+
+  useDeleteAnnotationMutation,
+
+} from './api/annotationsApi.js';
+
+export {
+
+  ragApi,
+
+  useListRagSourcesQuery,
+
+  useCreateRagSourceMutation,
+
+  useCompleteRagSourceMutation,
+
+  useUploadRagSourceFileMutation,
+
+  useDeleteRagSourceMutation,
+
+  useQueryRagMutation,
+
+} from './api/ragApi.js';
 

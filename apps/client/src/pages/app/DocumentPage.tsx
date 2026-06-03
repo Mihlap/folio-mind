@@ -30,6 +30,7 @@ import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js'
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
+import { shellTopHeaderClass } from '../../components/layout/shell-chrome.js';
 import { loadDocumentPdfUrl } from '../../lib/documents/documentPdf.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -291,8 +292,8 @@ export function DocumentPage() {
         }}
       />
 
-      <header className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-4">
-        <div className="flex items-center gap-2 sm:gap-3">
+      <header className={`${shellTopHeaderClass} px-3 sm:px-4`}>
+        <div className="flex w-full min-w-0 items-center gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 gap-y-1">
               <Link
@@ -499,6 +500,7 @@ export function DocumentPage() {
           versionReady={versionReady}
           viewerPage={viewerPage}
           onSelectVersion={setSelectedVersionId}
+          onGoToPage={setViewerPage}
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -562,6 +564,7 @@ export function DocumentPage() {
           versionReady={versionReady}
           viewerPage={viewerPage}
           onSelectVersion={setSelectedVersionId}
+          onGoToPage={setViewerPage}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

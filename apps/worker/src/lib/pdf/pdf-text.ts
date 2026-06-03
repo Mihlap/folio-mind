@@ -1,7 +1,8 @@
+import { getDocument, GlobalWorkerOptions, VerbosityLevel } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { getDocument, GlobalWorkerOptions, VerbosityLevel } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import type { PageText } from '@folio-mind/pdf-contracts';
 
 const require = createRequire(import.meta.url);
 const pdfjsPkgDir = dirname(require.resolve('pdfjs-dist/package.json'));
@@ -15,7 +16,12 @@ const standardFontDataUrl = `${pathToFileURL(join(pdfjsPkgDir, 'standard_fonts')
 const MAX_PAGES = 50;
 const MAX_CHARS = 12_000;
 
-export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
+export type ExtractTextResult = {
+  text: string;
+  pages: PageText[];
+};
+
+export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractTextResult> {
   const task = getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
@@ -26,21 +32,32 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   const pdf = await task.promise;
 
   const pageCount = Math.min(pdf.numPages, MAX_PAGES);
-  const parts: string[] = [];
+  const pages: PageText[] = [];
 
   for (let i = 1; i <= pageCount; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     const pageText = content.items.map(textItemToString).join(' ').replace(/\s+/g, ' ').trim();
-    if (pageText) parts.push(pageText);
-    if (parts.join('\n').length >= MAX_CHARS) break;
+    if (pageText) pages.push({ page: i, text: pageText });
+    if (pages.map((p) => p.text).join('\n\n').length >= MAX_CHARS) break;
   }
 
   await pdf.destroy();
 
-  const full = parts.join('\n\n').trim();
-  if (full.length <= MAX_CHARS) return full;
-  return `${full.slice(0, MAX_CHARS)}…`;
+  let full = pages.map((p) => p.text).join('\n\n').trim();
+  if (full.length > MAX_CHARS) {
+    full = `${full.slice(0, MAX_CHARS)}…`;
+    let total = 0;
+    const trimmedPages: PageText[] = [];
+    for (const page of pages) {
+      if (total + page.text.length > MAX_CHARS) break;
+      trimmedPages.push(page);
+      total += page.text.length + 2;
+    }
+    return { text: full, pages: trimmedPages };
+  }
+
+  return { text: full, pages };
 }
 
 function textItemToString(item: unknown): string {

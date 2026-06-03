@@ -3,18 +3,28 @@ import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { exportReportKey, exportReportPdfKey, exportReportWordKey } from '@folio-mind/pdf-contracts';
+import {
+  exportReportKey,
+  exportReportPdfKey,
+  exportReportWordKey,
+  resolveS3Key,
+} from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
 import { getCachedSummary } from '../lib/ai/ai-cache.js';
 import { AiLimitError, checkAndIncrementAiUsage, getAiUsageToday } from '../lib/ai/ai-limits.js';
 import type { Env } from '../lib/config/env.js';
 import { createLLMFromEnv, getAiProviderCatalog, getConfiguredProviderName } from '../lib/ai/llm.js';
-import { enqueueAiJob } from '../lib/queue/queue.js';
+import { enqueueAiJob, enqueueApplyAcceptedSuggestionsJob } from '../lib/queue/queue.js';
 import { getPresignedGetUrl, isS3Configured, putObjectByKey } from '../lib/storage/s3.js';
 import { resolveDefaultProvider, type AIProviderName } from '@folio-mind/ai-providers';
 
 const errorBody = z.object({ error: z.string() });
 const require = createRequire(import.meta.url);
+
+function buildOriginalKey(documentId: string, version: number, fileName: string) {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return resolveS3Key('originals', `${documentId}/v${version}-${safeName}`);
+}
 
 const chatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -405,6 +415,372 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         tenantId: user.tenantId,
         type: 'chat',
         prompt: request.body.prompt,
+        requestId: request.requestId,
+      });
+
+      return reply.status(202).send({ jobId: job.id, status: 'queued' });
+    },
+  );
+
+  const suggestionItemSchema = z.object({
+    id: z.string(),
+    fragmentId: z.string(),
+    originalText: z.string(),
+    suggestion: z.string(),
+    reason: z.string(),
+    page: z.number().nullable(),
+    status: z.string(),
+    createdAt: z.string(),
+  });
+
+  r.get(
+    '/documents/:documentId/versions/:versionId/ai/suggestions',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        response: {
+          200: z.object({ items: z.array(suggestionItemSchema) }),
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const items = await app.prisma.aiSuggestion.findMany({
+        where: { documentId, versionId, tenantId: user.tenantId },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      return {
+        items: items.map((item) => ({
+          id: item.id,
+          fragmentId: item.fragmentId,
+          originalText: item.originalText,
+          suggestion: item.suggestion,
+          reason: item.reason,
+          page: item.page,
+          status: item.status,
+          createdAt: item.createdAt.toISOString(),
+        })),
+      };
+    },
+  );
+
+  r.post(
+    '/documents/:documentId/versions/:versionId/ai/suggestions',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        body: z.object({ provider: z.enum(['gigachat', 'yandex']).optional() }),
+        response: {
+          202: z.object({ jobId: z.string(), status: z.string() }),
+          400: errorBody,
+          404: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const provider = request.body.provider ?? getConfiguredProviderName(env);
+
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version || version.status !== 'ready') {
+        return reply.code(400).send({ error: 'Version not ready' });
+      }
+
+      try {
+        await checkAndIncrementAiUsage(env, user.tenantId);
+      } catch (err) {
+        if (err instanceof AiLimitError) {
+          return reply.code(429).send({ error: err.message });
+        }
+        throw err;
+      }
+
+      const job = await app.prisma.job.create({
+        data: {
+          type: 'ai-suggestions',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: { documentId, versionId, provider },
+        },
+      });
+
+      await enqueueAiJob(env, {
+        jobId: job.id,
+        documentId,
+        versionId,
+        tenantId: user.tenantId,
+        type: 'suggestions',
+        requestId: request.requestId,
+      });
+
+      return reply.status(202).send({ jobId: job.id, status: 'queued' });
+    },
+  );
+
+  r.patch(
+    '/documents/:documentId/versions/:versionId/ai/suggestions/:suggestionId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+          suggestionId: z.string(),
+        }),
+        body: z.object({ status: z.enum(['accepted', 'rejected']) }),
+        response: {
+          200: suggestionItemSchema,
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId, suggestionId } = request.params;
+
+      const suggestion = await app.prisma.aiSuggestion.findFirst({
+        where: {
+          id: suggestionId,
+          documentId,
+          versionId,
+          tenantId: user.tenantId,
+        },
+      });
+      if (!suggestion) {
+        return reply.code(404).send({ error: 'Suggestion not found' });
+      }
+
+      const updated = await app.prisma.aiSuggestion.update({
+        where: { id: suggestionId },
+        data: { status: request.body.status },
+      });
+
+      if (request.body.status === 'accepted') {
+        await app.prisma.documentAnnotation.create({
+          data: {
+            documentId,
+            versionId,
+            userId: user.sub,
+            page: suggestion.page ?? 1,
+            kind: 'accepted_edit',
+            content: suggestion.suggestion,
+            quote: suggestion.originalText,
+            meta: { suggestionId: suggestion.id, reason: suggestion.reason },
+          },
+        });
+      }
+
+      await app.prisma.auditLog.create({
+        data: {
+          action:
+            request.body.status === 'accepted'
+              ? 'ai.suggestion_accepted'
+              : 'ai.suggestion_rejected',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: { suggestionId, versionId, fragmentId: suggestion.fragmentId },
+        },
+      });
+
+      return {
+        id: updated.id,
+        fragmentId: updated.fragmentId,
+        originalText: updated.originalText,
+        suggestion: updated.suggestion,
+        reason: updated.reason,
+        page: updated.page,
+        status: updated.status,
+        createdAt: updated.createdAt.toISOString(),
+      };
+    },
+  );
+
+  r.post(
+    '/documents/:documentId/versions/:versionId/ai/apply-accepted',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            version: z.number(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+
+      const acceptedCount = await app.prisma.aiSuggestion.count({
+        where: { documentId, versionId, tenantId: user.tenantId, status: 'accepted' },
+      });
+      if (acceptedCount === 0) {
+        return reply.code(400).send({ error: 'Нет принятых правок. Сначала нажмите «Принять» у нужных предложений.' });
+      }
+
+      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
+      const targetS3Key = buildOriginalKey(
+        document.id,
+        nextVersionNumber,
+        `edits-from-v${sourceVersion.version}.pdf`,
+      );
+
+      const [targetVersion, operationJob] = await app.prisma.$transaction([
+        app.prisma.documentVersion.create({
+          data: {
+            documentId: document.id,
+            version: nextVersionNumber,
+            s3Key: targetS3Key,
+            size: BigInt(0),
+            mimeType: sourceVersion.mimeType,
+            status: 'processing',
+          },
+        }),
+        app.prisma.job.create({
+          data: {
+            type: 'pdf-apply-edits',
+            status: 'queued',
+            tenantId: user.tenantId,
+            payload: { documentId, sourceVersionId: sourceVersion.id, acceptedCount },
+          },
+        }),
+      ]);
+
+      await enqueueApplyAcceptedSuggestionsJob(env, {
+        jobId: `apply-edits-${targetVersion.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        sourceVersionId: sourceVersion.id,
+        targetVersionId: targetVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Key: sourceVersion.s3Key,
+        targetS3Key,
+        requestId: request.requestId,
+      });
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_apply_ai_edits',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            sourceVersionId: sourceVersion.id,
+            targetVersionId: targetVersion.id,
+            acceptedCount,
+            operationJobId: operationJob.id,
+          },
+        },
+      });
+
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId: targetVersion.id,
+        version: targetVersion.version,
+        status: 'processing',
+      });
+    },
+  );
+
+  r.post(
+    '/documents/:documentId/versions/:versionId/rag/compare',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        body: z.object({
+          query: z.string().max(500).optional(),
+          provider: z.enum(['gigachat', 'yandex']).optional(),
+        }),
+        response: {
+          202: z.object({ jobId: z.string(), status: z.string() }),
+          400: errorBody,
+          404: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const provider = request.body.provider ?? getConfiguredProviderName(env);
+
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version || version.status !== 'ready') {
+        return reply.code(400).send({ error: 'Version not ready' });
+      }
+
+      try {
+        await checkAndIncrementAiUsage(env, user.tenantId);
+      } catch (err) {
+        if (err instanceof AiLimitError) {
+          return reply.code(429).send({ error: err.message });
+        }
+        throw err;
+      }
+
+      const job = await app.prisma.job.create({
+        data: {
+          type: 'rag-compare',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: {
+            documentId,
+            versionId,
+            provider,
+            query: request.body.query ?? 'сверка с регламентом',
+          },
+        },
+      });
+
+      await enqueueAiJob(env, {
+        jobId: job.id,
+        documentId,
+        versionId,
+        tenantId: user.tenantId,
+        type: 'rag-compare',
+        prompt: request.body.query,
         requestId: request.requestId,
       });
 

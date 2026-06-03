@@ -129,10 +129,17 @@ export async function processGeneratePreviewsJob(
 
     void (async () => {
       try {
-        const text = await withTimeout(extractTextFromPdf(pdfBuffer), 20_000, 'Extract text');
+        const extracted = await withTimeout(extractTextFromPdf(pdfBuffer), 20_000, 'Extract text');
         await putObjectBuffer({
           key: textKey,
-          body: Buffer.from(JSON.stringify({ text, extractedAt: new Date().toISOString() }), 'utf8'),
+          body: Buffer.from(
+            JSON.stringify({
+              text: extracted.text,
+              pages: extracted.pages,
+              extractedAt: new Date().toISOString(),
+            }),
+            'utf8',
+          ),
           contentType: 'application/json',
         });
         await prisma.job.update({

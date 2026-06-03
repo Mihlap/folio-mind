@@ -1,4 +1,7 @@
-import type { ReactNode } from 'react';
+import {
+  shellCollapseBtnClass,
+  shellPanelToolbarClass,
+} from '../layout/shell-chrome.js';
 import { PanelResizeHandle } from '../layout/PanelResizeHandle.js';
 import { DocumentAiPanel } from './DocumentAiPanel.js';
 import { DocumentPdfOperationsPanel } from './DocumentPdfOperationsPanel.js';
@@ -14,6 +17,7 @@ type Props = {
   versionReady: boolean;
   viewerPage: number;
   onSelectVersion: (versionId: string) => void;
+  onGoToPage: (page: number) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -38,6 +42,7 @@ export function DocumentRightPanel({
   versionReady,
   viewerPage,
   onSelectVersion,
+  onGoToPage,
   collapsed,
   onToggleCollapsed,
   onExpand,
@@ -53,12 +58,12 @@ export function DocumentRightPanel({
   if (collapsed && !isDrawer) {
     return (
       <aside className="relative hidden h-full shrink-0 flex-col border-l border-slate-200 bg-white lg:flex lg:w-12">
-        <div className="flex w-full shrink-0 items-center justify-end border-b border-slate-100 px-1.5 py-2">
+        <div className={`${shellPanelToolbarClass} justify-end px-1.5`}>
           <button
             type="button"
             title="Развернуть панель"
             onClick={onExpand}
-            className="cursor-pointer rounded-lg px-0.5 py-0.5 text-xs leading-none text-slate-400 hover:bg-slate-50"
+            className={shellCollapseBtnClass}
           >
             ◀
           </button>
@@ -93,21 +98,21 @@ export function DocumentRightPanel({
       style={isDrawer ? undefined : { width: panelWidth }}
       className={
         isDrawer
-          ? 'relative flex h-full min-h-0 flex-col bg-white'
-          : `relative hidden h-full min-h-0 shrink-0 flex-col border-l border-slate-200 bg-white lg:flex ${
+          ? 'relative flex h-full min-h-0 flex-col overflow-hidden bg-white'
+          : `relative hidden h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-white lg:flex ${
               isResizing ? '' : 'transition-[width] duration-200'
             }`
       }
     >
       {!isDrawer && <PanelResizeHandle edge="left" onMouseDown={onResizeStart} />}
 
-      <div className="flex shrink-0 items-center border-b border-slate-100">
+      <div className={`${shellPanelToolbarClass}`}>
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onTabChange(tab.id)}
-            className={`min-w-0 flex-1 cursor-pointer border-b-2 px-1 py-2.5 text-xs font-medium transition sm:px-2 sm:text-sm ${
+            className={`flex h-full min-w-0 flex-1 cursor-pointer items-center justify-center border-b-2 px-1 text-xs font-medium transition sm:px-2 sm:text-sm ${
               activeTab === tab.id
                 ? 'border-folio-600 text-folio-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -121,25 +126,27 @@ export function DocumentRightPanel({
             type="button"
             title="Свернуть"
             onClick={onToggleCollapsed}
-            className="hidden shrink-0 cursor-pointer px-2 py-2 text-xs text-slate-400 hover:text-slate-600 lg:block"
+            className={`hidden lg:block ${shellCollapseBtnClass}`}
           >
             ▶
           </button>
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <TabPanel active={activeTab === 'report'}>
+      <div className="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+        <div className={activeTab === 'report' ? 'block' : 'hidden'}>
           {activeVersion ? (
             <DocumentReportPanel
               documentId={documentId}
               versionId={activeVersion.id}
               versionReady={versionReady}
+              onGoToPage={onGoToPage}
+              onSelectVersion={onSelectVersion}
             />
           ) : (
             <EmptyTab text="Выберите версию" />
           )}
-        </TabPanel>
-        <TabPanel active={activeTab === 'tools'}>
+        </div>
+        <div className={activeTab === 'tools' ? 'block' : 'hidden'}>
           <DocumentPdfOperationsPanel
             embedded
             documentId={documentId}
@@ -147,9 +154,11 @@ export function DocumentRightPanel({
             activeVersion={activeVersion}
             viewerPage={viewerPage}
             onSelectVersion={onSelectVersion}
+            onGoToPage={onGoToPage}
+            versionReady={versionReady}
           />
-        </TabPanel>
-        <TabPanel active={activeTab === 'chat'}>
+        </div>
+        <div className={activeTab === 'chat' ? 'block' : 'hidden'}>
           {activeVersion ? (
             <DocumentAiPanel
               embedded
@@ -160,17 +169,9 @@ export function DocumentRightPanel({
           ) : (
             <EmptyTab text="Выберите версию" />
           )}
-        </TabPanel>
+        </div>
       </div>
     </aside>
-  );
-}
-
-function TabPanel({ active, children }: { active: boolean; children: ReactNode }) {
-  return (
-    <div className={active ? 'block' : 'hidden'} aria-hidden={!active}>
-      {children}
-    </div>
   );
 }
 

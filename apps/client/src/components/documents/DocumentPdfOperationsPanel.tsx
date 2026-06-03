@@ -6,6 +6,15 @@ import {
   useSplitPagesMutation,
 } from '@folio-mind/store';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
+import {
+  FeatureHelpActionButton,
+  FeatureHelpButton,
+  PanelSectionHeader,
+  reportActionBtnPrimary,
+  reportActionsColumnClass,
+} from '../ui/FeatureHelp.js';
+import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
+import { DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
 
 function parsePageNumbers(input: string, maxPage: number): number[] | string {
   const parts = input
@@ -41,6 +50,8 @@ type Props = {
   activeVersion: DocumentVersionItem | undefined;
   viewerPage: number;
   onSelectVersion: (versionId: string) => void;
+  onGoToPage: (page: number) => void;
+  versionReady: boolean;
   /** Встроено во вкладку правой панели — без сворачиваемой карточки. */
   embedded?: boolean;
 };
@@ -51,6 +62,8 @@ export function DocumentPdfOperationsPanel({
   activeVersion,
   viewerPage,
   onSelectVersion,
+  onGoToPage,
+  versionReady,
   embedded = false,
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
@@ -273,8 +286,23 @@ export function DocumentPdfOperationsPanel({
     <div className={embedded ? 'space-y-6 p-4' : 'border-t border-slate-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5'}>
       <div className={embedded ? 'space-y-6' : 'grid gap-6 lg:grid-cols-2'}>
             <div>
-              <h3 className="text-sm font-medium text-slate-800">Вырезать страницы</h3>
-              <p className="mt-1 text-xs text-slate-500">
+              <PanelSectionHeader
+                title="Вырезать страницы"
+                helpTitle="Вырезать страницы"
+                helpContent={
+                  <>
+                    <p>
+                      Укажите номера страниц открытой версии — через запятую или кнопкой «+ стр.»
+                      добавьте текущую страницу из просмотрщика.
+                    </p>
+                    <p>
+                      Будет создана новая версия PDF только с выбранными страницами. Исходная версия
+                      не изменяется.
+                    </p>
+                  </>
+                }
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
                 Из текущей версии{' '}
                 {activeVersion ? `v${activeVersion.version}` : '—'}
                 {effectivePageCount > 0 ? ` · всего ${effectivePageCount} стр.` : ''}
@@ -288,45 +316,75 @@ export function DocumentPdfOperationsPanel({
                   disabled={!activeReady || operationPending}
                   className="min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
                 />
-                <button
-                  type="button"
-                  disabled={!activeReady || operationPending || effectivePageCount <= 0}
-                  onClick={() => {
-                    const next = new Set(
-                      pagesInput
-                        .split(/[,;\s]+/)
-                        .map((p) => Number(p.trim()))
-                        .filter((n) => Number.isInteger(n) && n >= 1),
-                    );
-                    next.add(viewerPage);
-                    setPagesInput([...next].sort((a, b) => a - b).join(', '));
-                  }}
-                  className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  + стр. {viewerPage}
-                </button>
+                <div className="inline-flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    disabled={!activeReady || operationPending || effectivePageCount <= 0}
+                    onClick={() => {
+                      const next = new Set(
+                        pagesInput
+                          .split(/[,;\s]+/)
+                          .map((p) => Number(p.trim()))
+                          .filter((n) => Number.isInteger(n) && n >= 1),
+                      );
+                      next.add(viewerPage);
+                      setPagesInput([...next].sort((a, b) => a - b).join(', '));
+                    }}
+                    className="inline-flex h-8 cursor-pointer items-center rounded-md border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    + стр. {viewerPage}
+                  </button>
+                  <FeatureHelpButton title={`Страница ${viewerPage}`}>
+                    <p>
+                      Добавляет в поле номеров страницу, которую вы сейчас смотрите в PDF. Удобно
+                      выбирать страницы по одной, не вводя номер вручную.
+                    </p>
+                  </FeatureHelpButton>
+                </div>
               </div>
-              <button
-                type="button"
-                disabled={
-                  !activeReady || operationPending || effectivePageCount <= 0
-                }
-                onClick={() => void handleSplit()}
-                className="mt-3 cursor-pointer rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {splitLoading ? 'Запуск…' : 'Вырезать в новую версию'}
-              </button>
+              <div className={`mt-3 ${reportActionsColumnClass}`}>
+                <FeatureHelpActionButton
+                  helpTitle="Вырезать в новую версию"
+                  disabled={!activeReady || operationPending || effectivePageCount <= 0}
+                  onClick={() => void handleSplit()}
+                  buttonClassName={reportActionBtnPrimary}
+                  helpContent={
+                    <>
+                      <p>
+                        Запускает сборку новой версии с выбранными страницами. После готовности
+                        она появится в списке версий слева и откроется в просмотрщике.
+                      </p>
+                      <p>Нужна готовая версия с известным числом страниц.</p>
+                    </>
+                  }
+                >
+                  {splitLoading ? 'Запуск…' : 'Вырезать в новую версию'}
+                </FeatureHelpActionButton>
+              </div>
               {splitBlockedReason && (
                 <p className="mt-2 text-xs text-amber-700">{splitBlockedReason}</p>
               )}
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-slate-800">Объединить версии</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Порядок в списке ниже — порядок страниц в итоговом PDF
-              </p>
-              <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+              <PanelSectionHeader
+                title="Объединить версии"
+                description="Порядок в списке ниже — порядок страниц в итоговом PDF"
+                helpTitle="Объединить версии"
+                helpContent={
+                  <>
+                    <p>
+                      Отметьте две и более готовые версии. Стрелками ↑↓ задайте порядок: сначала
+                      все страницы первой версии, затем второй и т.д.
+                    </p>
+                    <p>
+                      По кнопке «Объединить в новую версию» worker соберёт один PDF — новая версия
+                      появится в списке слева.
+                    </p>
+                  </>
+                }
+              />
+              <ul className="mt-3 space-y-2">
                 {readyVersions.length < 2 ? (
                   <li className="text-xs text-slate-500">Нужно минимум две готовые версии</li>
                 ) : (
@@ -380,21 +438,51 @@ export function DocumentPdfOperationsPanel({
                   })
                 )}
               </ul>
-              <button
-                type="button"
-                disabled={mergeOrder.length < 2 || operationPending}
-                onClick={() => void handleMerge()}
-                className="mt-3 cursor-pointer rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {mergeLoading ? 'Запуск…' : 'Объединить в новую версию'}
-              </button>
+              <div className={`mt-3 ${reportActionsColumnClass}`}>
+                <FeatureHelpActionButton
+                  helpTitle="Объединить в новую версию"
+                  disabled={mergeOrder.length < 2 || operationPending}
+                  onClick={() => void handleMerge()}
+                  buttonClassName={reportActionBtnPrimary}
+                  helpContent={
+                    <>
+                      <p>
+                        Создаёт новую версию документа из выбранных готовых PDF в указанном
+                        порядке.
+                      </p>
+                      <p>Минимум две версии со статусом «готов».</p>
+                    </>
+                  }
+                >
+                  {mergeLoading ? 'Запуск…' : 'Объединить в новую версию'}
+                </FeatureHelpActionButton>
+              </div>
             </div>
           </div>
 
           {progressLabel && (
             <p className="mt-4 text-sm text-folio-700">{progressLabel}</p>
           )}
-      {operationError && <p className="mt-2 text-sm text-red-600">{operationError}</p>}
+          {operationError && <p className="mt-2 text-sm text-red-600">{operationError}</p>}
+
+          <div className={embedded ? 'mt-8 border-t border-slate-100 pt-6' : 'mt-6 border-t border-slate-100 pt-6'}>
+            <DocumentAnnotationsPanel
+              documentId={documentId}
+              versionId={activeVersion?.id ?? ''}
+              viewerPage={viewerPage}
+              versionReady={versionReady}
+              onGoToPage={onGoToPage}
+            />
+          </div>
+
+          <div className={embedded ? 'mt-8 border-t border-slate-100 pt-6' : 'mt-6 border-t border-slate-100 pt-6'}>
+            <DocumentVersionDiffPanel
+              documentId={documentId}
+              versions={versions}
+              activeVersion={activeVersion}
+              onGoToPage={onGoToPage}
+            />
+          </div>
     </div>
   );
 

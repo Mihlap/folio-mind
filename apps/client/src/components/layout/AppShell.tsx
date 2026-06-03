@@ -5,6 +5,11 @@ import { useDocumentWorkspaceOptional } from '../../context/document-workspace-c
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { useAppDispatch } from '../../hooks/index.js';
 import { Button } from '../ui/Button.js';
+import {
+  shellCollapseBtnClass,
+  shellPanelToolbarClass,
+  shellTopHeaderClass,
+} from './shell-chrome.js';
 import { PanelResizeHandle } from './PanelResizeHandle.js';
 
 const nav: Array<{
@@ -15,6 +20,7 @@ const nav: Array<{
   disabled?: boolean;
 }> = [
   { to: '/app', label: 'Документы', end: true, icon: '📄' },
+  { to: '/app/regulations', label: 'Регламенты', end: true, icon: '📋' },
   { to: '/app', label: 'ИИ-проверка', end: false, disabled: true, icon: '🤖' },
 ];
 
@@ -51,38 +57,39 @@ export function AppShell() {
       >
         {sidebar.collapsed ? (
           <>
-            <div className="flex w-full shrink-0 justify-center border-b border-slate-100 px-1.5 py-2">
+            <div className={`${shellTopHeaderClass} justify-center px-1.5`}>
               <span className="font-display text-lg leading-none text-folio-950" title="РазУм">
                 Р
               </span>
             </div>
 
+            <div className={`${shellPanelToolbarClass} justify-start px-1.5`}>
+              <button
+                type="button"
+                title="Развернуть меню"
+                onClick={sidebar.expand}
+                className={shellCollapseBtnClass}
+              >
+                ▶
+              </button>
+            </div>
+
             <nav className="flex flex-col items-center gap-1 p-1.5">
-              <div className="flex flex-col items-center gap-0.5">
-                <NavLink
-                  to="/app"
-                  end
-                  title="Документы"
-                  className={({ isActive }) =>
-                    `flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
-                      isActive
-                        ? 'bg-folio-50 ring-1 ring-folio-200'
-                        : 'text-slate-500 hover:bg-slate-50'
-                    }`
-                  }
-                >
-                  <span aria-hidden>📄</span>
-                  <span className="sr-only">Документы</span>
-                </NavLink>
-                <button
-                  type="button"
-                  title="Развернуть меню"
-                  onClick={sidebar.expand}
-                  className="cursor-pointer rounded-lg px-1 py-0.5 text-[10px] leading-none text-slate-400 hover:bg-slate-50"
-                >
-                  ▶
-                </button>
-              </div>
+              <NavLink
+                to="/app"
+                end
+                title="Документы"
+                className={({ isActive }) =>
+                  `flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
+                    isActive
+                      ? 'bg-folio-50 ring-1 ring-folio-200'
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`
+                }
+              >
+                <span aria-hidden>📄</span>
+                <span className="sr-only">Документы</span>
+              </NavLink>
               {nav.slice(1).map((item) => (
                 <NavLink
                   key={item.label}
@@ -140,40 +147,57 @@ export function AppShell() {
           </>
         ) : (
           <>
-            <div className="border-b border-slate-100 px-3 py-3 md:px-3.5 md:py-4">
-              <span className="font-display text-lg text-folio-950 md:text-xl">РазУм</span>
-              <p className="mt-0.5 truncate text-[10px] text-slate-500 md:text-[11px]">
-                {me?.email}
-              </p>
+            <div className={`${shellTopHeaderClass} gap-2 px-2 md:px-3`}>
+              {!isDocumentPage && (
+                <button
+                  type="button"
+                  title="Свернуть меню"
+                  onClick={sidebar.toggleCollapsed}
+                  className={shellCollapseBtnClass}
+                >
+                  ◀
+                </button>
+              )}
+              <div className="min-w-0 flex-1 py-1">
+                <span className="font-display text-lg leading-tight text-folio-950 md:text-xl">
+                  РазУм
+                </span>
+                <p className="truncate text-[10px] leading-tight text-slate-500 md:text-[11px]">
+                  {me?.email}
+                </p>
+              </div>
             </div>
+
+            {isDocumentPage && (
+              <div className={`${shellPanelToolbarClass} justify-start px-1.5 md:px-2`}>
+                <button
+                  type="button"
+                  title="Свернуть меню"
+                  onClick={sidebar.toggleCollapsed}
+                  className={shellCollapseBtnClass}
+                >
+                  ◀
+                </button>
+              </div>
+            )}
 
             <nav
               className={`overflow-x-auto p-1.5 md:p-2 ${hasVersions ? 'shrink-0' : 'flex-1 md:overflow-y-auto'}`}
             >
               <div className="flex min-w-max flex-col gap-1 md:min-w-0">
-                <div className="flex items-center gap-1">
-                  <NavLink
-                    to="/app"
-                    end
-                    className={({ isActive }) =>
-                      `min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition ${
-                        isActive
-                          ? 'bg-folio-50 text-folio-700'
-                          : 'text-slate-600 hover:bg-slate-50'
-                      }`
-                    }
-                  >
-                    Документы
-                  </NavLink>
-                  <button
-                    type="button"
-                    title="Свернуть меню"
-                    onClick={sidebar.toggleCollapsed}
-                    className="shrink-0 cursor-pointer rounded-lg px-1.5 py-1 text-xs text-slate-400 hover:bg-slate-50"
-                  >
-                    ◀
-                  </button>
-                </div>
+                <NavLink
+                  to="/app"
+                  end
+                  className={({ isActive }) =>
+                    `block rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition ${
+                      isActive
+                        ? 'bg-folio-50 text-folio-700'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`
+                  }
+                >
+                  Документы
+                </NavLink>
                 {nav.slice(1).map((item) => (
                   <NavLink
                     key={item.label}

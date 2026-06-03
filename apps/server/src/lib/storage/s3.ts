@@ -247,3 +247,16 @@ export async function getObjectReadable(key: string): Promise<{
     contentLength: out.ContentLength,
   };
 }
+
+export async function tryGetObjectBuffer(key: string): Promise<Buffer | null> {
+  try {
+    const { body } = await getObjectReadable(key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  } catch {
+    return null;
+  }
+}

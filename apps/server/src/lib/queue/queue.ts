@@ -143,13 +143,28 @@ export async function enqueueAiJob(
     documentId: string;
     versionId: string;
     tenantId: string;
-    type: 'summary' | 'chat';
+    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare';
     prompt?: string;
     requestId?: string;
   },
 ): Promise<void> {
   const { aiQueue } = getQueues(env);
   await aiQueue.add(payload.type, payload, { jobId: payload.jobId });
+}
+
+export async function enqueueRagIndexJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    sourceId: string;
+    tenantId: string;
+    s3Key: string;
+    fileName: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { previewQueue } = getQueues(env);
+  await previewQueue.add('rag-index', payload, { jobId: payload.jobId });
 }
 
 export async function enqueueSplitPagesJob(
@@ -169,6 +184,24 @@ export async function enqueueSplitPagesJob(
 ): Promise<void> {
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('split-pages', payload, { jobId: payload.jobId });
+}
+
+export async function enqueueApplyAcceptedSuggestionsJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    sourceVersionId: string;
+    targetVersionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    targetS3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('apply-accepted-suggestions', payload, { jobId: payload.jobId });
 }
 
 export async function enqueueMergeVersionsJob(

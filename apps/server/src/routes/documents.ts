@@ -16,6 +16,10 @@ import {
 } from '../lib/queue/queue.js';
 import { previewPageKey } from '@folio-mind/pdf-contracts';
 import {
+  buildVersionCompareResult,
+  loadVersionPageTexts,
+} from '../lib/documents/version-compare.js';
+import {
   deleteDocumentArtifacts,
   deleteVersionArtifacts,
   getObjectReadable,
@@ -61,6 +65,33 @@ const mergeVersionsSchema = z.object({
     .min(2)
     .max(20)
     .refine((ids) => new Set(ids).size === ids.length, 'versionIds must be unique'),
+});
+
+const textDiffLineSchema = z.object({
+  type: z.enum(['equal', 'insert', 'delete']),
+  text: z.string(),
+});
+
+const pageTextDiffSchema = z.object({
+  page: z.number(),
+  status: z.enum(['unchanged', 'modified', 'added', 'removed']),
+  baseText: z.string().optional(),
+  compareText: z.string().optional(),
+  lines: z.array(textDiffLineSchema).optional(),
+});
+
+const versionCompareResponseSchema = z.object({
+  baseVersionId: z.string(),
+  compareVersionId: z.string(),
+  baseVersion: z.number(),
+  compareVersion: z.number(),
+  summary: z.object({
+    unchangedPages: z.number(),
+    modifiedPages: z.number(),
+    addedPages: z.number(),
+    removedPages: z.number(),
+  }),
+  pages: z.array(pageTextDiffSchema),
 });
 
 function buildOriginalKey(documentId: string, version: number, fileName: string) {
@@ -470,6 +501,95 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         version: targetVersion.version,
         status: 'processing',
       });
+    },
+  );
+
+  r.get(
+    '/documents/:documentId/versions/compare',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string() }),
+        querystring: z.object({
+          baseVersionId: z.string().min(1),
+          compareVersionId: z.string().min(1),
+        }),
+        response: {
+          200: versionCompareResponseSchema,
+          400: errorBody,
+          404: errorBody,
+          409: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+
+      const user = getAuthUser(request);
+      const { documentId } = request.params;
+      const { baseVersionId, compareVersionId } = request.query;
+
+      if (baseVersionId === compareVersionId) {
+        return reply.code(400).send({ error: 'Выберите две разные версии' });
+      }
+
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const baseVersion = document.versions.find((v: { id: string }) => v.id === baseVersionId);
+      const compareVersion = document.versions.find(
+        (v: { id: string }) => v.id === compareVersionId,
+      );
+
+      if (!baseVersion || !compareVersion) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+
+      if (baseVersion.status !== 'ready' || compareVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Сравнение доступно только для готовых версий' });
+      }
+
+      const [basePages, comparePages] = await Promise.all([
+        loadVersionPageTexts(documentId, baseVersionId),
+        loadVersionPageTexts(documentId, compareVersionId),
+      ]);
+
+      if (!basePages || !comparePages) {
+        return reply.code(409).send({
+          error:
+            'Текст версий ещё не извлечён. Дождитесь завершения обработки или откройте документ позже.',
+        });
+      }
+
+      const diff = buildVersionCompareResult(basePages, comparePages);
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.versions_compared',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            baseVersionId,
+            compareVersionId,
+            summary: diff.summary,
+          },
+        },
+      });
+
+      return {
+        baseVersionId,
+        compareVersionId,
+        baseVersion: baseVersion.version,
+        compareVersion: compareVersion.version,
+        summary: diff.summary,
+        pages: diff.pages,
+      };
     },
   );
 

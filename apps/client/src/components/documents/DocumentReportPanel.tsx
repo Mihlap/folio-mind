@@ -5,6 +5,15 @@ import {
   useGetJobQuery,
   useRequestSummaryMutation,
 } from '@folio-mind/store';
+import {
+  FeatureHelpButton,
+  reportActionBtnPrimary,
+  reportIconCirclePdf,
+  reportIconCircleWord,
+  reportToolbarRowClass,
+} from '../ui/FeatureHelp.js';
+import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
+import { DocumentRagComparePanel } from './DocumentRagComparePanel.js';
 
 function openDownloadUrl(url: string, target: '_self' | '_blank' = '_self') {
   if (target === '_blank') {
@@ -18,9 +27,17 @@ type Props = {
   documentId: string;
   versionId: string;
   versionReady: boolean;
+  onGoToPage: (page: number) => void;
+  onSelectVersion: (versionId: string) => void;
 };
 
-export function DocumentReportPanel({ documentId, versionId, versionReady }: Props) {
+export function DocumentReportPanel({
+  documentId,
+  versionId,
+  versionReady,
+  onGoToPage,
+  onSelectVersion,
+}: Props) {
   const { data: providersData } = useGetAiProvidersQuery();
   const [requestSummary, { isLoading: summaryRequestLoading }] = useRequestSummaryMutation();
   const [exportReport, { isLoading: exportLoading }] = useExportReportMutation();
@@ -32,6 +49,7 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
   const [exportFormatLoading, setExportFormatLoading] = useState<'pdf' | 'word' | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
   const [storedSummary, setStoredSummary] = useState<string | null>(null);
+  const [summaryDismissed, setSummaryDismissed] = useState(false);
 
   const { data: summaryJob } = useGetJobQuery(summaryJobId!, {
     skip: !summaryJobId,
@@ -39,8 +57,10 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
   });
 
   const summaryFromJob =
-    summaryJob?.status === 'completed' ? (summaryJob.payload?.summary ?? null) : null;
-  const summaryText = storedSummary ?? summaryFromJob;
+    summaryJobId && summaryJob?.status === 'completed'
+      ? (summaryJob.payload?.summary ?? null)
+      : null;
+  const summaryText = summaryDismissed ? null : (storedSummary ?? summaryFromJob);
   const summaryPending =
     summaryJob?.status === 'queued' ||
     summaryJob?.status === 'processing' ||
@@ -55,12 +75,14 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
     setExportFormatLoading(null);
     setIsSummaryExpanded(true);
     setStoredSummary(null);
+    setSummaryDismissed(false);
   }, [versionId]);
 
   useEffect(() => {
     if (summaryJob?.status === 'completed' || summaryJob?.status === 'failed') {
       setPollSummary(false);
       if (summaryJob.status === 'completed' && summaryJob.payload?.summary) {
+        setSummaryDismissed(false);
         setStoredSummary(summaryJob.payload.summary);
       }
       if (summaryJob.status === 'failed') {
@@ -76,36 +98,58 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
   }, [summaryJob?.payload, summaryJob?.status]);
 
   return (
-    <div className="space-y-4 p-4">
-      <p className="text-xs text-slate-500">
+    <div className="space-y-3 p-3 sm:p-4">
+      <p className="text-[11px] leading-snug text-slate-500">
         Пересказ и отчёт относятся к выбранной версии документа.
       </p>
-      <div className="flex flex-col gap-2">
+      <div className={reportToolbarRowClass}>
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            disabled={!versionReady || summaryPending}
+            onClick={async () => {
+              try {
+                setSummaryError(null);
+                setSummaryDismissed(false);
+                setStoredSummary(null);
+                const result = await requestSummary({
+                  documentId,
+                  versionId,
+                  provider: providersData?.defaultProvider,
+                }).unwrap();
+                setSummaryJobId(result.jobId);
+                setPollSummary(result.status !== 'completed');
+              } catch (error) {
+                setSummaryError(
+                  error instanceof Error ? error.message : 'Не удалось получить пересказ',
+                );
+              }
+            }}
+            className={reportActionBtnPrimary}
+          >
+            {summaryPending ? 'Получаем…' : 'Получить пересказ'}
+          </button>
+          <FeatureHelpButton title="Пересказ и экспорт отчёта" corner>
+            <p>
+              <strong className="text-slate-800">Получить пересказ</strong> — ИИ читает текст этой
+              версии PDF и показывает краткое содержание договора на вкладке. Закрыть текст можно
+              крестиком × в блоке «Пересказ».
+            </p>
+            <p>
+              <strong className="text-slate-800">PDF</strong> — скачивает файл отчёта с пересказом
+              (доступно после получения пересказа). Откроется в новой вкладке браузера.
+            </p>
+            <p>
+              <strong className="text-slate-800">W</strong> — то же в формате Word (.docx) для
+              правок в редакторе.
+            </p>
+          </FeatureHelpButton>
+        </div>
+
         <button
           type="button"
-          disabled={!versionReady || summaryPending}
-          onClick={async () => {
-            try {
-              setSummaryError(null);
-              const result = await requestSummary({
-                documentId,
-                versionId,
-                provider: providersData?.defaultProvider,
-              }).unwrap();
-              setSummaryJobId(result.jobId);
-              setPollSummary(result.status !== 'completed');
-            } catch (error) {
-              setSummaryError(
-                error instanceof Error ? error.message : 'Не удалось получить пересказ',
-              );
-            }
-          }}
-          className="w-full cursor-pointer rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {summaryPending ? 'Получаем пересказ…' : 'Получить пересказ'}
-        </button>
-        <button
-          type="button"
+          title="Скачать отчёт с пересказом в PDF"
+          aria-label="Экспорт отчёта в PDF"
           disabled={!canExportReport || exportLoading}
           onClick={async () => {
             try {
@@ -125,12 +169,15 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
               setExportFormatLoading(null);
             }
           }}
-          className="w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-folio-300 disabled:cursor-not-allowed disabled:opacity-50"
+          className={reportIconCirclePdf}
         >
-          {exportLoading && exportFormatLoading === 'pdf' ? 'Экспорт…' : 'Экспорт отчёта (PDF)'}
+          {exportLoading && exportFormatLoading === 'pdf' ? '…' : 'PDF'}
         </button>
+
         <button
           type="button"
+          title="Скачать отчёт с пересказом в Word"
+          aria-label="Экспорт отчёта в Word"
           disabled={!canExportReport || exportLoading}
           onClick={async () => {
             try {
@@ -150,9 +197,9 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
               setExportFormatLoading(null);
             }
           }}
-          className="w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-folio-300 disabled:cursor-not-allowed disabled:opacity-50"
+          className={reportIconCircleWord}
         >
-          {exportLoading && exportFormatLoading === 'word' ? 'Экспорт…' : 'Экспорт отчёта (Word)'}
+          {exportLoading && exportFormatLoading === 'word' ? '…' : 'W'}
         </button>
       </div>
       {summaryError && <p className="text-sm text-red-600">{summaryError}</p>}
@@ -167,16 +214,19 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
                 onClick={() => setIsSummaryExpanded((prev) => !prev)}
                 className="cursor-pointer rounded px-2 py-0.5 text-xs text-slate-600 hover:bg-folio-100"
               >
-                {isSummaryExpanded ? 'Скрыть' : 'Показать'}
+                {isSummaryExpanded ? 'Свернуть' : 'Развернуть'}
               </button>
               <button
                 type="button"
-                title="Очистить пересказ"
+                title="Закрыть и очистить пересказ"
+                aria-label="Закрыть и очистить пересказ"
                 onClick={() => {
+                  setSummaryDismissed(true);
                   setSummaryJobId(null);
                   setPollSummary(false);
                   setStoredSummary(null);
                   setSummaryError(null);
+                  setIsSummaryExpanded(true);
                 }}
                 className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-400 hover:bg-folio-100 hover:text-slate-600"
               >
@@ -189,6 +239,20 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
           )}
         </div>
       )}
+
+      <DocumentAiSuggestionsPanel
+        documentId={documentId}
+        versionId={versionId}
+        versionReady={versionReady}
+        onGoToPage={onGoToPage}
+        onSelectVersion={onSelectVersion}
+      />
+
+      <DocumentRagComparePanel
+        documentId={documentId}
+        versionId={versionId}
+        versionReady={versionReady}
+      />
     </div>
   );
 }

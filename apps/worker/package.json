@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.758.0",
+    "@folio-mind/ai-contracts": "workspace:*",
     "@folio-mind/ai-providers": "workspace:*",
     "@folio-mind/observability": "workspace:*",
     "@folio-mind/pdf-contracts": "workspace:*",
