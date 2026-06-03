@@ -41,8 +41,8 @@ cp apps/worker/.env.example apps/worker/.env
 
 | Переменная | Пример (dev) |
 |------------|----------------|
-| `DATABASE_URL` | `postgresql://folio:folio@localhost:5434/folio_mind` |
-| `REDIS_URL` | `redis://localhost:6379` |
+| `DATABASE_URL` | `postgresql://folio:folio@127.0.0.1:5434/folio_mind` (на Windows предпочтительнее `127.0.0.1`, чем `localhost`) |
+| `REDIS_URL` | `redis://127.0.0.1:6379` |
 | `JWT_SECRET` | мин. 32 символа |
 | `CORS_ORIGIN` | `http://localhost:5173` |
 | `S3_ENDPOINT` | MinIO: `http://localhost:9000` или облако (Timeweb и т.д.) |

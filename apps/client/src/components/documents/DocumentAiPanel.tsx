@@ -11,6 +11,7 @@ type DocumentAiPanelProps = {
   documentId: string;
   versionId: string;
   versionReady: boolean;
+  embedded?: boolean;
 };
 
 function isJobPending(status: string | undefined) {
@@ -21,6 +22,7 @@ export function DocumentAiPanel({
   documentId,
   versionId,
   versionReady,
+  embedded = false,
 }: DocumentAiPanelProps) {
   const { data: providersData } = useGetAiProvidersQuery();
   const [provider, setProvider] = useState<AiProviderId | undefined>();
@@ -61,9 +63,15 @@ export function DocumentAiPanel({
   const configuredProviders =
     providersData?.providers.filter((p) => p.configured) ?? [];
 
+  const messagesMaxHeight = embedded
+    ? 'max-h-[min(42vh,360px)]'
+    : 'max-h-[38vh] sm:max-h-[40vh] lg:max-h-[48vh]';
+
   return (
-    <section className="space-y-3 sm:space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+    <section className={embedded ? 'flex flex-col' : 'space-y-3 sm:space-y-4'}>
+      <div
+        className={`flex flex-wrap items-center gap-3 ${embedded ? 'border-b border-slate-100 px-4 py-2' : ''}`}
+      >
         {configuredProviders.length > 1 && (
           <label className="flex items-center gap-2 text-sm text-slate-600">
             <span>ИИ:</span>
@@ -87,13 +95,15 @@ export function DocumentAiPanel({
         )}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
-          <h2 className="text-sm font-semibold text-slate-900">Чат по документу</h2>
-        </div>
+      <div className={embedded ? 'flex min-h-0 flex-1 flex-col' : 'rounded-2xl border border-slate-200 bg-white shadow-sm'}>
+        {!embedded && (
+          <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+            <h2 className="text-sm font-semibold text-slate-900">Чат по документу</h2>
+          </div>
+        )}
 
         {(messages.length > 0 || chatPending || chatError) && (
-          <div className="max-h-[38vh] space-y-3 overflow-y-auto px-4 py-3 sm:max-h-[40vh] sm:px-5 sm:py-4 lg:max-h-[48vh]">
+          <div className={`space-y-3 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 ${messagesMaxHeight}`}>
             {messages.map((msg, idx) => (
               <div
                 key={`${idx}-${msg.role}`}

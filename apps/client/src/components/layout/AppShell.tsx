@@ -1,5 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useMatch } from 'react-router-dom';
 import { logout, useMeQuery } from '@folio-mind/store';
+import { DocumentVersionsSidebar } from '../documents/DocumentVersionsSidebar.js';
+import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
 import { useAppDispatch } from '../../hooks/index.js';
 import { Button } from '../ui/Button.js';
 
@@ -11,17 +13,20 @@ const nav = [
 export function AppShell() {
   const dispatch = useAppDispatch();
   const { data: me } = useMeQuery();
+  const workspaceCtx = useDocumentWorkspaceOptional();
+  const isDocumentPage = Boolean(useMatch('/app/documents/:id'));
+  const hasVersions = Boolean(workspaceCtx?.workspace && isDocumentPage);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 md:flex-row">
-      <aside className="flex w-full flex-col border-b border-slate-200 bg-white md:w-64 md:border-r md:border-b-0">
-        <div className="border-b border-slate-100 px-4 py-4 md:px-5 md:py-6">
-          <div className="flex items-center justify-between gap-3 md:block">
-            <span className="font-display text-xl text-folio-950 md:text-2xl">РазУм</span>
-            <p className="truncate text-[11px] text-slate-500 md:mt-1 md:text-xs">{me?.email}</p>
-          </div>
+    <div className="flex min-h-screen flex-col bg-slate-50 md:h-screen md:flex-row md:overflow-hidden">
+      <aside className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white md:h-full md:w-60 md:border-r md:border-b-0 lg:w-64">
+        <div className="border-b border-slate-100 px-4 py-4 md:px-5 md:py-5">
+          <span className="font-display text-xl text-folio-950 md:text-2xl">РазУм</span>
+          <p className="mt-1 truncate text-[11px] text-slate-500 md:text-xs">{me?.email}</p>
         </div>
-        <nav className="flex-1 overflow-x-auto p-2 md:space-y-1 md:p-3">
+        <nav
+          className={`overflow-x-auto p-2 md:p-3 ${hasVersions ? 'shrink-0' : 'flex-1 md:overflow-y-auto'}`}
+        >
           <div className="flex min-w-max gap-1 md:block md:min-w-0">
             {nav.map((item) => (
               <NavLink
@@ -47,13 +52,25 @@ export function AppShell() {
             ))}
           </div>
         </nav>
-        <div className="border-t border-slate-100 p-3 md:p-4">
+
+        {hasVersions && (
+          <div className="hidden min-h-0 flex-1 flex-col overflow-hidden border-t border-slate-100 md:flex">
+            <DocumentVersionsSidebar />
+          </div>
+        )}
+
+        <div className="mt-auto border-t border-slate-100 p-3 md:p-4">
           <Button variant="ghost" className="w-full" onClick={() => dispatch(logout())}>
             Выйти
           </Button>
         </div>
       </aside>
-      <main className="flex-1 overflow-auto">
+
+      <main
+        className={`flex min-h-0 flex-1 flex-col ${
+          isDocumentPage ? 'overflow-hidden' : 'overflow-auto'
+        }`}
+      >
         <Outlet />
       </main>
     </div>

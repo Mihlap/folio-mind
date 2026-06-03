@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAppSelector } from '../hooks/index.js';
 import { AppShell } from '../components/layout/AppShell.js';
+import { DocumentWorkspaceProvider } from '../context/document-workspace-context.js';
 import { DashboardPage } from '../pages/app/DashboardPage.js';
 import { DocumentPage } from '../pages/app/DocumentPage.js';
 import { LandingPage } from '../pages/public/LandingPage.js';
@@ -37,7 +38,9 @@ export function App() {
         path="/app/*"
         element={
           <PrivateRoute>
-            <AppShell />
+            <DocumentWorkspaceProvider>
+              <AppShell />
+            </DocumentWorkspaceProvider>
           </PrivateRoute>
         }
       >

@@ -111,6 +111,7 @@ export function PdfViewer({
     setInternalPage(1);
     onPageChange?.(1);
     suppressObserverUntilRef.current = Date.now() + 1200;
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
     setNumPages(0);
     setSearchMatches([]);
     onSearchMatches?.([]);

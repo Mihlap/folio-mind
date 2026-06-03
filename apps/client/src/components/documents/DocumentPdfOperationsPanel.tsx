@@ -41,6 +41,8 @@ type Props = {
   activeVersion: DocumentVersionItem | undefined;
   viewerPage: number;
   onSelectVersion: (versionId: string) => void;
+  /** Встроено во вкладку правой панели — без сворачиваемой карточки. */
+  embedded?: boolean;
 };
 
 export function DocumentPdfOperationsPanel({
@@ -49,8 +51,9 @@ export function DocumentPdfOperationsPanel({
   activeVersion,
   viewerPage,
   onSelectVersion,
+  embedded = false,
 }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(embedded);
   const [pagesInput, setPagesInput] = useState('');
   const [mergeOrder, setMergeOrder] = useState<string[]>([]);
   const [operationJobId, setOperationJobId] = useState<string | null>(null);
@@ -108,7 +111,7 @@ export function DocumentPdfOperationsPanel({
   const operationPending = splitLoading || mergeLoading || optimizeRunning;
 
   const splitBlockedReason = (() => {
-    if (!activeVersion) return 'Выберите версию в списке выше';
+    if (!activeVersion) return 'Выберите версию в списке слева';
     if (activeVersion.status === 'processing') return 'Версия ещё обрабатывается';
     if (activeVersion.status === 'failed') return 'Версия с ошибкой — удалите или создайте заново';
     if (activeVersion.status === 'pending_upload') return 'Файл не загружен';
@@ -262,24 +265,13 @@ export function DocumentPdfOperationsPanel({
   const progressLabel = (() => {
     if (operationError) return null;
     if (splitLoading || mergeLoading) return 'Запуск операции…';
-    if (optimizeRunning) return 'Собираем PDF (merge/split)…';
+    if (optimizeRunning) return 'Собираем PDF…';
     return statusHint;
   })();
 
-  return (
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left sm:px-5"
-      >
-        <span className="text-sm font-semibold text-slate-900">Операции с PDF</span>
-        <span className="text-xs text-slate-500">{expanded ? 'Свернуть' : 'Развернуть'}</span>
-      </button>
-
-      {expanded && (
-        <div className="border-t border-slate-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
-          <div className="grid gap-6 lg:grid-cols-2">
+  const body = (
+    <div className={embedded ? 'space-y-6 p-4' : 'border-t border-slate-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5'}>
+      <div className={embedded ? 'space-y-6' : 'grid gap-6 lg:grid-cols-2'}>
             <div>
               <h3 className="text-sm font-medium text-slate-800">Вырезать страницы</h3>
               <p className="mt-1 text-xs text-slate-500">
@@ -292,7 +284,7 @@ export function DocumentPdfOperationsPanel({
                   type="text"
                   value={pagesInput}
                   onChange={(e) => setPagesInput(e.target.value)}
-                  placeholder="1, 3, 5"
+                  placeholder="1, 2 или выберите страницу"
                   disabled={!activeReady || operationPending}
                   className="min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
                 />
@@ -402,9 +394,25 @@ export function DocumentPdfOperationsPanel({
           {progressLabel && (
             <p className="mt-4 text-sm text-folio-700">{progressLabel}</p>
           )}
-          {operationError && <p className="mt-2 text-sm text-red-600">{operationError}</p>}
-        </div>
-      )}
+      {operationError && <p className="mt-2 text-sm text-red-600">{operationError}</p>}
+    </div>
+  );
+
+  if (embedded) {
+    return <div className="text-sm">{body}</div>;
+  }
+
+  return (
+    <section className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left sm:px-5"
+      >
+        <span className="text-sm font-semibold text-slate-900">Операции с PDF</span>
+        <span className="text-xs text-slate-500">{expanded ? 'Свернуть' : 'Развернуть'}</span>
+      </button>
+      {expanded && body}
     </section>
   );
 }
