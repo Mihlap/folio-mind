@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { PanelResizeHandle } from '../layout/PanelResizeHandle.js';
 import { DocumentAiPanel } from './DocumentAiPanel.js';
 import { DocumentPdfOperationsPanel } from './DocumentPdfOperationsPanel.js';
 import { DocumentReportPanel } from './DocumentReportPanel.js';
@@ -15,9 +16,12 @@ type Props = {
   onSelectVersion: (versionId: string) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  onExpand: () => void;
+  panelWidth: number;
+  isResizing: boolean;
+  onResizeStart: (event: React.MouseEvent) => void;
   activeTab: DocumentRightTab;
   onTabChange: (tab: DocumentRightTab) => void;
-  /** В drawer на мобиле — всегда развёрнутая панель. */
   mode?: 'docked' | 'drawer';
 };
 
@@ -36,6 +40,10 @@ export function DocumentRightPanel({
   onSelectVersion,
   collapsed,
   onToggleCollapsed,
+  onExpand,
+  panelWidth,
+  isResizing,
+  onResizeStart,
   activeTab,
   onTabChange,
   mode = 'docked',
@@ -44,59 +52,68 @@ export function DocumentRightPanel({
 
   if (collapsed && !isDrawer) {
     return (
-      <aside className="hidden shrink-0 flex-col items-center gap-2 border-l border-slate-200 bg-white py-3 lg:flex lg:w-12">
-        {TABS.map((tab) => (
+      <aside className="relative hidden h-full shrink-0 flex-col border-l border-slate-200 bg-white lg:flex lg:w-12">
+        <div className="flex w-full shrink-0 items-center justify-end border-b border-slate-100 px-1.5 py-2">
           <button
-            key={tab.id}
             type="button"
-            title={tab.label}
-            onClick={() => {
-              onTabChange(tab.id);
-              onToggleCollapsed();
-            }}
-            className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-lg transition ${
-              activeTab === tab.id
-                ? 'bg-folio-50 text-folio-700 ring-1 ring-folio-200'
-                : 'text-slate-500 hover:bg-slate-50'
-            }`}
+            title="Развернуть панель"
+            onClick={onExpand}
+            className="cursor-pointer rounded-lg px-0.5 py-0.5 text-xs leading-none text-slate-400 hover:bg-slate-50"
           >
-            <span aria-hidden>{tab.short}</span>
-            <span className="sr-only">{tab.label}</span>
+            ◀
           </button>
-        ))}
-        <button
-          type="button"
-          title="Развернуть панель"
-          onClick={onToggleCollapsed}
-          className="mt-auto cursor-pointer rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-slate-50"
-        >
-          ◀
-        </button>
+        </div>
+        <div className="flex flex-col items-center gap-1.5 p-1.5">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              title={tab.label}
+              onClick={() => {
+                onTabChange(tab.id);
+                onExpand();
+              }}
+              className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-lg transition ${
+                activeTab === tab.id
+                  ? 'bg-folio-50 text-folio-700 ring-1 ring-folio-200'
+                  : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <span aria-hidden>{tab.short}</span>
+              <span className="sr-only">{tab.label}</span>
+            </button>
+          ))}
+        </div>
       </aside>
     );
   }
 
   return (
     <aside
+      style={isDrawer ? undefined : { width: panelWidth }}
       className={
         isDrawer
-          ? 'flex h-full min-h-0 flex-col bg-white'
-          : 'hidden min-h-0 w-full shrink-0 flex-col border-l border-slate-200 bg-white lg:flex lg:w-[360px] xl:w-[380px]'
+          ? 'relative flex h-full min-h-0 flex-col bg-white'
+          : `relative hidden h-full min-h-0 shrink-0 flex-col border-l border-slate-200 bg-white lg:flex ${
+              isResizing ? '' : 'transition-[width] duration-200'
+            }`
       }
     >
+      {!isDrawer && <PanelResizeHandle edge="left" onMouseDown={onResizeStart} />}
+
       <div className="flex shrink-0 items-center border-b border-slate-100">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onTabChange(tab.id)}
-            className={`flex-1 cursor-pointer border-b-2 px-2 py-2.5 text-xs font-medium transition sm:text-sm ${
+            className={`min-w-0 flex-1 cursor-pointer border-b-2 px-1 py-2.5 text-xs font-medium transition sm:px-2 sm:text-sm ${
               activeTab === tab.id
                 ? 'border-folio-600 text-folio-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            {tab.label}
+            <span className="truncate">{tab.label}</span>
           </button>
         ))}
         {!isDrawer && (

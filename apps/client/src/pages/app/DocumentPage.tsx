@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PdfViewer, PdfViewerToolbar } from '@folio-mind/ui';
 import {
   useGetDocumentQuery,
@@ -26,7 +26,9 @@ import {
 } from '../../components/documents/DocumentRightPanel.js';
 import { DocumentVersionsSidebar } from '../../components/documents/DocumentVersionsSidebar.js';
 import { useDocumentWorkspace } from '../../context/document-workspace-context.js';
+import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js';
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
+import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
 import { loadDocumentPdfUrl } from '../../lib/documents/documentPdf.js';
 
@@ -39,10 +41,18 @@ const STATUS_LABEL: Record<string, string> = {
 
 const INITIAL_THUMB_PAGES = 15;
 
+const RIGHT_PANEL = {
+  defaultWidth: 360,
+  minExpandedWidth: 280,
+  collapseBelow: 260,
+  maxWidth: 560,
+} as const;
+
 type MobileSheet = null | 'versions' | 'panel';
 
 export function DocumentPage() {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const { setWorkspace } = useDocumentWorkspace();
   const { id } = useParams<{ id: string }>();
   const token = useAppSelector((s) => s.auth.token);
@@ -56,9 +66,13 @@ export function DocumentPage() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [viewerPage, setViewerPage] = useState(1);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
   const [rightTab, setRightTab] = useState<DocumentRightTab>('report');
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
+
+  const rightPanel = useHorizontalPanelResize({
+    side: 'right',
+    ...RIGHT_PANEL,
+  });
 
   const versions = useMemo(() => doc?.versions ?? [], [doc?.versions]);
   const latest = versions[0];
@@ -66,6 +80,10 @@ export function DocumentPage() {
 
   const upload = useDocumentVersionUpload(doc?.id ?? '', (versionId) => {
     setSelectedVersionId(versionId);
+  });
+
+  const newDocumentUpload = useCreateDocumentUpload((documentId) => {
+    navigate(`/app/documents/${documentId}`);
   });
 
   useEffect(() => {
@@ -262,60 +280,80 @@ export function DocumentPage() {
           if (file) void upload.handleFile(file);
         }}
       />
+      <input
+        ref={newDocumentUpload.inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void newDocumentUpload.handleFile(file);
+        }}
+      />
 
       <header className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-4">
-        <div className="flex flex-wrap items-center gap-2 gap-y-1">
-          <Link
-            to="/app"
-            className="shrink-0 text-xs text-folio-600 hover:underline sm:text-sm"
-          >
-            ← Документы
-          </Link>
-          <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 sm:text-lg">
-            {doc.title}
-          </h1>
-          <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
-            <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-initial lg:hidden">
-              <span className="sr-only">Версия</span>
-              <select
-                value={activeVersion?.id ?? ''}
-                onChange={(e) => setSelectedVersionId(e.target.value)}
-                className="min-w-0 flex-1 cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 gap-y-1">
+              <Link
+                to="/app"
+                className="shrink-0 text-xs text-folio-600 hover:underline sm:text-sm"
               >
-                {versions.map((v) => (
-                  <option key={v.id} value={v.id} disabled={v.status === 'pending_upload'}>
-                    v{v.version}
-                    {v.pageCount ? ` · ${v.pageCount} стр.` : ''}
-                    {v.id === latest?.id ? ' (нов.)' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              disabled={upload.uploading}
-              onClick={upload.openFilePicker}
-              className="cursor-pointer rounded-lg bg-folio-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-folio-700 disabled:opacity-50 sm:text-sm"
-            >
-              {upload.uploading ? 'Загрузка…' : '+ PDF'}
-            </button>
+                ← Документы
+              </Link>
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 sm:text-lg">
+                {doc.title}
+              </h1>
+              <label className="flex min-w-0 flex-1 items-center gap-2 lg:hidden">
+                <span className="sr-only">Версия</span>
+                <select
+                  value={activeVersion?.id ?? ''}
+                  onChange={(e) => setSelectedVersionId(e.target.value)}
+                  className="min-w-0 flex-1 cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                >
+                  {versions.map((v) => (
+                    <option key={v.id} value={v.id} disabled={v.status === 'pending_upload'}>
+                      v{v.version}
+                      {v.pageCount ? ` · ${v.pageCount} стр.` : ''}
+                      {v.id === latest?.id ? ' (нов.)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500 sm:text-xs">
+              {activeVersion ? (
+                <>
+                  <span className="hidden lg:inline">Просмотр: </span>
+                  v{activeVersion.version} · {statusLabel}
+                  {sizeLabel ? ` · ${sizeLabel}` : ''}
+                  {activeVersion.pageCount ? ` · ${activeVersion.pageCount} стр.` : ''}
+                </>
+              ) : (
+                'Нет версии'
+              )}
+            </p>
+            {activeVersion?.status === 'pending_upload' && (
+              <p className="mt-1 text-xs text-amber-700">Файл не загружен — выберите другую версию.</p>
+            )}
+            {newDocumentUpload.error && (
+              <p className="mt-1 text-xs text-red-600">{newDocumentUpload.error}</p>
+            )}
           </div>
+          <button
+            type="button"
+            disabled={newDocumentUpload.uploading || upload.uploading}
+            onClick={newDocumentUpload.openFilePicker}
+            title="Создать новый документ из PDF"
+            className="shrink-0 cursor-pointer self-center rounded-lg bg-folio-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-folio-700 disabled:opacity-50 sm:text-sm"
+          >
+            {newDocumentUpload.uploading
+              ? newDocumentUpload.uploadProgress !== null
+                ? `Загрузка ${newDocumentUpload.uploadProgress}%…`
+                : 'Загрузка…'
+              : '+ Документ'}
+          </button>
         </div>
-        <p className="mt-1 text-[11px] text-slate-500 sm:text-xs">
-          {activeVersion ? (
-            <>
-              <span className="hidden lg:inline">Просмотр: </span>
-              v{activeVersion.version} · {statusLabel}
-              {sizeLabel ? ` · ${sizeLabel}` : ''}
-              {activeVersion.pageCount ? ` · ${activeVersion.pageCount} стр.` : ''}
-            </>
-          ) : (
-            'Нет версии'
-          )}
-        </p>
-        {activeVersion?.status === 'pending_upload' && (
-          <p className="mt-1 text-xs text-amber-700">Файл не загружен — выберите другую версию.</p>
-        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -341,7 +379,8 @@ export function DocumentPage() {
             <div className="flex min-h-0 flex-1 gap-2 sm:gap-3">
               {previews?.pages && previews.pages.length > 0 && (
                 <div
-                  className="hidden w-16 shrink-0 flex-col gap-1.5 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 sm:flex sm:w-20 md:w-24"
+                  key={activeVersion?.id}
+                  className="scrollbar-thin hidden w-14 shrink-0 flex-col gap-1.5 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 opacity-0 animate-[sidebarFadeIn_0.35s_ease-out_forwards] sm:flex sm:w-16 md:w-[4.5rem]"
                   aria-label="Страницы"
                 >
                   {previews.pages.map((thumb) => (
@@ -349,7 +388,7 @@ export function DocumentPage() {
                       key={thumb.page}
                       type="button"
                       onClick={() => setViewerPage(thumb.page)}
-                      className={`shrink-0 cursor-pointer overflow-hidden rounded border-2 transition ${
+                      className={`shrink-0 cursor-pointer overflow-hidden rounded border-2 transition-[border-color,box-shadow] duration-200 ${
                         viewerPage === thumb.page
                           ? 'border-folio-600 ring-1 ring-folio-200'
                           : 'border-slate-200 hover:border-folio-300'
@@ -360,21 +399,25 @@ export function DocumentPage() {
                         alt={`Стр. ${thumb.page}`}
                         layout="vertical"
                         eager={isThumbnailEager(thumb.page, INITIAL_THUMB_PAGES)}
+                        staggerMs={Math.min(thumb.page - 1, 14) * 35}
                       />
                     </button>
                   ))}
                 </div>
               )}
 
-              <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                 {previews?.pages && previews.pages.length > 0 && (
-                  <div className="flex gap-1.5 overflow-x-auto border-b border-slate-100 bg-white p-2 sm:hidden">
+                  <div
+                    key={activeVersion?.id}
+                    className="scrollbar-thin flex gap-1.5 overflow-x-auto border-b border-slate-100 bg-white p-2 opacity-0 animate-[sidebarFadeIn_0.35s_ease-out_forwards] sm:hidden"
+                  >
                     {previews.pages.map((thumb) => (
                       <button
                         key={thumb.page}
                         type="button"
                         onClick={() => setViewerPage(thumb.page)}
-                        className={`shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 ${
+                        className={`shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-[border-color] duration-200 ${
                           viewerPage === thumb.page
                             ? 'border-folio-600'
                             : 'border-slate-200'
@@ -385,6 +428,7 @@ export function DocumentPage() {
                           alt={`Стр. ${thumb.page}`}
                           layout="horizontal"
                           eager={isThumbnailEager(thumb.page, INITIAL_THUMB_PAGES)}
+                          staggerMs={Math.min(thumb.page - 1, 14) * 35}
                         />
                       </button>
                     ))}
@@ -414,7 +458,7 @@ export function DocumentPage() {
                   )}
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-auto p-2 sm:p-3">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
                   {pdfLoading && (
                     <p className="text-center text-sm text-slate-500">Загрузка PDF…</p>
                   )}
@@ -424,8 +468,10 @@ export function DocumentPage() {
                     </p>
                   )}
                   {!pdfLoading && !pdfError && pdfUrl && (
-                    <PdfViewer
-                      url={pdfUrl}
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <PdfViewer
+                        className="min-h-0 flex-1"
+                        url={pdfUrl}
                       page={viewerPage}
                       onPageChange={setViewerPage}
                       displayMode={viewer.displayMode}
@@ -434,7 +480,8 @@ export function DocumentPage() {
                       searchQuery={viewer.searchQuery}
                       activeMatchIndex={viewer.activeMatchIndex}
                       onSearchMatches={handleSearchMatches}
-                    />
+                      />
+                    </div>
                   )}
                   {!pdfLoading && !pdfError && !pdfUrl && activeVersion?.status !== 'pending_upload' && (
                     <p className="text-center text-sm text-slate-500">Нет данных для просмотра</p>
@@ -452,8 +499,12 @@ export function DocumentPage() {
           versionReady={versionReady}
           viewerPage={viewerPage}
           onSelectVersion={setSelectedVersionId}
-          collapsed={rightCollapsed}
-          onToggleCollapsed={() => setRightCollapsed((v) => !v)}
+          collapsed={rightPanel.collapsed}
+          onToggleCollapsed={rightPanel.toggleCollapsed}
+          onExpand={rightPanel.expand}
+          panelWidth={rightPanel.panelWidth}
+          isResizing={rightPanel.isResizing}
+          onResizeStart={rightPanel.beginResize}
           activeTab={rightTab}
           onTabChange={setRightTab}
         />
@@ -513,6 +564,10 @@ export function DocumentPage() {
           onSelectVersion={setSelectedVersionId}
           collapsed={false}
           onToggleCollapsed={() => {}}
+          onExpand={() => {}}
+          panelWidth={360}
+          isResizing={false}
+          onResizeStart={() => {}}
           activeTab={rightTab}
           onTabChange={setRightTab}
         />

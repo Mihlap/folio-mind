@@ -224,7 +224,10 @@ export function PdfViewer({
   const activeMatch = searchMatches[activeMatchIndex];
 
   return (
-    <div ref={containerRef} className={['w-full', className].filter(Boolean).join(' ')}>
+    <div
+      ref={containerRef}
+      className={['flex min-h-0 w-full flex-col', className].filter(Boolean).join(' ')}
+    >
       {error ? (
         <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
       ) : displayMode === 'single' ? (
@@ -241,7 +244,7 @@ export function PdfViewer({
       ) : (
         <div
           ref={scrollRef}
-          className="max-h-[75vh] overflow-x-hidden overflow-y-auto rounded-lg bg-slate-100 p-2"
+          className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-lg bg-slate-100 p-2"
         >
           {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => (
             <div
@@ -274,7 +277,7 @@ export function PdfViewer({
       )}
 
       {numPages > 1 && (
-        <div className="mt-4 flex justify-center">
+        <div className="mt-4 flex shrink-0 justify-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
             <PageNavButton
               label="Предыдущая страница"

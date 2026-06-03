@@ -83,7 +83,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
         className={`shrink-0 bg-white ${
           isDrawer
             ? 'mb-3'
-            : 'border-b border-slate-100 px-3 py-3 md:px-4'
+            : 'border-b border-slate-100 px-2 py-2.5 md:px-2.5'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
@@ -110,7 +110,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
 
       <ul
         className={`min-h-0 space-y-0.5 overflow-y-auto overscroll-y-contain ${
-          isDrawer ? 'max-h-[50vh] pt-1' : 'flex-1 px-2 pb-3 pt-2 md:px-3'
+          isDrawer ? 'max-h-[50vh] pt-1' : 'flex-1 px-1.5 pb-2 pt-1.5 md:px-2'
         }`}
       >
         {versions.map((v, index) => {
