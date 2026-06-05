@@ -45,6 +45,7 @@ export async function processAiSuggestionsJob(
     data: { status: 'processing' },
   });
 
+  let rawText = '';
   try {
     const version = await prisma.documentVersion.findUnique({
       where: { id: versionId },
@@ -70,7 +71,8 @@ export async function processAiSuggestionsJob(
       maxTokens: 4000,
     });
 
-    const items = parseAiSuggestionsFromLlm(result.text);
+    rawText = result.text ?? '';
+    const items = parseAiSuggestionsFromLlm(rawText);
 
     await prisma.aiSuggestion.deleteMany({
       where: { documentId, versionId, status: 'pending' },
@@ -114,6 +116,9 @@ export async function processAiSuggestionsJob(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'AI suggestions failed';
+    const rawSnippet = rawText
+      ? rawText.slice(0, 1500)
+      : undefined;
     await prisma.job.update({
       where: { id: jobId },
       data: {
@@ -123,6 +128,7 @@ export async function processAiSuggestionsJob(
           documentId,
           versionId,
           error: message,
+          rawText: rawSnippet,
         },
       },
     });

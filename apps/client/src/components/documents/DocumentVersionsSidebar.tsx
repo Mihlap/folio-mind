@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useDeleteDocumentVersionMutation, useLazyGetDownloadUrlQuery } from '@folio-mind/store';
 import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
+import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { DeleteDocumentButton } from './DeleteDocumentButton.js';
+import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.js';
 
 const STATUS_SHORT: Record<string, string> = {
   pending_upload: 'не загружен',
@@ -146,16 +148,35 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                       ? ` · ${formatVersionMeta(v.size, v.pageCount)}`
                       : ''}
                   </span>
+                  {(v.status === 'ready' || v.integrityStatus) && (
+                    <span className="mt-1 block">
+                      <DocumentVersionIntegrityBadge
+                        status={
+                          v.status === 'processing' && !v.integrityStatus
+                            ? 'pending'
+                            : (v.integrityStatus as
+                                | 'intact'
+                                | 'modified'
+                                | 'cannot_verify'
+                                | 'failed'
+                                | null)
+                        }
+                        summary={v.integritySummary}
+                        compact
+                      />
+                    </span>
+                  )}
                 </button>
                 {v.status !== 'pending_upload' && (
-                  <div className="flex shrink-0 flex-col gap-0.5 lg:opacity-0 lg:group-hover:opacity-100">
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
                     <button
                       type="button"
-                      title="Скачать"
+                      title="Скачать PDF этой версии"
                       onClick={() => void handleDownload(v.id)}
-                      className="cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium text-folio-600 hover:bg-folio-50"
+                      className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-folio-700 hover:bg-folio-50"
                     >
-                      ⬇
+                      <DownloadIcon className="h-3 w-3 shrink-0" />
+                      <span>Скачать</span>
                     </button>
                     <DeleteDocumentButton
                       title={`Удалить v${v.version}`}

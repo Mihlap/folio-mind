@@ -50,7 +50,11 @@ type Props = {
   activeVersion: DocumentVersionItem | undefined;
   viewerPage: number;
   onSelectVersion: (versionId: string) => void;
-  onGoToPage: (page: number) => void;
+  onGoToPage: (page: number, annotationId?: string) => void;
+  focusedAnnotationId?: string | null;
+  onOpenAcceptedEdit: (page: number, annotationId: string) => void;
+  onOpenAllAcceptedEdits: () => void;
+  injectedEditBefore?: string | null;
   versionReady: boolean;
   /** Встроено во вкладку правой панели — без сворачиваемой карточки. */
   embedded?: boolean;
@@ -63,6 +67,10 @@ export function DocumentPdfOperationsPanel({
   viewerPage,
   onSelectVersion,
   onGoToPage,
+  focusedAnnotationId = null,
+  onOpenAcceptedEdit,
+  onOpenAllAcceptedEdits,
+  injectedEditBefore = null,
   versionReady,
   embedded = false,
 }: Props) {
@@ -471,6 +479,10 @@ export function DocumentPdfOperationsPanel({
               versionId={activeVersion?.id ?? ''}
               viewerPage={viewerPage}
               versionReady={versionReady}
+              focusedAnnotationId={focusedAnnotationId}
+              onOpenAcceptedEdit={onOpenAcceptedEdit}
+              onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
+              injectedEditBefore={injectedEditBefore}
               onGoToPage={onGoToPage}
             />
           </div>

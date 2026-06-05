@@ -37,6 +37,22 @@ body {
   color: transparent;
 }
 
+.textLayer.textLayer--quote {
+  opacity: 1;
+}
+
+.textLayer.textLayer--quote span::selection,
+.textLayer.select-text span::selection {
+  background-color: rgba(254, 226, 226, 0.38);
+  color: transparent;
+}
+
+.textLayer.textLayer--quote span::-moz-selection,
+.textLayer.select-text span::-moz-selection {
+  background-color: rgba(254, 226, 226, 0.38);
+  color: transparent;
+}
+
 @keyframes sidebarFadeIn {
   from {
     opacity: 0;
@@ -48,7 +64,6 @@ body {
   }
 }
 
-/* Узкая полоса прокрутки без стрелок (Windows / WebKit). */
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: rgb(203 213 225) transparent;

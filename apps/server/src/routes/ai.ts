@@ -648,11 +648,19 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         return reply.code(400).send({ error: 'Source version is not ready' });
       }
 
-      const acceptedCount = await app.prisma.aiSuggestion.count({
-        where: { documentId, versionId, tenantId: user.tenantId, status: 'accepted' },
-      });
-      if (acceptedCount === 0) {
-        return reply.code(400).send({ error: 'Нет принятых правок. Сначала нажмите «Принять» у нужных предложений.' });
+      const [acceptedAiCount, manualEditsCount] = await Promise.all([
+        app.prisma.aiSuggestion.count({
+          where: { documentId, versionId, tenantId: user.tenantId, status: 'accepted' },
+        }),
+        app.prisma.documentAnnotation.count({
+          where: { documentId, versionId, kind: 'accepted_edit' },
+        }),
+      ]);
+      if (acceptedAiCount === 0 && manualEditsCount === 0) {
+        return reply.code(400).send({
+          error:
+            'Нет правок для сборки. Добавьте свои в «Аннотации» или примите предложения ИИ.',
+        });
       }
 
       const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
@@ -678,7 +686,12 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
             type: 'pdf-apply-edits',
             status: 'queued',
             tenantId: user.tenantId,
-            payload: { documentId, sourceVersionId: sourceVersion.id, acceptedCount },
+            payload: {
+              documentId,
+              sourceVersionId: sourceVersion.id,
+              acceptedAiCount,
+              manualEditsCount,
+            },
           },
         }),
       ]);
@@ -704,7 +717,8 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           meta: {
             sourceVersionId: sourceVersion.id,
             targetVersionId: targetVersion.id,
-            acceptedCount,
+            acceptedAiCount,
+            manualEditsCount,
             operationJobId: operationJob.id,
           },
         },

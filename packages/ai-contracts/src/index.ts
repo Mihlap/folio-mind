@@ -8,6 +8,12 @@ export {
 
 export { extractRagSearchTerms } from './rag-search-terms.js';
 
+export {
+  RAG_EMBEDDING_DIM,
+  embedTextLocal,
+  embeddingToPgVector,
+} from './rag-embeddings.js';
+
 export function splitTextIntoChunks(text: string, maxChunkSize = 800): string[] {
   const normalized = text.replace(/\r\n/g, '\n').trim();
   if (!normalized) return [];

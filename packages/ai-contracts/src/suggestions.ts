@@ -28,25 +28,31 @@ function parseJsonLenient(jsonStr: string): unknown {
   }
 }
 
-/** Извлекает первый сбалансированный JSON-объект или массив из текста. */
 export function extractBalancedJsonSubstring(text: string): string | null {
   const objectStart = text.indexOf('{');
   const arrayStart = text.indexOf('[');
-  let start = -1;
-  if (objectStart >= 0 && arrayStart >= 0) {
-    start = Math.min(objectStart, arrayStart);
-  } else {
-    start = Math.max(objectStart, arrayStart);
-  }
-  if (start < 0) return null;
+  const start =
+    objectStart >= 0 && arrayStart >= 0
+      ? Math.min(objectStart, arrayStart)
+      : Math.max(objectStart, arrayStart);
 
-  const open = text[start];
+  if (start < 0) return null;
+  return extractBalancedJsonSubstringFromIndex(text, start);
+}
+
+function extractBalancedJsonSubstringFromIndex(
+  text: string,
+  startIndex: number,
+): string | null {
+  const open = text[startIndex];
+  if (open !== '{' && open !== '[') return null;
   const close = open === '{' ? '}' : ']';
+
   let depth = 0;
   let inString = false;
   let escaped = false;
 
-  for (let i = start; i < text.length; i++) {
+  for (let i = startIndex; i < text.length; i++) {
     const ch = text[i];
     if (inString) {
       if (escaped) {
@@ -60,16 +66,19 @@ export function extractBalancedJsonSubstring(text: string): string | null {
       if (ch === '"') inString = false;
       continue;
     }
+
     if (ch === '"') {
       inString = true;
       continue;
     }
+
     if (ch === open) depth++;
     if (ch === close) {
       depth--;
-      if (depth === 0) return text.slice(start, i + 1);
+      if (depth === 0) return text.slice(startIndex, i + 1);
     }
   }
+
   return null;
 }
 
@@ -80,9 +89,52 @@ export function extractJsonFromLlm(text: string): unknown {
     return parseJsonLenient(fenced[1]);
   }
 
-  const balanced = extractBalancedJsonSubstring(trimmed);
-  if (balanced) {
-    return parseJsonLenient(balanced);
+  const candidates: string[] = [];
+ 
+  if (trimmed.startsWith('{')) {
+    const cand = extractBalancedJsonSubstringFromIndex(trimmed, 0);
+    if (cand) candidates.push(cand);
+  } else if (trimmed.startsWith('[')) {
+    const cand = extractBalancedJsonSubstringFromIndex(trimmed, 0);
+    if (cand) candidates.push(cand);
+  }
+
+  const suggestionsIdx = trimmed.indexOf('"suggestions"');
+  if (suggestionsIdx >= 0) {
+    const braceStart = trimmed.lastIndexOf('{', suggestionsIdx);
+    if (braceStart >= 0) {
+      const cand = extractBalancedJsonSubstringFromIndex(trimmed, braceStart);
+      if (cand) candidates.push(cand);
+    }
+
+    const arrayStart = trimmed.lastIndexOf('[', suggestionsIdx);
+    if (arrayStart >= 0) {
+      const cand = extractBalancedJsonSubstringFromIndex(trimmed, arrayStart);
+      if (cand) candidates.push(cand);
+    }
+  }
+
+ const objectStart = trimmed.indexOf('{');
+  if (objectStart >= 0) {
+    const cand = extractBalancedJsonSubstringFromIndex(trimmed, objectStart);
+    if (cand) candidates.push(cand);
+  }
+
+  const arrayStart = trimmed.indexOf('[');
+  if (arrayStart >= 0) {
+    const cand = extractBalancedJsonSubstringFromIndex(trimmed, arrayStart);
+    if (cand) candidates.push(cand);
+  }
+
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+    try {
+      return parseJsonLenient(candidate);
+    } catch {
+  
+    }
   }
 
   throw new Error('JSON not found in model response');

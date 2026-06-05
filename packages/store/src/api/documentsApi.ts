@@ -53,6 +53,8 @@ export const documentsApi = baseApi.injectEndpoints({
           mimeType: string;
           pageCount: number | null;
           createdAt: string;
+          integrityStatus: string | null;
+          integritySummary: string | null;
         }>;
       },
       string
@@ -180,6 +182,30 @@ export const documentsApi = baseApi.injectEndpoints({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/download-url`,
     }),
+    getVersionIntegrity: build.query<
+      {
+        versionId: string;
+        status: 'pending' | 'intact' | 'modified' | 'cannot_verify' | 'failed' | null;
+        score: number | null;
+        summary: string | null;
+        analyzedAt: string | null;
+        details: {
+          revisionCount: number;
+          hasPrevTrailer: boolean;
+          creator: string | null;
+          producer: string | null;
+          creationDate: string | null;
+          modDate: string | null;
+          hasDigitalSignature: boolean;
+          signals: Array<{ id: string; weight: string; message: string }>;
+          analyzedWith: 'qpdf' | 'builtin';
+        } | null;
+      },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) =>
+        `/documents/${documentId}/versions/${versionId}/integrity`,
+    }),
     splitPages: build.mutation<
       {
         operationJobId: string;
@@ -237,6 +263,20 @@ export const documentsApi = baseApi.injectEndpoints({
           compareText?: string;
           lines?: Array<{ type: 'equal' | 'insert' | 'delete'; text: string }>;
         }>;
+        acceptedEdits: {
+          baseCount: number;
+          compareCount: number;
+          onlyInCompare: Array<{ page: number; quote: string; content: string }>;
+          onlyInBase: Array<{ page: number; quote: string; content: string }>;
+          modified: Array<{
+            page: number;
+            baseQuote: string;
+            compareQuote: string;
+            baseContent: string;
+            compareContent: string;
+          }>;
+        };
+        pageCount: { base: number | null; compare: number | null };
       },
       { documentId: string; baseVersionId: string; compareVersionId: string }
     >({
@@ -258,6 +298,7 @@ export const {
   useDeleteDocumentMutation,
   useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
+  useGetVersionIntegrityQuery,
   useGetVersionPreviewsQuery,
   useSplitPagesMutation,
   useMergeVersionsMutation,

@@ -1,6 +1,25 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { searchPdfText, type PdfSearchMatch } from './pdf-search.js';
+import { PdfAcceptedEditsHint } from './PdfAcceptedEditsHint.js';
+import { PdfTextSelectionHighlight } from './PdfTextSelectionHighlight.js';
+import type { PdfSelectionHighlightRect } from './PdfTextSelectionHighlight.js';
+import { PdfTextSelectionPrompt } from './PdfTextSelectionPrompt.js';
+import {
+  captureTextSelectionFromDrag,
+  clearDocumentSelection,
+  isTextLayerSelectable,
+  pageNumberFromPageRoot,
+  pageNumberFromSelection,
+  pdfPageRootFromTextLayer,
+  readPdfTextSelection,
+  type PdfTextSelectionDrag,
+} from './pdf-text-selection.js';
+import {
+  markerKindClass,
+  markersForPage,
+  type PdfPageMarker,
+} from './pdf-page-markers.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -22,7 +41,17 @@ type PdfViewerProps = {
   customScale?: number;
   searchQuery?: string;
   activeMatchIndex?: number;
-  onSearchMatches?: (matches: PdfSearchMatch[]) => void;
+  onSearchMatches?: (matches: PdfSearchMatch[]) => void;  
+  pageMarkers?: PdfPageMarker[];
+  activeMarkerId?: string | null;
+  onMarkerClick?: (marker: PdfPageMarker) => void;
+  pageAcceptedEditCountByPage?: Record<number, number>;
+  onPageAcceptedEditsOpen?: (page: number) => void;
+  onMarkersOverflowClick?: (page: number) => void;
+  pageNavTick?: number;
+
+  enableTextSelection?: boolean;
+  onTextQuoteForEdit?: (payload: { text: string; page: number }) => void;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -47,6 +76,15 @@ export function PdfViewer({
   searchQuery = '',
   activeMatchIndex = 0,
   onSearchMatches,
+  pageMarkers = [],
+  activeMarkerId = null,
+  onMarkerClick,
+  pageAcceptedEditCountByPage = {},
+  onPageAcceptedEditsOpen,
+  onMarkersOverflowClick,
+  pageNavTick = 0,
+  enableTextSelection = false,
+  onTextQuoteForEdit,
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -63,6 +101,15 @@ export function PdfViewer({
   const [pdfReady, setPdfReady] = useState(false);
   const [visiblePages, setVisiblePages] = useState<Set<number>>(() => new Set([1]));
   const [searchMatches, setSearchMatches] = useState<PdfSearchMatch[]>([]);
+  const [selectionPrompt, setSelectionPrompt] = useState<{
+    text: string;
+    page: number;
+    x: number;
+    y: number;
+    highlightRects: PdfSelectionHighlightRect[];
+  } | null>(null);
+  const selectionDragRef = useRef<PdfTextSelectionDrag | null>(null);
+  const selectionQuoteRef = useRef<string>('');
 
   const goToPage = useCallback(
     (next: number, source: 'external' | 'observer' = 'external') => {
@@ -87,6 +134,106 @@ export function PdfViewer({
     if (page === undefined) return;
     lastPageUpdateSourceRef.current = 'external';
   }, [page]);
+
+  useEffect(() => {
+    setSelectionPrompt(null);
+  }, [url, enableTextSelection]);
+
+  useEffect(() => {
+    if (!enableTextSelection) return;
+    const root = containerRef.current;
+    if (!root) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      let layer = (e.target as HTMLElement | null)?.closest('.textLayer');
+      if (!(layer instanceof HTMLElement) || !isTextLayerSelectable(layer)) {
+        for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
+          const hit = el instanceof HTMLElement ? el.closest('.textLayer') : null;
+          if (hit instanceof HTMLElement && isTextLayerSelectable(hit)) {
+            layer = hit;
+            break;
+          }
+        }
+      }
+      if (!(layer instanceof HTMLElement) || !isTextLayerSelectable(layer)) {
+        selectionDragRef.current = null;
+        return;
+      }
+      const pageRoot = pdfPageRootFromTextLayer(layer);
+      if (!pageRoot) {
+        selectionDragRef.current = null;
+        return;
+      }
+      selectionDragRef.current = {
+        textLayer: layer,
+        pageRoot,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+      };
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      const drag = selectionDragRef.current;
+      if (!drag) return;
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('[data-pdf-selection-ui]')) return;
+
+      const drag = selectionDragRef.current;
+      selectionDragRef.current = null;
+      const endX = drag?.lastX ?? e.clientX;
+      const endY = drag?.lastY ?? e.clientY;
+
+      requestAnimationFrame(() => {
+        let snap = readPdfTextSelection(root);
+        if (!snap && drag) {
+          snap = captureTextSelectionFromDrag(drag, endX, endY);
+        }
+        clearDocumentSelection();
+
+        if (!snap) {
+          setSelectionPrompt(null);
+          selectionQuoteRef.current = '';
+          return;
+        }
+
+        const pageNum =
+          (drag ? pageNumberFromPageRoot(drag.pageRoot) : null) ?? pageNumberFromSelection(root);
+        if (!pageNum) return;
+
+        const anchorX =
+          snap.rect.width > 0 || snap.rect.left > 0 ? snap.rect.left : endX;
+        const anchorY =
+          snap.rect.height > 0 || snap.rect.bottom > 0
+            ? snap.rect.bottom + 6
+            : endY + 6;
+
+        selectionQuoteRef.current = snap.text;
+        setSelectionPrompt({
+          text: snap.text,
+          page: pageNum,
+          x: anchorX,
+          y: anchorY,
+          highlightRects: snap.highlightRects,
+        });
+      });
+    };
+
+    root.addEventListener('mousedown', onMouseDown);
+    root.addEventListener('mousemove', onMouseMove);
+    root.addEventListener('mouseup', onMouseUp);
+    return () => {
+      root.removeEventListener('mousedown', onMouseDown);
+      root.removeEventListener('mousemove', onMouseMove);
+      root.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [enableTextSelection, pdfReady, displayMode]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -223,11 +370,32 @@ export function PdfViewer({
 
   const activeMatch = searchMatches[activeMatchIndex];
 
+  const showTextLayerOnPages = Boolean(searchQuery.trim()) || enableTextSelection;
+
   return (
     <div
       ref={containerRef}
       className={['flex min-h-0 w-full flex-col', className].filter(Boolean).join(' ')}
     >
+      {selectionPrompt && enableTextSelection && (
+        <PdfTextSelectionPrompt
+          x={selectionPrompt.x}
+          y={selectionPrompt.y}
+          previewText={selectionPrompt.text}
+          onDismiss={() => {
+            setSelectionPrompt(null);
+            selectionQuoteRef.current = '';
+            clearDocumentSelection();
+          }}
+          onUseAsQuote={() => {
+            const text = selectionQuoteRef.current || selectionPrompt.text;
+            onTextQuoteForEdit?.({ text, page: selectionPrompt.page });
+            setSelectionPrompt(null);
+            selectionQuoteRef.current = '';
+            clearDocumentSelection();
+          }}
+        />
+      )}
       {error ? (
         <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
       ) : displayMode === 'single' ? (
@@ -239,7 +407,17 @@ export function PdfViewer({
           pdfReady={pdfReady}
           searchQuery={searchQuery}
           highlight={activeMatch?.page === pageNum}
-          showTextLayer={Boolean(searchQuery.trim())}
+          showTextLayer={showTextLayerOnPages}
+          enableTextSelection={enableTextSelection}
+          pageMarkers={pageMarkers}
+          activeMarkerId={activeMarkerId}
+          onMarkerClick={onMarkerClick}
+          onMarkersOverflowClick={onMarkersOverflowClick}
+          pageAcceptedEditCountByPage={pageAcceptedEditCountByPage}
+          onPageAcceptedEditsOpen={onPageAcceptedEditsOpen}
+          selectionHighlightRects={
+            selectionPrompt?.page === pageNum ? selectionPrompt.highlightRects : undefined
+          }
         />
       ) : (
         <div
@@ -266,7 +444,19 @@ export function PdfViewer({
                   searchQuery={searchQuery}
                   highlight={activeMatch?.page === pageNumber}
                   showLabel={numPages > 1}
-                  showTextLayer={Boolean(searchQuery.trim())}
+                  showTextLayer={showTextLayerOnPages}
+                  enableTextSelection={enableTextSelection}
+                  pageMarkers={pageMarkers}
+                  activeMarkerId={activeMarkerId}
+                  onMarkerClick={onMarkerClick}
+                  onMarkersOverflowClick={onMarkersOverflowClick}
+                  pageAcceptedEditCountByPage={pageAcceptedEditCountByPage}
+                  onPageAcceptedEditsOpen={onPageAcceptedEditsOpen}
+                  selectionHighlightRects={
+                    selectionPrompt?.page === pageNumber
+                      ? selectionPrompt.highlightRects
+                      : undefined
+                  }
                 />
               ) : (
                 <PagePlaceholder pageNumber={pageNumber} containerWidth={containerWidth} />
@@ -331,6 +521,14 @@ function PdfPage({
   highlight,
   showLabel,
   showTextLayer,
+  enableTextSelection = false,
+  pageMarkers = [],
+  activeMarkerId,
+  onMarkerClick,
+  onMarkersOverflowClick,
+  pageAcceptedEditCountByPage = {},
+  onPageAcceptedEditsOpen,
+  selectionHighlightRects,
 }: {
   pdf: pdfjs.PDFDocumentProxy | null;
   pageNumber: number;
@@ -341,7 +539,19 @@ function PdfPage({
   highlight: boolean;
   showLabel?: boolean;
   showTextLayer?: boolean;
+  enableTextSelection?: boolean;
+  pageMarkers?: PdfPageMarker[];
+  activeMarkerId?: string | null;
+  onMarkerClick?: (marker: PdfPageMarker) => void;
+  onMarkersOverflowClick?: (page: number) => void;
+  pageAcceptedEditCountByPage?: Record<number, number>;
+  onPageAcceptedEditsOpen?: (page: number) => void;
+  selectionHighlightRects?: PdfSelectionHighlightRect[];
 }) {
+  const markersOnPage = markersForPage(pageMarkers, pageNumber).filter(
+    (m) => m.kind !== 'accepted_edit',
+  );
+  const acceptedEditCount = pageAcceptedEditCountByPage[pageNumber] ?? 0;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -411,20 +621,112 @@ function PdfPage({
     };
   }, [pdf, pageNumber, containerWidth, computeScale, pdfReady, searchQuery, highlight, showTextLayer]);
 
+  const quoteSelectMode = Boolean(enableTextSelection && showTextLayer && !searchQuery.trim());
+
   return (
-    <div ref={wrapperRef} className="relative inline-block rounded bg-white shadow-sm">
+    <div
+      ref={wrapperRef}
+      data-pdf-page={pageNumber}
+      className="pdf-page-root relative inline-block rounded bg-white shadow-sm"
+    >
       {showLabel && (
         <span className="absolute -top-6 left-0 text-xs text-slate-500">Стр. {pageNumber}</span>
       )}
       <canvas ref={canvasRef} className="block" />
       <div
         ref={textLayerRef}
-        className={`textLayer pointer-events-none absolute inset-0 overflow-hidden ${
-          showTextLayer ? 'opacity-30' : 'opacity-0'
-        }`}
-        aria-hidden
+        className={[
+          'textLayer absolute inset-0 overflow-hidden',
+          showTextLayer
+            ? searchQuery.trim()
+              ? 'opacity-30'
+              : quoteSelectMode
+                ? 'textLayer--quote'
+                : 'opacity-0'
+            : 'opacity-0',
+          enableTextSelection && showTextLayer
+            ? 'pointer-events-auto select-text'
+            : 'pointer-events-none',
+        ].join(' ')}
+        aria-hidden={!enableTextSelection}
       />
+      {selectionHighlightRects && selectionHighlightRects.length > 0 && (
+        <PdfTextSelectionHighlight rects={selectionHighlightRects} />
+      )}
+      {(acceptedEditCount > 0 || markersOnPage.length > 0) && (
+        <div className="pointer-events-none absolute top-2 right-2 z-10 flex max-w-[min(52%,15rem)] flex-col items-end gap-1.5">
+          {acceptedEditCount > 0 && onPageAcceptedEditsOpen && (
+            <PdfAcceptedEditsHint
+              count={acceptedEditCount}
+              onClick={() => onPageAcceptedEditsOpen(pageNumber)}
+            />
+          )}
+          {markersOnPage.length > 0 && (
+            <PageMarkersOverlay
+              pageNumber={pageNumber}
+              markers={markersOnPage}
+              activeMarkerId={activeMarkerId}
+              onMarkerClick={onMarkerClick}
+              onOverflowClick={onMarkersOverflowClick}
+            />
+          )}
+        </div>
+      )}
       {pageError && <p className="p-2 text-xs text-red-600">{pageError}</p>}
+    </div>
+  );
+}
+
+function PageMarkersOverlay({
+  pageNumber,
+  markers,
+  activeMarkerId,
+  onMarkerClick,
+  onOverflowClick,
+}: {
+  pageNumber: number;
+  markers: PdfPageMarker[];
+  activeMarkerId?: string | null;
+  onMarkerClick?: (marker: PdfPageMarker) => void;
+  onOverflowClick?: (page: number) => void;
+}) {
+  const maxVisible = 3;
+  const visible = markers.slice(0, maxVisible);
+  const overflow = markers.length - visible.length;
+
+  return (
+    <div className="flex w-full flex-col items-end gap-1.5" aria-label="Заметки на странице">
+      {visible.map((marker) => {
+        const active = marker.id === activeMarkerId;
+        return (
+          <button
+            key={marker.id}
+            type="button"
+            title={marker.title}
+            onClick={() => onMarkerClick?.(marker)}
+            className={[
+              'flex max-w-full cursor-pointer items-center gap-1 rounded-full px-1.5 py-0.5 text-left shadow-sm ring-2 transition',
+              markerKindClass(marker.kind),
+              active ? 'scale-110 ring-2 ring-white animate-pulse' : 'ring-transparent',
+            ].join(' ')}
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full bg-white/90" aria-hidden />
+            <span className="truncate text-[10px] font-medium leading-tight text-white">
+              {marker.title}
+            </span>
+          </button>
+        );
+      })}
+      {overflow > 0 && (
+        <button
+          type="button"
+          title={`Ещё ${overflow} заметок на стр. ${pageNumber}`}
+          onClick={() => onOverflowClick?.(pageNumber)}
+          className="cursor-pointer rounded-full border border-slate-200 bg-white/95 px-2.5 py-1 text-[10px] font-medium text-slate-700 shadow-sm ring-1 ring-white/90 hover:border-slate-300 hover:bg-slate-50"
+        >
+          +{overflow} заметок
+        </button>
+      )}
     </div>
   );
 }

@@ -18,12 +18,37 @@ const annotationSchema = z.object({
   updatedAt: z.string(),
 });
 
-const createAnnotationSchema = z.object({
-  page: z.number().int().min(1),
-  content: z.string().min(1).max(8000),
-  kind: z.enum(['comment', 'highlight']).default('comment'),
-  quote: z.string().max(4000).optional(),
-});
+const createAnnotationSchema = z
+  .object({
+    page: z.number().int().min(1),
+    content: z.string().min(1).max(8000),
+    kind: z.enum(['comment', 'highlight', 'accepted_edit']).default('comment'),
+    quote: z.string().max(4000).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.kind === 'accepted_edit' && !data.quote?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Для правки нужен исходный текст (было)',
+        path: ['quote'],
+      });
+    }
+  });
+
+const updateAnnotationSchema = z
+  .object({
+    page: z.number().int().min(1).optional(),
+    content: z.string().min(1).max(8000).optional(),
+    quote: z.string().max(4000).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.content === undefined && data.quote === undefined && data.page === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Нет полей для обновления',
+      });
+    }
+  });
 
 export const annotationRoutes: FastifyPluginAsync = async (app) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -132,6 +157,89 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),
       });
+    },
+  );
+
+  r.patch(
+    '/documents/:documentId/versions/:versionId/annotations/:annotationId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+          annotationId: z.string(),
+        }),
+        body: updateAnnotationSchema,
+        response: {
+          200: annotationSchema,
+          404: errorBody,
+          403: errorBody,
+          400: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId, annotationId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const annotation = await app.prisma.documentAnnotation.findFirst({
+        where: { id: annotationId, documentId, versionId },
+      });
+      if (!annotation) {
+        return reply.code(404).send({ error: 'Annotation not found' });
+      }
+      if (annotation.userId !== user.sub) {
+        return reply.code(403).send({ error: 'Можно изменить только свою заметку' });
+      }
+
+      const nextQuote =
+        request.body.quote !== undefined ? request.body.quote : annotation.quote;
+      const nextContent =
+        request.body.content !== undefined ? request.body.content : annotation.content;
+
+      if (annotation.kind === 'accepted_edit' && !String(nextQuote ?? '').trim()) {
+        return reply.code(400).send({ error: 'Для правки нужен исходный текст (было)' });
+      }
+      if (!String(nextContent).trim()) {
+        return reply.code(400).send({ error: 'Текст правки не может быть пустым' });
+      }
+
+      const updated = await app.prisma.documentAnnotation.update({
+        where: { id: annotationId },
+        data: {
+          page: request.body.page ?? annotation.page,
+          content: nextContent,
+          quote: nextQuote,
+        },
+      });
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.annotation_updated',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: { annotationId, versionId },
+        },
+      });
+
+      return {
+        id: updated.id,
+        documentId: updated.documentId,
+        versionId: updated.versionId,
+        userId: updated.userId,
+        page: updated.page,
+        kind: updated.kind,
+        content: updated.content,
+        quote: updated.quote,
+        createdAt: updated.createdAt.toISOString(),
+        updatedAt: updated.updatedAt.toISOString(),
+      };
     },
   );
 

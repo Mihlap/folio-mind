@@ -14,6 +14,7 @@ import {
   reportActionBtnPrimary,
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
+import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
 
 type Props = {
   documentId: string;
@@ -155,8 +156,8 @@ export function DocumentAiSuggestionsPanel({
           <>
             <p>ИИ предлагает замены формулировок. «Принять» фиксирует решение и добавляет запись в аннотации.</p>
             <p>
-              Чтобы получить PDF, нажмите «Собрать PDF с принятыми правками» — появится новая версия с
-              пометками на страницах и приложением со списком правок.
+              «Собрать PDF» — файл для пересылки: договор без изменений + компактный реестр
+              правок в приложении. Полные «было / стало» — в окне «Правки» и при сравнении версий.
             </p>
           </>
         }
@@ -190,8 +191,9 @@ export function DocumentAiSuggestionsPanel({
             helpContent={
               <>
                 <p>
-                  Создаёт новую версию документа. На затронутых страницах внизу появятся блоки «было /
-                  стало», в конце — приложение со всеми принятыми правками.
+                  Создаёт новую версию: текст страниц договора не меняется; в приложении —
+                  компактный реестр (страница + краткие фрагменты) по всем принятым правкам ИИ и
+                  ручным из «Аннотации».
                 </p>
                 <p>
                   Исходный текст в PDF не переписывается автоматически — это рабочая версия для
@@ -240,8 +242,12 @@ export function DocumentAiSuggestionsPanel({
                   стр. {item.page}
                 </button>
               )}
-              <p className="mt-1 text-xs text-slate-500 line-through">{item.originalText}</p>
-              <p className="mt-1 text-xs text-slate-800">{item.suggestion}</p>
+              <AcceptedEditBeforeAfter
+                className="mt-2"
+                compact
+                before={item.originalText}
+                after={item.suggestion}
+              />
               <p className="mt-1 text-[11px] text-slate-500">{item.reason}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
@@ -276,14 +282,41 @@ export function DocumentAiSuggestionsPanel({
         </ul>
       )}
 
-      {(accepted.length > 0 || rejected.length > 0) && (
+      {accepted.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-slate-600">Принято ({accepted.length})</p>
+          <ul className="space-y-3">
+            {accepted.map((item) => (
+              <li key={item.id} className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2">
+                {item.page != null && (
+                  <button
+                    type="button"
+                    onClick={() => onGoToPage(item.page!)}
+                    className="cursor-pointer text-[11px] font-medium text-folio-700 hover:underline"
+                  >
+                    стр. {item.page}
+                  </button>
+                )}
+                <AcceptedEditBeforeAfter
+                  className="mt-2"
+                  compact
+                  before={item.originalText}
+                  after={item.suggestion}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {rejected.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-medium text-slate-600">Уже обработано</p>
+          <p className="mb-2 text-xs font-medium text-slate-600">Отклонено ({rejected.length})</p>
           <ul className="space-y-1.5">
-            {[...accepted, ...rejected].map((item) => (
-              <li key={item.id} className="text-xs text-slate-500">
-                {item.status === 'accepted' ? '✓' : '✗'} {item.originalText.slice(0, 60)}
-                {item.originalText.length > 60 ? '…' : ''}
+            {rejected.map((item) => (
+              <li key={item.id} className="text-xs text-slate-500 line-through">
+                {item.originalText.slice(0, 80)}
+                {item.originalText.length > 80 ? '…' : ''}
               </li>
             ))}
           </ul>

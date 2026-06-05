@@ -7,7 +7,9 @@ import {
   useLazyGetDownloadUrlQuery,
   useUploadVersionFileMutation,
 } from '@folio-mind/store';
+import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { DeleteDocumentButton } from './DeleteDocumentButton.js';
+import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.js';
 
 async function waitMs(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,6 +41,8 @@ export type DocumentVersionItem = {
   mimeType: string;
   pageCount?: number | null;
   createdAt: string;
+  integrityStatus?: string | null;
+  integritySummary?: string | null;
 };
 
 type Props = {
@@ -218,14 +222,34 @@ export function DocumentVersionsPanel({
                 <span className="mt-0.5 block text-xs text-slate-500">
                   {date} · {getDisplayStatus(v.status)} · {sizeMb} МБ
                 </span>
+                {(v.status === 'ready' || v.integrityStatus) && (
+                  <span className="mt-1 block">
+                    <DocumentVersionIntegrityBadge
+                      status={
+                        v.status === 'processing' && !v.integrityStatus
+                          ? 'pending'
+                          : (v.integrityStatus as
+                              | 'intact'
+                              | 'modified'
+                              | 'cannot_verify'
+                              | 'failed'
+                              | null)
+                      }
+                      summary={v.integritySummary}
+                      compact
+                    />
+                  </span>
+                )}
               </button>
               {v.status !== 'pending_upload' && (
                 <button
                   type="button"
+                  title="Скачать PDF этой версии"
                   onClick={() => void handleDownload(v.id)}
-                  className="cursor-pointer rounded-lg px-2 py-1 text-xs font-medium text-folio-600 hover:bg-folio-50"
+                  className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-folio-700 hover:bg-folio-50"
                 >
-                  Скачать
+                  <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span>Скачать</span>
                 </button>
               )}
               <DeleteDocumentButton

@@ -30,13 +30,31 @@ export const annotationsApi = baseApi.injectEndpoints({
         versionId: string;
         page: number;
         content: string;
-        kind?: 'comment' | 'highlight';
+        kind?: 'comment' | 'highlight' | 'accepted_edit';
         quote?: string;
       }
     >({
       query: ({ documentId, versionId, ...body }) => ({
         url: `/documents/${documentId}/versions/${versionId}/annotations`,
         method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_r, _e, { versionId }) => [{ type: 'Annotations', id: versionId }],
+    }),
+    updateAnnotation: build.mutation<
+      DocumentAnnotation,
+      {
+        documentId: string;
+        versionId: string;
+        annotationId: string;
+        page?: number;
+        content?: string;
+        quote?: string;
+      }
+    >({
+      query: ({ documentId, versionId, annotationId, ...body }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/annotations/${annotationId}`,
+        method: 'PATCH',
         body,
       }),
       invalidatesTags: (_r, _e, { versionId }) => [{ type: 'Annotations', id: versionId }],
@@ -57,5 +75,6 @@ export const annotationsApi = baseApi.injectEndpoints({
 export const {
   useListAnnotationsQuery,
   useCreateAnnotationMutation,
+  useUpdateAnnotationMutation,
   useDeleteAnnotationMutation,
 } = annotationsApi;

@@ -1,4 +1,4 @@
-import { splitTextIntoChunks } from '@folio-mind/ai-contracts';
+import { splitTextIntoChunks, embedTextLocal, embeddingToPgVector } from '@folio-mind/ai-contracts';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import { extractTextFromPdf } from '../../lib/pdf/pdf-text.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
@@ -12,6 +12,20 @@ type RagIndexPayload = WorkerJobPayload & {
   s3Key?: string;
   fileName?: string;
 };
+
+async function saveChunkEmbeddings(
+  prisma: ReturnType<typeof getPrisma>,
+  rows: Array<{ id: string; content: string }>,
+): Promise<void> {
+  for (const row of rows) {
+    const vectorLiteral = embeddingToPgVector(embedTextLocal(row.content));
+    await prisma.$executeRawUnsafe(
+      `UPDATE "RagChunk" SET embedding = $1::vector WHERE id = $2`,
+      vectorLiteral,
+      row.id,
+    );
+  }
+}
 
 export async function processRagIndexJob(env: WorkerEnv, data: RagIndexPayload): Promise<void> {
   const prisma = getPrisma();
@@ -53,24 +67,34 @@ export async function processRagIndexJob(env: WorkerEnv, data: RagIndexPayload):
       throw new Error('Не удалось извлечь текст для индексации');
     }
 
-    await prisma.$transaction([
-      prisma.ragChunk.deleteMany({ where: { sourceId } }),
-      ...chunks.map((content, chunkIndex) =>
-        prisma.ragChunk.create({
+    const createdRows = await prisma.$transaction(async (tx) => {
+      await tx.ragChunk.deleteMany({ where: { sourceId } });
+      const rows: Array<{ id: string; content: string }> = [];
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+        const content = chunks[chunkIndex]!;
+        const row = await tx.ragChunk.create({
           data: { sourceId, tenantId, chunkIndex, content },
-        }),
-      ),
-      prisma.ragSource.update({
+        });
+        rows.push({ id: row.id, content });
+      }
+      await tx.ragSource.update({
         where: { id: sourceId },
         data: { status: 'ready', chunkCount: chunks.length },
-      }),
-    ]);
+      });
+      return rows;
+    });
+
+    try {
+      await saveChunkEmbeddings(prisma, createdRows);
+    } catch (embedErr) {
+      console.warn('[rag-index] embedding save failed, chunks kept without vectors', embedErr);
+    }
 
     await prisma.job.update({
       where: { id: jobId },
       data: {
         status: 'completed',
-        payload: { sourceId, chunkCount: chunks.length },
+        payload: { sourceId, chunkCount: chunks.length, embeddings: true },
       },
     });
   } catch (err) {

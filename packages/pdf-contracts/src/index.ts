@@ -28,6 +28,15 @@ export {
   type VersionTextCompareSummary,
 } from './text-diff.js';
 
+export {
+  analyzePdfIntegrity,
+  parsePdfDate,
+  type PdfIntegrityDetails,
+  type PdfIntegrityResult,
+  type PdfIntegritySignal,
+  type PdfIntegrityVerdict,
+} from './pdf-integrity.js';
+
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';

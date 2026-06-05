@@ -15,6 +15,7 @@ import {
   enqueueSplitPagesJob,
 } from '../lib/queue/queue.js';
 import { previewPageKey } from '@folio-mind/pdf-contracts';
+import { compareAcceptedEdits } from '../lib/documents/compare-accepted-edits.js';
 import {
   buildVersionCompareResult,
   loadVersionPageTexts,
@@ -80,6 +81,12 @@ const pageTextDiffSchema = z.object({
   lines: z.array(textDiffLineSchema).optional(),
 });
 
+const acceptedEditDiffItemSchema = z.object({
+  page: z.number(),
+  quote: z.string(),
+  content: z.string(),
+});
+
 const versionCompareResponseSchema = z.object({
   baseVersionId: z.string(),
   compareVersionId: z.string(),
@@ -92,6 +99,64 @@ const versionCompareResponseSchema = z.object({
     removedPages: z.number(),
   }),
   pages: z.array(pageTextDiffSchema),
+  acceptedEdits: z.object({
+    baseCount: z.number(),
+    compareCount: z.number(),
+    onlyInCompare: z.array(acceptedEditDiffItemSchema),
+    onlyInBase: z.array(acceptedEditDiffItemSchema),
+    modified: z.array(
+      z.object({
+        page: z.number(),
+        baseQuote: z.string(),
+        compareQuote: z.string(),
+        baseContent: z.string(),
+        compareContent: z.string(),
+      }),
+    ),
+  }),
+  pageCount: z.object({
+    base: z.number().nullable(),
+    compare: z.number().nullable(),
+  }),
+});
+
+const versionIntegritySignalSchema = z.object({
+  id: z.string(),
+  weight: z.enum(['high', 'medium', 'low']),
+  message: z.string(),
+});
+
+const versionIntegrityResponseSchema = z.object({
+  versionId: z.string(),
+  status: z.enum(['pending', 'intact', 'modified', 'cannot_verify', 'failed']).nullable(),
+  score: z.number().nullable(),
+  summary: z.string().nullable(),
+  analyzedAt: z.string().nullable(),
+  details: z
+    .object({
+      revisionCount: z.number(),
+      hasPrevTrailer: z.boolean(),
+      creator: z.string().nullable(),
+      producer: z.string().nullable(),
+      creationDate: z.string().nullable(),
+      modDate: z.string().nullable(),
+      hasDigitalSignature: z.boolean(),
+      signals: z.array(versionIntegritySignalSchema),
+      analyzedWith: z.enum(['qpdf', 'builtin']),
+    })
+    .nullable(),
+});
+
+const versionListItemSchema = z.object({
+  id: z.string(),
+  version: z.number(),
+  status: z.string(),
+  size: z.string(),
+  mimeType: z.string(),
+  pageCount: z.number().nullable(),
+  createdAt: z.string(),
+  integrityStatus: z.string().nullable(),
+  integritySummary: z.string().nullable(),
 });
 
 function buildOriginalKey(documentId: string, version: number, fileName: string) {
@@ -568,6 +633,21 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
 
       const diff = buildVersionCompareResult(basePages, comparePages);
 
+      const [baseEditRows, compareEditRows] = await Promise.all([
+        app.prisma.documentAnnotation.findMany({
+          where: { documentId, versionId: baseVersionId, kind: 'accepted_edit' },
+          select: { page: true, quote: true, content: true, meta: true },
+          orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
+        }),
+        app.prisma.documentAnnotation.findMany({
+          where: { documentId, versionId: compareVersionId, kind: 'accepted_edit' },
+          select: { page: true, quote: true, content: true, meta: true },
+          orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
+        }),
+      ]);
+
+      const acceptedEdits = compareAcceptedEdits(baseEditRows, compareEditRows);
+
       await app.prisma.auditLog.create({
         data: {
           action: 'document.versions_compared',
@@ -589,6 +669,11 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
         compareVersion: compareVersion.version,
         summary: diff.summary,
         pages: diff.pages,
+        acceptedEdits,
+        pageCount: {
+          base: baseVersion.pageCount ?? null,
+          compare: compareVersion.pageCount ?? null,
+        },
       };
     },
   );
@@ -998,17 +1083,7 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
           200: z.object({
             id: z.string(),
             title: z.string(),
-            versions: z.array(
-              z.object({
-                id: z.string(),
-                version: z.number(),
-                status: z.string(),
-                size: z.string(),
-                mimeType: z.string(),
-                pageCount: z.number().nullable(),
-                createdAt: z.string(),
-              }),
-            ),
+            versions: z.array(versionListItemSchema),
           }),
           404: errorBody,
         },
@@ -1041,6 +1116,8 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
           mimeType: string;
           pageCount: number | null;
           createdAt: Date;
+          integrityStatus: string | null;
+          integritySummary: string | null;
         }) => ({
           id: v.id,
           version: v.version,
@@ -1049,7 +1126,64 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
           mimeType: v.mimeType,
           pageCount: v.pageCount ?? null,
           createdAt: v.createdAt.toISOString(),
+          integrityStatus: v.integrityStatus,
+          integritySummary: v.integritySummary,
         })),
+      };
+    },
+  );
+
+  r.get(
+    '/documents/:documentId/versions/:versionId/integrity',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        response: {
+          200: versionIntegrityResponseSchema,
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+
+      const v = version as {
+        id: string;
+        status: string;
+        integrityStatus: string | null;
+        integrityScore: number | null;
+        integritySummary: string | null;
+        integrityDetails: unknown;
+        integrityAnalyzedAt: Date | null;
+      };
+
+      const integrityStatus =
+        v.status === 'processing' && !v.integrityStatus
+          ? 'pending'
+          : v.integrityStatus;
+
+      return {
+        versionId: v.id,
+        status: integrityStatus as 'pending' | 'intact' | 'modified' | 'cannot_verify' | 'failed' | null,
+        score: v.integrityScore,
+        summary: v.integritySummary,
+        analyzedAt: v.integrityAnalyzedAt?.toISOString() ?? null,
+        details: v.integrityDetails as z.infer<typeof versionIntegrityResponseSchema>['details'],
       };
     },
   );

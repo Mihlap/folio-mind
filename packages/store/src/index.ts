@@ -90,6 +90,8 @@ export {
 
   useLazyGetDownloadUrlQuery,
 
+  useGetVersionIntegrityQuery,
+
   useGetVersionPreviewsQuery,
 
   useSplitPagesMutation,
@@ -137,10 +139,13 @@ export {
 
   annotationsApi,
 
+  type DocumentAnnotation,
+
   useListAnnotationsQuery,
 
   useCreateAnnotationMutation,
 
+  useUpdateAnnotationMutation,
   useDeleteAnnotationMutation,
 
 } from './api/annotationsApi.js';

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { PdfViewer, PdfViewerToolbar } from '@folio-mind/ui';
+import { PdfViewer, PdfViewerToolbar, type PdfPageMarker } from '@folio-mind/ui';
 import {
+  useDeleteAnnotationMutation,
+  useUpdateAnnotationMutation,
   useGetDocumentQuery,
   useGetVersionPreviewsQuery,
+  useListAnnotationsQuery,
   clearSearch,
   nextSearchMatch,
   prevSearchMatch,
@@ -31,6 +34,12 @@ import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.j
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
 import { shellTopHeaderClass } from '../../components/layout/shell-chrome.js';
+import { annotationsToPageMarkers } from '../../lib/documents/annotationMarkers.js';
+import {
+  countAcceptedEditsByPage,
+  listAcceptedEditAnnotations,
+} from '../../lib/documents/acceptedEditOverlays.js';
+import { AcceptedEditsModal } from '../../components/documents/AcceptedEditsModal.js';
 import { loadDocumentPdfUrl } from '../../lib/documents/documentPdf.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -67,6 +76,13 @@ export function DocumentPage() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [viewerPage, setViewerPage] = useState(1);
+  const [focusedAnnotationId, setFocusedAnnotationId] = useState<string | null>(null);
+  const [acceptedEditsModalOpen, setAcceptedEditsModalOpen] = useState(false);
+  const [editsModalPageFilter, setEditsModalPageFilter] = useState<number | null>(null);
+  const [injectedEditBefore, setInjectedEditBefore] = useState<string | null>(null);
+  const [pageNavTick, setPageNavTick] = useState(0);
+  const [deleteAnnotation] = useDeleteAnnotationMutation();
+  const [updateAnnotation, { isLoading: updatingAnnotation }] = useUpdateAnnotationMutation();
   const [rightTab, setRightTab] = useState<DocumentRightTab>('report');
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
 
@@ -129,9 +145,84 @@ export function DocumentPage() {
 
   useEffect(() => {
     setViewerPage(1);
+    setFocusedAnnotationId(null);
+    setAcceptedEditsModalOpen(false);
+    setInjectedEditBefore(null);
     dispatch(resetZoom());
     dispatch(clearSearch());
   }, [activeVersion?.id, dispatch]);
+
+  const { data: annotationsData } = useListAnnotationsQuery(
+    { documentId: id!, versionId: activeVersion?.id ?? '' },
+    { skip: !id || !activeVersion?.id },
+  );
+
+  const pageMarkers = useMemo(
+    () => annotationsToPageMarkers(annotationsData?.items ?? []),
+    [annotationsData?.items],
+  );
+
+  const acceptedEditsList = useMemo(
+    () => listAcceptedEditAnnotations(annotationsData?.items ?? []),
+    [annotationsData?.items],
+  );
+
+  const modalAcceptedEdits = useMemo(
+    () =>
+      editsModalPageFilter != null
+        ? acceptedEditsList.filter((e) => e.page === editsModalPageFilter)
+        : acceptedEditsList,
+    [acceptedEditsList, editsModalPageFilter],
+  );
+
+  const pageAcceptedEditCountByPage = useMemo(
+    () => countAcceptedEditsByPage(annotationsData?.items ?? []),
+    [annotationsData?.items],
+  );
+
+  const handleGoToPage = useCallback((page: number, annotationId?: string) => {
+    setViewerPage(page);
+    setFocusedAnnotationId(annotationId ?? null);
+    setPageNavTick((t) => t + 1);
+  }, []);
+
+  const openAcceptedEditsModal = useCallback(
+    (page: number, annotationId?: string, pageFilter?: number | null) => {
+      handleGoToPage(page, annotationId);
+      setEditsModalPageFilter(pageFilter ?? null);
+      setAcceptedEditsModalOpen(true);
+    },
+    [handleGoToPage],
+  );
+
+  const handleMarkerClick = useCallback(
+    (marker: PdfPageMarker) => {
+      if (marker.kind === 'accepted_edit') {
+        openAcceptedEditsModal(marker.page, marker.id);
+      } else {
+        handleGoToPage(marker.page, marker.id);
+      }
+    },
+    [handleGoToPage, openAcceptedEditsModal],
+  );
+
+  const handleTextQuoteForEdit = useCallback(
+    ({ text, page }: { text: string; page: number }) => {
+      setInjectedEditBefore(text);
+      queueMicrotask(() => setInjectedEditBefore(null));
+      setRightTab('tools');
+      handleGoToPage(page);
+    },
+    [handleGoToPage],
+  );
+
+  const handlePageAcceptedEditsOpen = useCallback(
+    (page: number) => {
+      const firstOnPage = acceptedEditsList.find((e) => e.page === page);
+      openAcceptedEditsModal(page, firstOnPage?.id, page);
+    },
+    [acceptedEditsList, openAcceptedEditsModal],
+  );
 
   const previewFrom = 1;
   const previewEnd = Math.max(INITIAL_THUMB_PAGES, viewerPage + 14);
@@ -388,7 +479,7 @@ export function DocumentPage() {
                     <button
                       key={thumb.page}
                       type="button"
-                      onClick={() => setViewerPage(thumb.page)}
+                      onClick={() => handleGoToPage(thumb.page)}
                       className={`shrink-0 cursor-pointer overflow-hidden rounded border-2 transition-[border-color,box-shadow] duration-200 ${
                         viewerPage === thumb.page
                           ? 'border-folio-600 ring-1 ring-folio-200'
@@ -417,7 +508,7 @@ export function DocumentPage() {
                       <button
                         key={thumb.page}
                         type="button"
-                        onClick={() => setViewerPage(thumb.page)}
+                        onClick={() => handleGoToPage(thumb.page)}
                         className={`shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-[border-color] duration-200 ${
                           viewerPage === thumb.page
                             ? 'border-folio-600'
@@ -481,6 +572,18 @@ export function DocumentPage() {
                       searchQuery={viewer.searchQuery}
                       activeMatchIndex={viewer.activeMatchIndex}
                       onSearchMatches={handleSearchMatches}
+                        pageMarkers={pageMarkers}
+                        activeMarkerId={focusedAnnotationId}
+                        onMarkerClick={handleMarkerClick}
+                        pageAcceptedEditCountByPage={pageAcceptedEditCountByPage}
+                        onPageAcceptedEditsOpen={handlePageAcceptedEditsOpen}
+                        onMarkersOverflowClick={(page) => {
+                          setRightTab('tools');
+                          handleGoToPage(page);
+                        }}
+                        pageNavTick={pageNavTick}
+                        enableTextSelection={versionReady && Boolean(pdfUrl)}
+                        onTextQuoteForEdit={handleTextQuoteForEdit}
                       />
                     </div>
                   )}
@@ -500,7 +603,15 @@ export function DocumentPage() {
           versionReady={versionReady}
           viewerPage={viewerPage}
           onSelectVersion={setSelectedVersionId}
-          onGoToPage={setViewerPage}
+          onGoToPage={handleGoToPage}
+          focusedAnnotationId={focusedAnnotationId}
+          onOpenAcceptedEdit={openAcceptedEditsModal}
+          onOpenAllAcceptedEdits={() => {
+            const first = acceptedEditsList[0];
+            if (first) openAcceptedEditsModal(first.page, first.id);
+            else setAcceptedEditsModalOpen(true);
+          }}
+          injectedEditBefore={injectedEditBefore}
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -549,6 +660,43 @@ export function DocumentPage() {
         <DocumentVersionsSidebar variant="drawer" onVersionAction={() => setMobileSheet(null)} />
       </DocumentMobileSheet>
 
+      <AcceptedEditsModal
+        open={acceptedEditsModalOpen}
+        edits={modalAcceptedEdits}
+        pageFilter={editsModalPageFilter}
+        focusedId={focusedAnnotationId}
+        onClose={() => {
+          setAcceptedEditsModalOpen(false);
+          setEditsModalPageFilter(null);
+        }}
+        onGoToPage={handleGoToPage}
+        onDelete={
+          doc && activeVersion?.id
+            ? (annotationId) => {
+                void deleteAnnotation({
+                  documentId: doc.id,
+                  versionId: activeVersion.id,
+                  annotationId,
+                });
+              }
+            : undefined
+        }
+        onUpdate={
+          doc && activeVersion?.id
+            ? async (annotationId, payload) => {
+                await updateAnnotation({
+                  documentId: doc.id,
+                  versionId: activeVersion.id,
+                  annotationId,
+                  quote: payload.quote,
+                  content: payload.content,
+                }).unwrap();
+              }
+            : undefined
+        }
+        saving={updatingAnnotation}
+      />
+
       <DocumentMobileSheet
         open={mobileSheet === 'panel'}
         title={
@@ -564,7 +712,15 @@ export function DocumentPage() {
           versionReady={versionReady}
           viewerPage={viewerPage}
           onSelectVersion={setSelectedVersionId}
-          onGoToPage={setViewerPage}
+          onGoToPage={handleGoToPage}
+          focusedAnnotationId={focusedAnnotationId}
+          onOpenAcceptedEdit={openAcceptedEditsModal}
+          onOpenAllAcceptedEdits={() => {
+            const first = acceptedEditsList[0];
+            if (first) openAcceptedEditsModal(first.page, first.id);
+            else setAcceptedEditsModalOpen(true);
+          }}
+          injectedEditBefore={injectedEditBefore}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

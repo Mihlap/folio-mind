@@ -2,6 +2,7 @@ import { extractedTextKey, previewPageKey } from '@folio-mind/pdf-contracts';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { extractTextFromPdf } from '../../lib/pdf/pdf-text.js';
+import { analyzePdfIntegrityFromBuffer } from '../../lib/pdf/pdf-integrity.js';
 import {
   getPreviewLimits,
   renderPdfPageRange,
@@ -80,6 +81,7 @@ export async function processGeneratePreviewsJob(
     }
 
     const pdfBuffer = await getObjectBuffer(s3Key);
+    const integrity = await analyzePdfIntegrityFromBuffer(pdfBuffer);
     const { pageCount, previews, initialPages } = await renderPdfPreviews(pdfBuffer);
 
     const versionExistsBeforeUpload = await prisma.documentVersion.findUnique({
@@ -102,10 +104,26 @@ export async function processGeneratePreviewsJob(
       });
     }
 
-    await prisma.documentVersion.update({
-      where: { id: versionId },
-      data: { status: 'ready', pageCount },
-    });
+    try {
+      await prisma.documentVersion.update({
+        where: { id: versionId },
+        data: {
+          status: 'ready',
+          pageCount,
+          integrityStatus: integrity.verdict,
+          integrityScore: integrity.score,
+          integritySummary: integrity.summary,
+          integrityDetails: integrity,
+          integrityAnalyzedAt: new Date(),
+        },
+      });
+    } catch (integrityErr) {
+      console.warn('[preview] integrity metadata save failed, version marked ready', integrityErr);
+      await prisma.documentVersion.update({
+        where: { id: versionId },
+        data: { status: 'ready', pageCount },
+      });
+    }
 
     const textKey = extractedTextKey(documentId, versionId);
 
@@ -123,6 +141,8 @@ export async function processGeneratePreviewsJob(
           textKey: null,
           textExtracted: false,
           textError: null,
+          integrityStatus: integrity.verdict,
+          integrityScore: integrity.score,
         },
       },
     });

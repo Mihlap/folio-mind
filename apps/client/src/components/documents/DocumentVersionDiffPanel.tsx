@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLazyCompareVersionsQuery } from '@folio-mind/store';
+import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 
 type DiffLine = { type: 'equal' | 'insert' | 'delete'; text: string };
@@ -78,6 +79,18 @@ export function DocumentVersionDiffPanel({
     [data?.pages],
   );
 
+  const editDiff = data?.acceptedEdits;
+  const hasEditListChanges = Boolean(
+    editDiff &&
+      (editDiff.onlyInCompare.length > 0 ||
+        editDiff.onlyInBase.length > 0 ||
+        editDiff.modified.length > 0),
+  );
+  const hasPageCountDelta =
+    data?.pageCount?.base != null &&
+    data?.pageCount?.compare != null &&
+    data.pageCount.base !== data.pageCount.compare;
+
   async function handleCompare() {
     if (!canCompare) return;
     setExpandedPage(null);
@@ -101,7 +114,8 @@ export function DocumentVersionDiffPanel({
       <div>
         <h3 className="text-sm font-medium text-slate-800">Сравнение версий</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Текстовый diff по извлечённому слою PDF (база → текущая версия)
+          Текст страниц договора и список правок «было / стало» (база → текущая версия). После
+          «Собрать PDF» тело договора обычно не меняется — в приложении компактный реестр правок.
         </p>
       </div>
 
@@ -162,8 +176,84 @@ export function DocumentVersionDiffPanel({
                 {data.summary.removedPages} удалённых
               </span>
             )}
-            {changedPages.length === 0 && ' различий не найдено'}
+            {changedPages.length === 0 &&
+              !hasEditListChanges &&
+              !hasPageCountDelta &&
+              ' в тексте страниц различий не найдено'}
           </p>
+
+          {hasPageCountDelta && (
+            <p className="text-xs text-slate-600">
+              Страниц в PDF: v{data.baseVersion} — {data.pageCount.base}, v{data.compareVersion} —{' '}
+              {data.pageCount.compare}
+              {data.pageCount.compare > (data.pageCount.base ?? 0)
+                ? ' (вероятно добавлено приложение с правками)'
+                : ''}
+            </p>
+          )}
+
+          {editDiff && (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-2">
+              <p className="text-xs font-medium text-slate-700">
+                Правки «было / стало»: v{data.baseVersion} — {editDiff.baseCount}, v
+                {data.compareVersion} — {editDiff.compareCount}
+              </p>
+              {hasEditListChanges ? (
+                <ul className="space-y-2">
+                  {editDiff.onlyInCompare.map((item, i) => (
+                    <li
+                      key={`add-${item.page}-${i}`}
+                      className="rounded-md border border-emerald-100 bg-white p-2"
+                    >
+                      <p className="mb-1 text-[10px] font-medium text-emerald-800">
+                        Только в v{data.compareVersion} · стр. {item.page}
+                      </p>
+                      <AcceptedEditBeforeAfter
+                        before={item.quote}
+                        after={item.content}
+                        compact
+                      />
+                    </li>
+                  ))}
+                  {editDiff.onlyInBase.map((item, i) => (
+                    <li
+                      key={`rm-${item.page}-${i}`}
+                      className="rounded-md border border-red-100 bg-white p-2"
+                    >
+                      <p className="mb-1 text-[10px] font-medium text-red-800">
+                        Только в v{data.baseVersion} · стр. {item.page}
+                      </p>
+                      <AcceptedEditBeforeAfter
+                        before={item.quote}
+                        after={item.content}
+                        compact
+                      />
+                    </li>
+                  ))}
+                  {editDiff.modified.map((item, i) => (
+                    <li
+                      key={`mod-${item.page}-${i}`}
+                      className="rounded-md border border-amber-100 bg-white p-2"
+                    >
+                      <p className="mb-1 text-[10px] font-medium text-amber-900">
+                        Изменено «стало» при той же цитате · стр. {item.page}
+                      </p>
+                      <AcceptedEditBeforeAfter
+                        before={item.baseContent}
+                        after={item.compareContent}
+                        compact
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Списки правок совпадают. Если правки меняли после сборки PDF — пересоберите версию
+                  из исходной.
+                </p>
+              )}
+            </div>
+          )}
 
           {changedPages.length > 0 && (
             <ul className="space-y-2">

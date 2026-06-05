@@ -1,8 +1,8 @@
-import { extractRagSearchTerms } from '@folio-mind/ai-contracts';
 import type { AIProviderName } from '@folio-mind/ai-providers';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import { loadDocumentText } from '../../lib/pdf/document-text.js';
 import { createLLMFromWorkerEnv } from '../../lib/ai/llm.js';
+import { searchRagChunks } from '../../lib/rag/rag-search.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import { getObjectBuffer, isWorkerS3Configured } from '../../lib/storage/s3.js';
@@ -52,27 +52,7 @@ async function loadRagChunksForCompare(
     );
   }
 
-  const terms = extractRagSearchTerms(documentText, 8);
-  if (terms.length > 0) {
-    const matched = await prisma.ragChunk.findMany({
-      where: {
-        ...readyWhere,
-        OR: terms.map((term) => ({
-          content: { contains: term, mode: 'insensitive' as const },
-        })),
-      },
-      take: CHUNK_LIMIT,
-      include: { source: { select: { title: true } } },
-    });
-    if (matched.length > 0) return matched;
-  }
-
-  return prisma.ragChunk.findMany({
-    where: readyWhere,
-    orderBy: [{ sourceId: 'asc' }, { chunkIndex: 'asc' }],
-    take: CHUNK_LIMIT,
-    include: { source: { select: { title: true } } },
-  });
+  return searchRagChunks(prisma, tenantId, documentText, CHUNK_LIMIT);
 }
 
 export async function processRagCompareJob(env: WorkerEnv, data: RagComparePayload): Promise<void> {

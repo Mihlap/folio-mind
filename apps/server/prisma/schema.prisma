@@ -111,6 +111,11 @@ model DocumentVersion {
   mimeType   String   @default("application/pdf")
   status     String   @default("pending")
   pageCount  Int?
+  integrityStatus     String?
+  integrityScore      Int?
+  integritySummary    String?
+  integrityDetails    Json?
+  integrityAnalyzedAt DateTime?
   createdAt  DateTime @default(now())
 
   @@unique([documentId, version])
@@ -191,12 +196,13 @@ model RagSource {
 }
 
 model RagChunk {
-  id         String    @id @default(cuid())
+  id         String                     @id @default(cuid())
   sourceId   String
-  source     RagSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  source     RagSource                  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   tenantId   String
   chunkIndex Int
-  content    String    @db.Text
+  content    String                     @db.Text
+  embedding  Unsupported("vector(384)")?
 
   @@index([sourceId])
   @@index([tenantId])

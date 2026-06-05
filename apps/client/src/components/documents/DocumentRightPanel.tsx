@@ -17,7 +17,11 @@ type Props = {
   versionReady: boolean;
   viewerPage: number;
   onSelectVersion: (versionId: string) => void;
-  onGoToPage: (page: number) => void;
+  onGoToPage: (page: number, annotationId?: string) => void;
+  focusedAnnotationId?: string | null;
+  onOpenAcceptedEdit: (page: number, annotationId: string) => void;
+  onOpenAllAcceptedEdits: () => void;
+  injectedEditBefore?: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -43,6 +47,10 @@ export function DocumentRightPanel({
   viewerPage,
   onSelectVersion,
   onGoToPage,
+  focusedAnnotationId = null,
+  onOpenAcceptedEdit,
+  onOpenAllAcceptedEdits,
+  injectedEditBefore = null,
   collapsed,
   onToggleCollapsed,
   onExpand,
@@ -155,6 +163,10 @@ export function DocumentRightPanel({
             viewerPage={viewerPage}
             onSelectVersion={onSelectVersion}
             onGoToPage={onGoToPage}
+            focusedAnnotationId={focusedAnnotationId}
+            onOpenAcceptedEdit={onOpenAcceptedEdit}
+            onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
+            injectedEditBefore={injectedEditBefore}
             versionReady={versionReady}
           />
         </div>
