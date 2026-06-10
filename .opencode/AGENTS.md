@@ -44,4 +44,4 @@ CI order: `lint` → `typecheck` → `test`. Typecheck & test need build first (
 
 ## OpenCode config
 
-`.opencode/opencode.json` registers a `designmd` MCP tool (`npx designmd-mcp`). Requires `DESIGNMD_API_KEY` set in the system environment — not hardcoded in config. The `.opencode/` dir is gitignored (except `AGENTS.md` and `skills/`).
+`.opencode/opencode.json` registers a `designmd` MCP tool (`npx designmd-mcp`, needs `DESIGNMD_API_KEY`). See `.env.example` for all env vars. `.opencode/` is gitignored (except `AGENTS.md` and `skills/`).
