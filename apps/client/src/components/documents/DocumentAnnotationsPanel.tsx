@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  useApplyAcceptedSuggestionsMutation,
   useCreateAnnotationMutation,
   useDeleteAnnotationMutation,
+  useGetJobQuery,
   useListAnnotationsQuery,
 } from '@folio-mind/store';
 import {
   FeatureHelpActionButton,
   PanelSectionHeader,
+  reportActionBtnHighlight,
   reportActionBtnPrimary,
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
@@ -19,6 +22,7 @@ type Props = {
   onGoToPage: (page: number, annotationId?: string) => void;
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
+  onSelectVersion: (versionId: string) => void;
   focusedAnnotationId?: string | null;
   injectedEditBefore?: string | null;
 };
@@ -31,6 +35,7 @@ export function DocumentAnnotationsPanel({
   onGoToPage,
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
+  onSelectVersion,
   focusedAnnotationId = null,
   injectedEditBefore = null,
 }: Props) {
@@ -40,18 +45,48 @@ export function DocumentAnnotationsPanel({
   );
   const [createAnnotation, { isLoading: creating }] = useCreateAnnotationMutation();
   const [deleteAnnotation] = useDeleteAnnotationMutation();
+  const [applyAccepted, { isLoading: applying }] = useApplyAcceptedSuggestionsMutation();
   const [content, setContent] = useState('');
   const [editBefore, setEditBefore] = useState('');
   const [editAfter, setEditAfter] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [applyJobId, setApplyJobId] = useState<string | null>(null);
+  const [pollApply, setPollApply] = useState(false);
+  const [applyHint, setApplyHint] = useState<string | null>(null);
   const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+
+  const { data: applyJob } = useGetJobQuery(applyJobId!, {
+    skip: !applyJobId,
+    pollingInterval: pollApply ? 2000 : 0,
+  });
 
   useEffect(() => {
     setContent('');
     setEditBefore('');
     setEditAfter('');
     setError(null);
+    setApplyJobId(null);
+    setPollApply(false);
+    setApplyHint(null);
   }, [versionId]);
+
+  useEffect(() => {
+    if (!applyJob) return;
+    if (applyJob.status === 'completed') {
+      setPollApply(false);
+      setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
+    }
+    if (applyJob.status === 'failed') {
+      setPollApply(false);
+      setApplyHint(
+        typeof applyJob.payload === 'object' &&
+          applyJob.payload &&
+          'error' in applyJob.payload
+          ? String((applyJob.payload as { error?: string }).error)
+          : 'Не удалось собрать PDF с правками',
+      );
+    }
+  }, [applyJob]);
 
   useEffect(() => {
     if (!focusedAnnotationId) return;
@@ -107,6 +142,26 @@ export function DocumentAnnotationsPanel({
       void refetch();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось сохранить правку');
+    }
+  }
+
+  async function handleApplyPdf() {
+    setError(null);
+    setApplyHint(null);
+    try {
+      const result = await applyAccepted({ documentId, versionId }).unwrap();
+      setApplyJobId(result.operationJobId);
+      setPollApply(true);
+      onSelectVersion(result.versionId);
+      setApplyHint(`Создана версия ${result.version}. Собираем PDF…`);
+    } catch (err) {
+      const msg =
+        typeof err === 'object' && err && 'data' in err
+          ? typeof (err as { data: unknown }).data === 'string'
+            ? (err as { data: string }).data
+            : 'Не удалось собрать PDF с правками'
+          : 'Не удалось собрать PDF с правками';
+      setError(msg);
     }
   }
 
@@ -260,6 +315,33 @@ export function DocumentAnnotationsPanel({
               Открыть все
             </button>
           </div>
+
+          <div className={reportActionsColumnClass}>
+            <FeatureHelpActionButton
+              helpTitle="Собрать PDF с правками"
+              disabled={!versionReady || creating || applying || pollApply}
+              onClick={() => void handleApplyPdf()}
+              buttonClassName={reportActionBtnHighlight}
+              helpContent={
+                <>
+                  <p>
+                    Создаёт новую версию: текст страниц договора не меняется; в приложении —
+                    компактный реестр (страница + краткие фрагменты) по всем принятым правкам ИИ и
+                    ручным из «Аннотации».
+                  </p>
+                  <p>
+                    Исходный текст в PDF не переписывается автоматически — это рабочая версия для
+                    согласования. Для финального договора правки вносят в Word и загружают новый PDF.
+                  </p>
+                </>
+              }
+            >
+              {applying || pollApply ? 'Сборка PDF…' : 'Собрать PDF с правками'}
+            </FeatureHelpActionButton>
+          </div>
+
+          {applyHint && <p className="text-xs text-folio-700">{applyHint}</p>}
+
           <ul className="space-y-1.5">
             {acceptedEdits.map((item) => (
               <li

@@ -484,6 +484,7 @@ export function DocumentPdfOperationsPanel({
               onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
               injectedEditBefore={injectedEditBefore}
               onGoToPage={onGoToPage}
+              onSelectVersion={onSelectVersion}
             />
           </div>
 

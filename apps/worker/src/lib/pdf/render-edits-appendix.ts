@@ -56,7 +56,7 @@ export function renderAcceptedEditsAppendix(
 
   drawWrappedParagraph(
     layout,
-    'Текст страниц договора не изменён. Ниже — компактный реестр: страница и краткие фрагменты «было / стало». Полные формулировки — в интерфейсе Folio Mind.',
+    'Ниже — компактный реестр: страница и краткие фрагменты «было / стало».',
     {
       fontSize: BODY_SIZE,
       color: rgb(0.35, 0.35, 0.35),

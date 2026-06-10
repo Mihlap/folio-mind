@@ -25,6 +25,7 @@ secrets/
 /scripts/
 
 # IDE / editor
+.opencode/
 .cursor/
 .vscode/settings.json
 

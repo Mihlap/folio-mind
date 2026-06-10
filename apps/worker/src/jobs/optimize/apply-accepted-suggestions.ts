@@ -12,6 +12,8 @@ import { embedCyrillicFont, registerPdfFontkit } from '../../lib/pdf/pdf-cyrilli
 import { collectAcceptedEditsForPdf } from '../../lib/pdf/collect-accepted-edits.js';
 import { renderAcceptedEditsAppendix } from '../../lib/pdf/render-edits-appendix.js';
 import { failOptimizeOperation, finalizeOptimizeVersion } from '../../lib/pdf/finalize-optimize-version.js';
+import { findAllTextPositions } from '../../lib/pdf/find-text-positions.js';
+import { renderAllHighlights } from '../../lib/pdf/render-edits-highlights.js';
 
 type ApplyAcceptedPayload = WorkerJobPayload & {
   operationJobId?: string;
@@ -96,6 +98,9 @@ export async function processApplyAcceptedSuggestionsJob(
     const pdfDoc = await PDFDocument.load(sourceBuffer);
     registerPdfFontkit(pdfDoc);
     const font = await embedCyrillicFont(pdfDoc);
+
+    const highlights = await findAllTextPositions(sourceBuffer, edits);
+    renderAllHighlights(pdfDoc, highlights);
 
     renderAcceptedEditsAppendix(pdfDoc, font, edits);
 
