@@ -24,8 +24,11 @@ secrets/
 # Local dev / machine-specific scripts (WSL, Docker, Postgres setup)
 /scripts/
 
-# IDE / editor
-.opencode/
+# AI tools
+.opencode/*
+!.opencode/AGENTS.md
+!.opencode/skills/
+.agents/
 .cursor/
 .vscode/settings.json
 
