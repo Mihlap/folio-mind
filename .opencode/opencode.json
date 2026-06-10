@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "designmd": {
+      "type": "local",
+      "command": ["npx", "designmd-mcp"],
+      "env": {
+        "DESIGNMD_API_KEY": "your-key-here"
+      }
+    }
+  }
+}

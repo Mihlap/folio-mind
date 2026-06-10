@@ -88,10 +88,11 @@
 
 | Этап | Задача |
 |------|--------|
-| B | Gotenberg / LibreOffice в compose; job PDF ↔ DOCX; экспорт DOCX с подсветкой правок |
-| C | Worker `apply-edits-final`: автозамены по реестру + отчёт неудач + новая версия PDF |
-| D | Опциональный исходный DOCX при загрузке (`sourceDocxKey`); source-first для лучшего качества |
+| D | **Source-first (приоритет):** `sourceDocxKey`, pipeline замен в DOCX → PDF; максимальное качество |
+| B | Gotenberg / LibreOffice в compose; job PDF ↔ DOCX; pre-convert при upload; кэш DOCX; экспорт DOCX с подсветкой |
+| C | Worker `apply-edits-final`: автозамены + confidence scoring + отчёт + новая версия PDF |
 | E | Координаты выделения в аннотациях → точнее матчинг (бэклог фазы 2) |
+| F | Гранулярность правок: text-only / structural / table / image (бэклог) |
 
 **Два режима в UI:**
 
@@ -100,10 +101,12 @@
 | «Собрать PDF» | Согласование: реестр правок в приложении (✅ фаза 2) |
 | «Применить правки» | Финал: текст в теле документа изменён |
 
-- [ ] Gotenberg / LibreOffice в `docker-compose`
-- [ ] PDF ↔ DOCX в worker (очередь `optimize`)
-- [ ] `apply-edits-final`: автозамены, отчёт `applied` / `failed` / `ambiguous`
-- [ ] API + UI «Применить правки»; опционально исходный DOCX при upload
+- [ ] **D:** Prisma `sourceDocxKey`, UI поля при загрузке, source-first pipeline
+- [ ] **B:** Gotenberg / LibreOffice в `docker-compose`
+- [ ] **B:** PDF ↔ DOCX + pre-convert при upload + кэш промежуточного DOCX
+- [ ] **C:** `apply-edits-final`: автозамены, отчёт `applied` / `failed` / `ambiguous`
+- [ ] **C:** Confidence scoring: Green/Yellow/Red после round-trip; `confidenceScore` в `DocumentVersion`
+- [ ] API + UI «Применить правки»; два подрежима (source-first / PDF-only)
 - [ ] PDF ↔ Office (прочие форматы), формы AcroForm
 - [ ] Визуальная подпись → трек PAdES/PKCS#7
 - [ ] Экспорт буклетов: JPG, DPI-чеклист, PDF/A (опц.)
@@ -123,7 +126,7 @@
 
 1. Стабилизация **фазы 2** в использовании (smoke, RAG после reset, integrity на реальных PDF).
 2. Доработки фазы 2: координаты маркеров на листе, integrity v2, эмбеддинги API.
-3. Проектирование **фазы 3 / «Применить правки»**: DOCX-пайплайн (§2.4 PROJECT_PLAN).
+3. **Фаза 3 / «Применить правки»**: реализация DOCX-пайплайн в порядке D → B → C (§2.4 PROJECT_PLAN): source-first (приоритет), инфраструктура конвертации, автозамены + confidence scoring.
 4. **2b** (буклеты) — только после стабильного viewer и ACL, не смешивать с юр. v1.
 
 См. также [VISION.md](./VISION.md), [ICP.md](./ICP.md).
