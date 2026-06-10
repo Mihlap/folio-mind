@@ -1,22 +1,5 @@
 # folio-mind — Agent instructions
 
-# Пример каркаса
-
-## Primary Goal
-Опишите, что делает проект и какую бизнес-цель он решает.
-
-## Expected Repository Structure
-- apps/
-- src/
-- docs/specs/
-- .opencode/agents/
-- .opencode/skills/
-
-## Delivery Workflow
-1. Уточнить задачу.
-2. При необходимости обновить specs.
-3. Реализовать минимальный рабочий slice.
-4. Обновить сопутствующую документацию.
 ## Quick start
 
 ```bash
@@ -61,4 +44,4 @@ CI order: `lint` → `typecheck` → `test`. Typecheck & test need build first (
 
 ## OpenCode config
 
-`.opencode/opencode.json` registers a `designmd` MCP tool (`npx designmd-mcp`, requires `DESIGNMD_API_KEY` env var). The `.opencode/` dir is gitignored.
+`.opencode/opencode.json` registers a `designmd` MCP tool (`npx designmd-mcp`). Requires `DESIGNMD_API_KEY` set in the system environment — not hardcoded in config. The `.opencode/` dir is gitignored (except `AGENTS.md` and `skills/`).
