@@ -67,6 +67,12 @@ export {
 
   useResetPasswordMutation,
 
+  useSendPhoneCodeMutation,
+
+  usePhoneRegisterMutation,
+
+  usePhoneLoginMutation,
+
 } from './api/authApi.js';
 
 export {
@@ -99,6 +105,8 @@ export {
   useMergeVersionsMutation,
 
   useLazyCompareVersionsQuery,
+
+  useCompareVersionIntegrityQuery,
 
 } from './api/documentsApi.js';
 

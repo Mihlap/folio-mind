@@ -15,5 +15,6 @@ export function annotationsToPageMarkers(items: DocumentAnnotation[]): PdfPageMa
     page: item.page,
     kind: item.kind,
     title: truncateTitle(item.content),
+    ...(item.x != null && item.y != null ? { x: item.x, y: item.y } : {}),
   }));
 }

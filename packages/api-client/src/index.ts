@@ -44,3 +44,22 @@ export type LoginBody = {
   password: string;
   captchaToken?: string;
 };
+
+export type SendCodeBody = {
+  phone: string;
+};
+
+export type SendCodeResponse = {
+  ok: true;
+};
+
+export type PhoneRegisterBody = {
+  phone: string;
+  code: string;
+  name?: string;
+};
+
+export type PhoneLoginBody = {
+  phone: string;
+  code: string;
+};

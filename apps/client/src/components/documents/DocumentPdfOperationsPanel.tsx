@@ -55,8 +55,8 @@ type Props = {
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
   injectedEditBefore?: string | null;
-  versionReady: boolean;
-  /** Встроено во вкладку правой панели — без сворачиваемой карточки. */
+  injectedCoords?: { x?: number; y?: number } | null;
+  versionReady: boolean; 
   embedded?: boolean;
 };
 
@@ -71,6 +71,7 @@ export function DocumentPdfOperationsPanel({
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
   injectedEditBefore = null,
+  injectedCoords = null,
   versionReady,
   embedded = false,
 }: Props) {
@@ -200,8 +201,7 @@ export function DocumentPdfOperationsPanel({
 
   useEffect(() => {
     setPagesInput('');
-    setOperationError(null);
-    // При смене версии убираем «успешные» всплывашки, чтобы не путать пользователя.
+    setOperationError(null);  
     setStatusHint(null);
     setStatusHintVersionId(null);
   }, [activeVersion?.id]);
@@ -483,6 +483,7 @@ export function DocumentPdfOperationsPanel({
               onOpenAcceptedEdit={onOpenAcceptedEdit}
               onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
               injectedEditBefore={injectedEditBefore}
+              injectedCoords={injectedCoords}
               onGoToPage={onGoToPage}
               onSelectVersion={onSelectVersion}
             />

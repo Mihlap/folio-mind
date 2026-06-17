@@ -1,18 +1,15 @@
 import { apiBaseUrl } from '@folio-mind/store';
 
-/** Включить, когда будут настроены GOOGLE_OAUTH_* / YANDEX_OAUTH_* на сервере */
-const OAUTH_LOGIN_ENABLED = false;
+type Provider = { id: string; label: string };
 
-const providers = [
-  { id: 'google', label: 'Google' },
+const providers: Provider[] = [
+  // Google OAuth — не соответствует 406-ФЗ (иностранная ИС)
+  // { id: 'google', label: 'Google' },
   { id: 'yandex', label: 'Яндекс' },
-] as const;
+  { id: 'esia', label: 'Госуслуги' },
+];
 
 export function OAuthButtons() {
-  if (!OAUTH_LOGIN_ENABLED) {
-    return null;
-  }
-
   return (
     <div className="space-y-2">
       <p className="text-center text-xs text-slate-500">или войти через</p>

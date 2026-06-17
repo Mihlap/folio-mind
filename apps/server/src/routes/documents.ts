@@ -1439,6 +1439,73 @@ export const documentRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts
       return { url, expiresInSeconds };
     },
   );
+
+  r.get(
+    '/documents/:documentId/versions/:versionId/integrity/compare/:otherVersionId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+          otherVersionId: z.string(),
+        }),
+        response: {
+          200: z.object({
+            versionA: versionIntegrityResponseSchema,
+            versionB: versionIntegrityResponseSchema,
+            changed: z.boolean(),
+            statusDelta: z.string().nullable(),
+            scoreDelta: z.number().nullable(),
+          }),
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId, otherVersionId } = request.params;
+
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+
+      const fetchIntegrity = async (vid: string) => {
+        const v = document.versions.find((x: { id: string }) => x.id === vid);
+        if (!v) return null;
+        const integrityStatus =
+          v.status === 'processing' && !v.integrityStatus ? 'pending' : v.integrityStatus;
+        return {
+          versionId: v.id,
+          status: integrityStatus as 'pending' | 'intact' | 'modified' | 'cannot_verify' | 'failed' | null,
+          score: v.integrityScore,
+          summary: v.integritySummary,
+          analyzedAt: v.integrityAnalyzedAt?.toISOString() ?? null,
+          details: v.integrityDetails as z.infer<typeof versionIntegrityResponseSchema>['details'],
+        };
+      };
+
+      const versionA = await fetchIntegrity(versionId);
+      const versionB = await fetchIntegrity(otherVersionId);
+
+      if (!versionA || !versionB) {
+        return reply.code(404).send({ error: 'One or both versions not found' });
+      }
+
+      const changed = versionA.status !== versionB.status || versionA.score !== versionB.score;
+      const statusDelta =
+        versionA.status !== versionB.status
+          ? `${versionA.status ?? 'none'} \u2192 ${versionB.status ?? 'none'}`
+          : null;
+      const scoreDelta =
+        versionA.score != null && versionB.score != null
+          ? versionB.score - versionA.score
+          : null;
+
+      return { versionA, versionB, changed, statusDelta, scoreDelta };
+    },
+  );
 };
 
 export function hashBuffer(buffer: Buffer): string {

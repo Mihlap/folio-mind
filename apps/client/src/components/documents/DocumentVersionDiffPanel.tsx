@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLazyCompareVersionsQuery } from '@folio-mind/store';
+import { useLazyCompareVersionsQuery, useCompareVersionIntegrityQuery } from '@folio-mind/store';
+import { IntegrityCompareBadge } from './DocumentVersionIntegrityBadge.js';
 import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 
@@ -186,7 +187,7 @@ export function DocumentVersionDiffPanel({
             <p className="text-xs text-slate-600">
               Страниц в PDF: v{data.baseVersion} — {data.pageCount.base}, v{data.compareVersion} —{' '}
               {data.pageCount.compare}
-              {data.pageCount.compare > (data.pageCount.base ?? 0)
+              {(data.pageCount.compare ?? 0) > (data.pageCount.base ?? 0)
                 ? ' (вероятно добавлено приложение с правками)'
                 : ''}
             </p>
@@ -253,6 +254,14 @@ export function DocumentVersionDiffPanel({
                 </p>
               )}
             </div>
+          )}
+
+          {data && baseVersionId && compareVersionId && (
+            <IntegrityCompareBadge
+              documentId={documentId}
+              versionId={baseVersionId}
+              otherVersionId={compareVersionId}
+            />
           )}
 
           {changedPages.length > 0 && (

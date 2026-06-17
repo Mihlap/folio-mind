@@ -4,6 +4,8 @@ export type YandexGPTConfig = {
   folderId?: string;
   iamToken?: string;
   model?: string;
+  embeddingModel?: string;
+  embeddingDimension?: number;
 };
 
 type YandexMessage = {
@@ -25,6 +27,34 @@ export class YandexGPTProvider implements LLMProvider {
 
   constructor(config?: YandexGPTConfig) {
     this.config = config ?? null;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    if (!this.config?.folderId || !this.config?.iamToken) {
+      throw new Error('YandexGPT credentials not configured for embeddings');
+    }
+    const model = this.config.embeddingModel ?? 'text-search-query';
+    const modelUri = `emb://${this.config.folderId}/${model}/latest`;
+    const response = await fetch(
+      'https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.config.iamToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ modelUri, text }),
+      },
+    );
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`YandexGPT embeddings error ${response.status}: ${body.slice(0, 200)}`);
+    }
+    const data = (await response.json()) as { embedding?: number[] };
+    if (!data.embedding || data.embedding.length === 0) {
+      throw new Error('YandexGPT: empty embedding response');
+    }
+    return data.embedding;
   }
 
   async complete(params: CompletionRequest): Promise<CompletionResponse> {

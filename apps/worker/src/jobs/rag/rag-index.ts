@@ -1,4 +1,5 @@
-import { splitTextIntoChunks, embedTextLocal, embeddingToPgVector } from '@folio-mind/ai-contracts';
+import { splitTextIntoChunks, embedTextLocal, embeddingToPgVector, RAG_EMBEDDING_DIM } from '@folio-mind/ai-contracts';
+import { createLLMProvider, type AIProviderName } from '@folio-mind/ai-providers';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import { extractTextFromPdf } from '../../lib/pdf/pdf-text.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
@@ -11,14 +12,44 @@ type RagIndexPayload = WorkerJobPayload & {
   tenantId?: string;
   s3Key?: string;
   fileName?: string;
+  provider?: AIProviderName;
 };
 
 async function saveChunkEmbeddings(
   prisma: ReturnType<typeof getPrisma>,
   rows: Array<{ id: string; content: string }>,
+  provider?: AIProviderName,
 ): Promise<void> {
+  let providerInstance: ReturnType<typeof createLLMProvider> | null = null;
+  if (provider) {
+    try {
+      providerInstance = createLLMProvider(provider, {
+        gigachat: { credentials: process.env.GIGACHAT_CREDENTIALS ?? '', embeddingModel: process.env.GIGACHAT_EMBEDDING_MODEL },
+        yandex: { folderId: process.env.YANDEX_FOLDER_ID ?? '', iamToken: process.env.YANDEX_IAM_TOKEN ?? '', embeddingModel: process.env.YANDEX_EMBEDDING_MODEL },
+      });
+      await providerInstance.healthCheck();
+    } catch {
+      providerInstance = null;
+    }
+  }
+
   for (const row of rows) {
-    const vectorLiteral = embeddingToPgVector(embedTextLocal(row.content));
+    let vector: number[];
+    if (providerInstance?.embed) {
+      try {
+        vector = await providerInstance.embed(row.content);
+        if (vector.length !== RAG_EMBEDDING_DIM) {
+          console.warn(`[rag-index] provider embedding dim ${vector.length} != ${RAG_EMBEDDING_DIM}, falling back to local`);
+          vector = embedTextLocal(row.content);
+        }
+      } catch (err) {
+        console.warn('[rag-index] provider embedding failed, falling back to local', err);
+        vector = embedTextLocal(row.content);
+      }
+    } else {
+      vector = embedTextLocal(row.content);
+    }
+    const vectorLiteral = embeddingToPgVector(vector);
     await prisma.$executeRawUnsafe(
       `UPDATE "RagChunk" SET embedding = $1::vector WHERE id = $2`,
       vectorLiteral,

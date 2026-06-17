@@ -66,6 +66,9 @@
 - [x] RAG v1: загрузка регламентов, индексация, сверка с договором
 - [x] RAG pgvector: эмбеддинги при индексации, семантический поиск (fallback на keyword)
 - [x] PDF integrity v1: эвристика структуры файла (xref, метаданные) при upload, бейдж в списке версий, `GET .../integrity` (qpdf + fallback)
+- [x] PDF integrity v2: сравнение integrity между версиями, `/Sig` детекция, модалка с детальным отчётом, `IntegrityCompareBadge` в панели сравнения
+- [x] Координаты аннотаций (x/y): позиция маркера на странице, передача через text selection
+- [x] Embeddings API: `embed()` в GigaChat (через `client.embeddings`) и YandexGPT (через `/foundationModels/v1/textEmbedding`), fallback на локальные эмбеддинги
 
 ---
 
@@ -80,6 +83,7 @@
 
 ---
 
+
 ## Фаза 3 — Конвертация, формы, подпись (4–8 месяцев)
 
 ### Финальная версия PDF (приоритет фазы 3)
@@ -91,7 +95,7 @@
 | D | **Source-first (приоритет):** `sourceDocxKey`, pipeline замен в DOCX → PDF; максимальное качество |
 | B | Gotenberg / LibreOffice в compose; job PDF ↔ DOCX; pre-convert при upload; кэш DOCX; экспорт DOCX с подсветкой |
 | C | Worker `apply-edits-final`: автозамены + confidence scoring + отчёт + новая версия PDF |
-| E | Координаты выделения в аннотациях → точнее матчинг (бэклог фазы 2) |
+| E | Координаты выделения в аннотациях → точнее матчинг (✅ фаза 2: x/y в Prisma, API, UI) |
 | F | Гранулярность правок: text-only / structural / table / image (бэклог) |
 
 **Два режима в UI:**
@@ -122,11 +126,20 @@
 
 ---
 
+## Приоритет worker-очередей
+
+Общий принцип для всех фаз (подробнее — §2.4.2 PROJECT_PLAN):
+
+```
+preview > text-extraction > conversion (PDF↔DOCX) > ai-jobs > apply-edits-final
+```
+
+Очереди физически раздельные. Concurrency и количество реплик настраивается под приоритет.
+
 ## Текущий фокус команды
 
-1. Стабилизация **фазы 2** в использовании (smoke, RAG после reset, integrity на реальных PDF).
-2. Доработки фазы 2: координаты маркеров на листе, integrity v2, эмбеддинги API.
-3. **Фаза 3 / «Применить правки»**: реализация DOCX-пайплайн в порядке D → B → C (§2.4 PROJECT_PLAN): source-first (приоритет), инфраструктура конвертации, автозамены + confidence scoring.
-4. **2b** (буклеты) — только после стабильного viewer и ACL, не смешивать с юр. v1.
+1. ✅ Стабилизация **фазы 2**: smoke-тесты (`tools/smoke-phase2.mjs`), integrity на реальных PDF, координаты маркеров, integrity v2, эмбеддинги API.
+2. 🔜 **Фаза 3 / «Применить правки»**: реализация DOCX-пайплайн в порядке D → B → C (§2.4 PROJECT_PLAN): source-first (приоритет), инфраструктура конвертации, автозамены + confidence scoring.
+3. ⏳ **2b** (буклеты) — только после стабильного viewer и ACL, не смешивать с юр. v1.
 
 См. также [VISION.md](./VISION.md), [ICP.md](./ICP.md).

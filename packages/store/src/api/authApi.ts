@@ -6,6 +6,10 @@ import type {
   AuthUser,
   VerifyEmailBody,
   VerifyEmailResponse,
+  SendCodeBody,
+  SendCodeResponse,
+  PhoneRegisterBody,
+  PhoneLoginBody,
 } from '@folio-mind/api-client';
 import { baseApi } from './baseApi.js';
 
@@ -45,6 +49,15 @@ export const authApi = baseApi.injectEndpoints({
     resetPassword: build.mutation<{ ok: true }, { token: string; newPassword: string }>({
       query: (body) => ({ url: '/auth/reset-password', method: 'POST', body }),
     }),
+    sendPhoneCode: build.mutation<SendCodeResponse, SendCodeBody>({
+      query: (body) => ({ url: '/auth/phone/send-code', method: 'POST', body }),
+    }),
+    phoneRegister: build.mutation<AuthResponse, PhoneRegisterBody>({
+      query: (body) => ({ url: '/auth/phone/register', method: 'POST', body }),
+    }),
+    phoneLogin: build.mutation<AuthResponse, PhoneLoginBody>({
+      query: (body) => ({ url: '/auth/phone/login', method: 'POST', body }),
+    }),
   }),
 });
 
@@ -60,4 +73,7 @@ export const {
   useHealthQuery,
   useForgotPasswordMutation,
   useResetPasswordMutation,
+  useSendPhoneCodeMutation,
+  usePhoneRegisterMutation,
+  usePhoneLoginMutation,
 } = authApi;

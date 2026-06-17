@@ -4,8 +4,7 @@ import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
 
 type Props = {
   open: boolean;
-  edits: DocumentAnnotation[];
-  /** Если задан — в заголовке показываем фильтр по странице */
+  edits: DocumentAnnotation[]; 
   pageFilter?: number | null;
   focusedId?: string | null;
   onClose: () => void;

@@ -29,6 +29,8 @@ const testEnv = {
   EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: 60,
   MAGIC_LINK_TOKEN_TTL_MINUTES: 15,
   SKIP_EMAIL_MX_CHECK: true,
+  SMS_PROVIDER: 'dummy' as const,
+  SMS_CODE_TTL_MINUTES: 5,
 };
 
 describe('API /health', () => {

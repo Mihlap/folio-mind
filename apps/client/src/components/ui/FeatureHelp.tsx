@@ -57,9 +57,9 @@ export function FeatureHelpButton({ title, children, corner = false }: FeatureHe
                 type="button"
                 aria-label="Закрыть"
                 onClick={() => setOpen(false)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
-                ×
+                ✕
               </button>
             </div>
             <div className="mt-3 space-y-2 text-sm leading-relaxed text-slate-600">{children}</div>

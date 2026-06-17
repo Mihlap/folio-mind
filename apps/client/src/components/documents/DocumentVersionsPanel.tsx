@@ -43,6 +43,7 @@ export type DocumentVersionItem = {
   createdAt: string;
   integrityStatus?: string | null;
   integritySummary?: string | null;
+  integrityScore?: number | null;
 };
 
 type Props = {
@@ -236,7 +237,7 @@ export function DocumentVersionsPanel({
                               | null)
                       }
                       summary={v.integritySummary}
-                      compact
+                      score={v.integrityScore}
                     />
                   </span>
                 )}

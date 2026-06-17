@@ -14,6 +14,8 @@ const annotationSchema = z.object({
   kind: z.string(),
   content: z.string(),
   quote: z.string().nullable(),
+  x: z.number().nullable(),
+  y: z.number().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -21,6 +23,8 @@ const annotationSchema = z.object({
 const createAnnotationSchema = z
   .object({
     page: z.number().int().min(1),
+    x: z.number().optional(),
+    y: z.number().optional(),
     content: z.string().min(1).max(8000),
     kind: z.enum(['comment', 'highlight', 'accepted_edit']).default('comment'),
     quote: z.string().max(4000).optional(),
@@ -91,6 +95,8 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           kind: item.kind,
           content: item.content,
           quote: item.quote,
+          x: item.x,
+          y: item.y,
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.updatedAt.toISOString(),
         })),
@@ -132,6 +138,8 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           kind: request.body.kind,
           content: request.body.content,
           quote: request.body.quote,
+          x: request.body.x,
+          y: request.body.y,
         },
       });
 
@@ -154,6 +162,8 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         kind: created.kind,
         content: created.content,
         quote: created.quote,
+        x: created.x,
+        y: created.y,
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),
       });
@@ -237,6 +247,8 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         kind: updated.kind,
         content: updated.content,
         quote: updated.quote,
+        x: updated.x,
+        y: updated.y,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       };

@@ -82,6 +82,7 @@ export function DocumentPage() {
   const [acceptedEditsModalOpen, setAcceptedEditsModalOpen] = useState(false);
   const [editsModalPageFilter, setEditsModalPageFilter] = useState<number | null>(null);
   const [injectedEditBefore, setInjectedEditBefore] = useState<string | null>(null);
+  const [pendingCoords, setPendingCoords] = useState<{ x?: number; y?: number } | null>(null);
   const [pageNavTick, setPageNavTick] = useState(0);
   const [deleteAnnotation] = useDeleteAnnotationMutation();
   const [updateAnnotation, { isLoading: updatingAnnotation }] = useUpdateAnnotationMutation();
@@ -209,9 +210,13 @@ export function DocumentPage() {
   );
 
   const handleTextQuoteForEdit = useCallback(
-    ({ text, page }: { text: string; page: number }) => {
+    ({ text, page, x, y }: { text: string; page: number; x?: number; y?: number }) => {
       setInjectedEditBefore(text);
-      queueMicrotask(() => setInjectedEditBefore(null));
+      setPendingCoords({ x, y });
+      queueMicrotask(() => {
+        setInjectedEditBefore(null);
+        setPendingCoords(null);
+      });
       setRightTab('tools');
       handleGoToPage(page);
     },
@@ -644,6 +649,7 @@ export function DocumentPage() {
             else setAcceptedEditsModalOpen(true);
           }}
           injectedEditBefore={injectedEditBefore}
+          injectedCoords={pendingCoords}
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -753,6 +759,7 @@ export function DocumentPage() {
             else setAcceptedEditsModalOpen(true);
           }}
           injectedEditBefore={injectedEditBefore}
+          injectedCoords={pendingCoords}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

@@ -19,9 +19,11 @@ model Tenant {
 model User {
   id                String     @id @default(cuid())
   email             String     @unique
+  phone             String?    @unique
   passwordHash      String
   name              String?
   emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
   tenantId          String
   tenant            Tenant     @relation(fields: [tenantId], references: [id])
   createdAt         DateTime   @default(now())
@@ -32,6 +34,18 @@ model User {
   magicLinkTokens   MagicLinkToken[]
   oauthAccounts     OAuthAccount[]
   annotations       DocumentAnnotation[]
+}
+
+model SmsCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone, code])
+  @@index([expiresAt])
 }
 
 model MagicLinkToken {
@@ -154,6 +168,8 @@ model DocumentAnnotation {
   kind       String   @default("comment")
   content    String
   quote      String?
+  x          Float?
+  y          Float?
   meta       Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

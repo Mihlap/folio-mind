@@ -173,11 +173,24 @@
 | Этап | Содержание | Фаза |
 |------|------------|------|
 | **A** | «Собрать PDF» с компактным реестром в приложении | **2** ✅ |
-| **D** | **Source-first (приоритет):** хранение исходного DOCX (`sourceDocxKey`), UI поля при загрузке; pipeline замен в DOCX → DOCX → PDF | **3** |
+| **D** | **Source-first (приоритет):** хранение исходного DOCX (`sourceDocxKey`), UI поля при загрузке; pipeline замен в DOCX → DOCX → PDF | **3** ✅ (сделать основным, не опциональным — см. §2.4b) |
 | **B** | Gotenberg / LibreOffice в `docker-compose`; job PDF ↔ DOCX + pre-convert при upload; кэш промежуточного DOCX в S3; экспорт DOCX с подсветкой правок | **3** |
 | **C** | `apply-edits-final`: автозамены + confidence scoring + отчёт + новая версия PDF | **3** |
 | **E** | Координаты выделения в аннотациях → точнее матчинг на странице | **2** (бэклог) |
 | **F** | Гранулярность правок: категоризация text-only / structural / table / image; разная стратегия применения | **3** (бэклог) |
+
+**Приоритет worker-очередей (общий для всех фаз):**
+
+```
+preview > text-extraction > conversion (PDF↔DOCX) > ai-jobs > apply-edits-final
+```
+
+- `preview` и `text-extraction` — самые частые, блокируют UI пользователя.
+- `conversion` — pre-convert при upload, не блокирует пользователя.
+- `ai-jobs` — средний приоритет, кэшируется.
+- `apply-edits-final` — самая тяжёлая, идёт последней, но с polling прогресса в UI.
+
+Очереди физически раздельные (`preview`, `ai`, `optimize`, `convert`), concurrency настраивается отдельно. Приоритет выше — не про порядок в одной очереди, а про concurrency и количество worker-реплик.
 
 ---
 
@@ -614,7 +627,7 @@ interface LLMProvider {
 
 #### 2.2 Аннотации и предпросмотр изменений
 - [x] Слой аннотаций (комментарии, маркеры) — Postgres; overlay маркеров по странице в `packages/ui` PdfViewer.
-- [ ] Координаты на листе (x/y) и overlay в S3 (опц.).
+- [x] Координаты на листе (x/y) и overlay маркеров по странице в `packages/ui` PdfPageMarker — `DocumentAnnotation.x/y` (Float?), Zod-схемы, text selection → pendingCoords → `DocumentAnnotationsPanel`; overlay рендерит маркер на позиции.
 - [x] Режим «до/после» для правок (ИИ и ручной ввод); модальное окно; на PDF — компактная кнопка открытия.
 
 #### 2.3 Сравнение версий
@@ -631,11 +644,12 @@ interface LLMProvider {
 
 Выполнять в порядке приоритета: **D → B → C**.
 
-##### Этап D — Source-first (приоритет)
+##### Этап D — Source-first (приоритетный путь по умолчанию)
 - [ ] Prisma: поле `sourceDocxKey` у `DocumentVersion` (nullable).
-- [ ] UI: поле «Исходный DOCX (опционально)» при загрузке документа; пояснение, что улучшает качество финальных правок.
+- [ ] UI: поле «Исходный DOCX» **рекомендуется** при загрузке; если пользователь выбрал категорию «Договор / ТЗ / Смета» — делать поле обязательным (с возможностью пропустить). Пояснение: «DOCX даёт идеальное качество финальных правок — таблицы, формулы и стили не ломаются».
 - [ ] Worker: pipeline замен в исходном DOCX (без PDF→DOCX конвертации): найти `originalText` в DOCX, заменить на `suggestion`, экспорт DOCX → PDF через Gotenberg.
-- [ ] API + UI: «Применить правки» при наличии `sourceDocxKey` использует source-first pipeline автоматически.
+- [ ] API + UI: «Применить правки» при наличии `sourceDocxKey` использует source-first pipeline автоматически. Если DOCX нет — fallback на этап B (PDF→DOCX→правки→PDF).
+- [ ] UX: при загрузке PDF через drag-and-drop предложить дополнительно загрузить DOCX; при загрузке DOCX — автоматически конвертировать в PDF для просмотра.
 
 ##### Этап B — Инфраструктура конвертации
 - [ ] Gotenberg / LibreOffice headless в `docker-compose`; сервис конвертации PDF ↔ DOCX в worker.
@@ -652,14 +666,14 @@ interface LLMProvider {
 - [ ] Опционально: экспорт DOCX с track changes для юридического рецензирования.
 
 **Бэклог:**
-- [ ] Координаты выделения (x/y в PDF) в `DocumentAnnotation` для точнее матчинга на странице (этап E).
+- [x] Координаты выделения (x/y в PDF) в `DocumentAnnotation` для точнее матчинга на странице (этап E). ✅ Перенесено в фазу 2.
 - [ ] Гранулярность правок: категоризация text-only / structural / table / image; разная стратегия применения (этап F).
 
 **Критерий:** пользователь с принятыми правками получает финальный PDF с изменённым текстом; при сложном макете — DOCX для доработки в Word без потери чертежей и схем; confidence scoring предотвращает незамеченную деградацию вёрстки.
 
 #### 2.5 RAG v1
 - [x] Загрузка шаблонов/регламентов → S3 `rag-sources/` + индекс **pgvector** (локальные эмбеддинги 384d).
-- [ ] Эмбеддинги через API провайдера (GigaChat/Yandex) — когда доступны.
+- [x] Эмбеддинги через API провайдера (GigaChat/Yandex) — `embed()` методы, fallback на локальные.
 - [x] `POST /rag/query` с фильтром по tenant.
 - [x] Сценарий «сверь договор с регламентом» в UI.
 
@@ -668,7 +682,7 @@ interface LLMProvider {
 - [x] Prisma: `integrityStatus`, `integrityScore`, `integritySummary`, `integrityDetails`, `integrityAnalyzedAt` на `DocumentVersion`.
 - [x] API: `GET /documents/:id/versions/:vid/integrity`; поля в списке версий документа.
 - [x] UI: бейдж «структура OK / есть правки / не проверить» в списке версий + подсказка (i).
-- [ ] v2: сравнение integrity между версиями; проверка `/Sig` (связка с PAdES, фаза 3).
+- [x] v2: сравнение integrity между версиями (`GET .../integrity/compare/:v2`); проверка `/Sig`; модалка с детальным отчётом; `IntegrityCompareBadge` в UI.
 
 **Критерий готовности:** пользователь принимает/отклоняет правки с откатом; RAG изолирован по tenant/ACL; при загрузке PDF виден статус структурной проверки.
 

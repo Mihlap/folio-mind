@@ -9,6 +9,8 @@ export type DocumentAnnotation = {
   kind: string;
   content: string;
   quote: string | null;
+  x: number | null;
+  y: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -29,6 +31,8 @@ export const annotationsApi = baseApi.injectEndpoints({
         documentId: string;
         versionId: string;
         page: number;
+        x?: number;
+        y?: number;
         content: string;
         kind?: 'comment' | 'highlight' | 'accepted_edit';
         quote?: string;

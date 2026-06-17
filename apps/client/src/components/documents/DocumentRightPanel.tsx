@@ -22,6 +22,7 @@ type Props = {
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
   injectedEditBefore?: string | null;
+  injectedCoords?: { x?: number; y?: number } | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -51,6 +52,7 @@ export function DocumentRightPanel({
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
   injectedEditBefore = null,
+  injectedCoords = null,
   collapsed,
   onToggleCollapsed,
   onExpand,
@@ -167,6 +169,7 @@ export function DocumentRightPanel({
             onOpenAcceptedEdit={onOpenAcceptedEdit}
             onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
             injectedEditBefore={injectedEditBefore}
+            injectedCoords={injectedCoords}
             versionReady={versionReady}
           />
         </div>

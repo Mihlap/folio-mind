@@ -67,6 +67,13 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().optional(),
+
+  SMS_PROVIDER: z.enum(['console', 'dummy']).default('console'),
+  SMS_CODE_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
+
+  ESIA_CLIENT_ID: z.string().optional(),
+  ESIA_CLIENT_SECRET: z.string().optional(),
+  ESIA_REDIRECT_URI: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -6,6 +6,9 @@ export type PdfPageMarker = {
   kind: PdfPageMarkerKind;
   /** Короткий текст для tooltip */
   title: string;
+  /** Позиция на странице в долях (0-1) от ширины/высоты страницы. */
+  x?: number;
+  y?: number;
 };
 
 export function markersForPage(markers: PdfPageMarker[], pageNumber: number): PdfPageMarker[] {

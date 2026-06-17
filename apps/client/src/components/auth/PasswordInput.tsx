@@ -39,7 +39,7 @@ export function PasswordInput({
           minLength={minLength}
           autoComplete={autoComplete}
           disabled={disabled}
-          className="w-full rounded-lg border border-slate-200 py-2 pl-3 pr-10 text-slate-900 outline-none ring-folio-500 focus:border-folio-500 focus:ring-2 disabled:opacity-50"
+          className="w-full rounded-lg border border-slate-200 py-1.5 pl-3 pr-10 text-slate-900 outline-none ring-folio-500 focus:border-folio-500 focus:ring-2 disabled:opacity-50"
         />
         <button
           type="button"

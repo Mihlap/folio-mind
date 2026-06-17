@@ -51,7 +51,7 @@ type PdfViewerProps = {
   pageNavTick?: number;
 
   enableTextSelection?: boolean;
-  onTextQuoteForEdit?: (payload: { text: string; page: number }) => void;
+  onTextQuoteForEdit?: (payload: { text: string; page: number; x?: number; y?: number }) => void;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -389,7 +389,16 @@ export function PdfViewer({
           }}
           onUseAsQuote={() => {
             const text = selectionQuoteRef.current || selectionPrompt.text;
-            onTextQuoteForEdit?.({ text, page: selectionPrompt.page });
+            const rects = selectionPrompt.highlightRects;
+            let x: number | undefined;
+            let y: number | undefined;
+            if (rects.length > 0) {
+              const avgLeft = rects.reduce((s, r) => s + r.left, 0) / rects.length;
+              const avgTop = rects.reduce((s, r) => s + r.top, 0) / rects.length;
+              x = avgLeft;
+              y = avgTop;
+            }
+            onTextQuoteForEdit?.({ text, page: selectionPrompt.page, x, y });
             setSelectionPrompt(null);
             selectionQuoteRef.current = '';
             clearDocumentSelection();
@@ -654,12 +663,14 @@ function PdfPage({
         <PdfTextSelectionHighlight rects={selectionHighlightRects} />
       )}
       {(acceptedEditCount > 0 || markersOnPage.length > 0) && (
-        <div className="pointer-events-none absolute top-2 right-2 z-10 flex max-w-[min(52%,15rem)] flex-col items-end gap-1.5">
+        <>
           {acceptedEditCount > 0 && onPageAcceptedEditsOpen && (
-            <PdfAcceptedEditsHint
-              count={acceptedEditCount}
-              onClick={() => onPageAcceptedEditsOpen(pageNumber)}
-            />
+            <div className="pointer-events-none absolute top-2 right-2 z-10">
+              <PdfAcceptedEditsHint
+                count={acceptedEditCount}
+                onClick={() => onPageAcceptedEditsOpen(pageNumber)}
+              />
+            </div>
           )}
           {markersOnPage.length > 0 && (
             <PageMarkersOverlay
@@ -670,7 +681,7 @@ function PdfPage({
               onOverflowClick={onMarkersOverflowClick}
             />
           )}
-        </div>
+        </>
       )}
       {pageError && <p className="p-2 text-xs text-red-600">{pageError}</p>}
     </div>
@@ -691,12 +702,14 @@ function PageMarkersOverlay({
   onOverflowClick?: (page: number) => void;
 }) {
   const maxVisible = 3;
-  const visible = markers.slice(0, maxVisible);
-  const overflow = markers.length - visible.length;
+  const positioned = markers.filter((m) => m.x != null && m.y != null);
+  const unpositioned = markers.filter((m) => m.x == null || m.y == null);
+  const visible = unpositioned.slice(0, maxVisible);
+  const overflow = markers.length - visible.length - positioned.length;
 
   return (
-    <div className="flex w-full flex-col items-end gap-1.5" aria-label="Заметки на странице">
-      {visible.map((marker) => {
+    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" aria-label="Заметки на странице">
+      {positioned.map((marker) => {
         const active = marker.id === activeMarkerId;
         return (
           <button
@@ -705,27 +718,50 @@ function PageMarkersOverlay({
             title={marker.title}
             onClick={() => onMarkerClick?.(marker)}
             className={[
-              'flex max-w-full cursor-pointer items-center gap-1 rounded-full px-1.5 py-0.5 text-left shadow-sm ring-2 transition',
+              'pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full px-1.5 py-0.5 text-left shadow-sm ring-2 transition',
               markerKindClass(marker.kind),
-              active ? 'scale-110 ring-2 ring-white animate-pulse' : 'ring-transparent',
+              active ? 'scale-110 ring-2 ring-white animate-pulse z-20' : 'ring-transparent z-10',
             ].join(' ')}
+            style={{ left: `${marker.x!}px`, top: `${marker.y!}px` }}
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-white/90" aria-hidden />
-            <span className="truncate text-[10px] font-medium leading-tight text-white">
-              {marker.title}
-            </span>
           </button>
         );
       })}
-      {overflow > 0 && (
-        <button
-          type="button"
-          title={`Ещё ${overflow} заметок на стр. ${pageNumber}`}
-          onClick={() => onOverflowClick?.(pageNumber)}
-          className="cursor-pointer rounded-full border border-slate-200 bg-white/95 px-2.5 py-1 text-[10px] font-medium text-slate-700 shadow-sm ring-1 ring-white/90 hover:border-slate-300 hover:bg-slate-50"
-        >
-          +{overflow} заметок
-        </button>
+      {unpositioned.length > 0 && (
+        <div className="pointer-events-auto absolute top-2 right-2 flex max-w-[min(52%,15rem)] flex-col items-end gap-1.5">
+          {visible.map((marker) => {
+            const active = marker.id === activeMarkerId;
+            return (
+              <button
+                key={marker.id}
+                type="button"
+                title={marker.title}
+                onClick={() => onMarkerClick?.(marker)}
+                className={[
+                  'flex max-w-full cursor-pointer items-center gap-1 rounded-full px-1.5 py-0.5 text-left shadow-sm ring-2 transition',
+                  markerKindClass(marker.kind),
+                  active ? 'scale-110 ring-2 ring-white animate-pulse' : 'ring-transparent',
+                ].join(' ')}
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-white/90" aria-hidden />
+                <span className="truncate text-[10px] font-medium leading-tight text-white">
+                  {marker.title}
+                </span>
+              </button>
+            );
+          })}
+          {overflow > 0 && (
+            <button
+              type="button"
+              title={`Ещё ${overflow + positioned.length} заметок на стр. ${pageNumber}`}
+              onClick={() => onOverflowClick?.(pageNumber)}
+              className="cursor-pointer rounded-full border border-slate-200 bg-white/95 px-2.5 py-1 text-[10px] font-medium text-slate-700 shadow-sm ring-1 ring-white/90 hover:border-slate-300 hover:bg-slate-50"
+            >
+              +{overflow + positioned.length} заметок
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

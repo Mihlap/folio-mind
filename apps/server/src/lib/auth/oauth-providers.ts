@@ -1,7 +1,13 @@
 import type { Env } from '../config/env.js';
 import { getApiPublicOrigin } from '../config/api-public-origin.js';
+import {
+  buildEsiaAuthorizeUrl,
+  exchangeEsiaCode,
+  fetchEsiaProfile,
+  isEsiaConfigured,
+} from './esia.js';
 
-export type OAuthProviderId = 'google' | 'yandex';
+export type OAuthProviderId = 'google' | 'yandex' | 'esia';
 
 export type OAuthProfile = {
   providerUserId: string;
@@ -16,6 +22,9 @@ export function getOAuthRedirectUri(env: Env, provider: OAuthProviderId): string
 export function isOAuthConfigured(env: Env, provider: OAuthProviderId): boolean {
   if (provider === 'google') {
     return Boolean(env.GOOGLE_OAUTH_CLIENT_ID?.trim() && env.GOOGLE_OAUTH_CLIENT_SECRET?.trim());
+  }
+  if (provider === 'esia') {
+    return isEsiaConfigured(env);
   }
   return Boolean(env.YANDEX_OAUTH_CLIENT_ID?.trim() && env.YANDEX_OAUTH_CLIENT_SECRET?.trim());
 }
@@ -39,6 +48,10 @@ export function buildOAuthAuthorizeUrl(
       `&state=${encodedState}` +
       `&prompt=select_account`
     );
+  }
+
+  if (provider === 'esia') {
+    return buildEsiaAuthorizeUrl(env, state);
   }
 
   return (
@@ -131,7 +144,12 @@ export async function fetchOAuthProfile(
   env: Env,
   provider: OAuthProviderId,
   code: string,
+  state?: string,
 ): Promise<OAuthProfile> {
+  if (provider === 'esia') {
+    const accessToken = await exchangeEsiaCode(env, code, state ?? '');
+    return fetchEsiaProfile(accessToken, env);
+  }
   const accessToken = await exchangeCode(env, provider, code);
   return fetchProfile(provider, accessToken);
 }

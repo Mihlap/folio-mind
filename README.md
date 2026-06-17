@@ -52,6 +52,7 @@ pnpm dev
 | [docs/ICP.md](./docs/ICP.md) | ICP и сценарий v1 |
 | [docs/ROADMAP.md](./docs/ROADMAP.md) | Фазы разработки |
 | [docs/DEPLOY.md](./docs/DEPLOY.md) | Порты, PgBouncer, OTEL, S3 |
+| [docs/AUTH.md](./docs/AUTH.md) | Регистрация по телефону, Яндекс OAuth, ЕСИА — настройка провайдеров |
 | [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md) | Лицензии PDF-стека |
 | [docs/legal/](./docs/legal/) | Privacy, DPA, субпроцессоры (черновики) |
 

@@ -10,7 +10,7 @@ import {
 import { findOrCreateUserFromOAuth } from '../lib/auth/oauth-user.js';
 
 const OAUTH_COOKIE = 'oauth_state';
-const PROVIDERS: OAuthProviderId[] = ['google', 'yandex'];
+const PROVIDERS: OAuthProviderId[] = ['google', 'yandex', 'esia'];
 
 function oauthErrorRedirect(env: Env, message: string): string {
   const base = env.FRONTEND_URL.replace(/\/+$/, '');
@@ -68,7 +68,7 @@ export const oauthRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =
       }
 
       try {
-        const profile = await fetchOAuthProfile(env, provider, code);
+        const profile = await fetchOAuthProfile(env, provider, code, state);
         const user = await findOrCreateUserFromOAuth(app.prisma, provider, profile);
         const token = await reply.jwtSign({
           sub: user.id,

@@ -18,7 +18,8 @@
     "db:generate": "pnpm --filter @folio-mind/server exec prisma generate",
     "db:migrate": "pnpm --filter @folio-mind/server exec prisma migrate dev",
     "db:push": "pnpm --filter @folio-mind/server exec prisma db push",
-    "smoke:phase1": "node tools/smoke-phase1.mjs"
+    "smoke:phase1": "node tools/smoke-phase1.mjs",
+    "smoke:phase2": "node tools/smoke-phase2.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

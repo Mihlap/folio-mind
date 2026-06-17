@@ -7,6 +7,8 @@ export type GigaChatConfig = {
   scope?: string;
   model?: string;
   timeout?: number;
+  embeddingModel?: string;
+  embeddingDimension?: number;
 };
 
 export class GigaChatProvider implements LLMProvider {
@@ -15,6 +17,19 @@ export class GigaChatProvider implements LLMProvider {
 
   constructor(config?: GigaChatConfig) {
     this.config = config ?? readGigaChatConfigFromEnv();
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const cfg = this.config;
+    if (!cfg?.credentials) {
+      throw new Error('GigaChat credentials not configured for embeddings');
+    }
+    const client = this.createClient();
+    const model = cfg.embeddingModel ?? 'Embeddings';
+    const result = await client.embeddings([text], model);
+    const emb = result.data?.[0]?.embedding;
+    if (!emb || emb.length === 0) throw new Error('GigaChat: empty embedding response');
+    return emb;
   }
 
   async completeWithPdf(params: {

@@ -182,6 +182,53 @@ export const documentsApi = baseApi.injectEndpoints({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/download-url`,
     }),
+    compareVersionIntegrity: build.query<
+      {
+        versionA: {
+          versionId: string;
+          status: 'pending' | 'intact' | 'modified' | 'cannot_verify' | 'failed' | null;
+          score: number | null;
+          summary: string | null;
+          analyzedAt: string | null;
+          details: {
+            revisionCount: number;
+            hasPrevTrailer: boolean;
+            creator: string | null;
+            producer: string | null;
+            creationDate: string | null;
+            modDate: string | null;
+            hasDigitalSignature: boolean;
+            signals: Array<{ id: string; weight: string; message: string }>;
+            analyzedWith: 'qpdf' | 'builtin';
+          } | null;
+        };
+        versionB: {
+          versionId: string;
+          status: 'pending' | 'intact' | 'modified' | 'cannot_verify' | 'failed' | null;
+          score: number | null;
+          summary: string | null;
+          analyzedAt: string | null;
+          details: {
+            revisionCount: number;
+            hasPrevTrailer: boolean;
+            creator: string | null;
+            producer: string | null;
+            creationDate: string | null;
+            modDate: string | null;
+            hasDigitalSignature: boolean;
+            signals: Array<{ id: string; weight: string; message: string }>;
+            analyzedWith: 'qpdf' | 'builtin';
+          } | null;
+        };
+        changed: boolean;
+        statusDelta: string | null;
+        scoreDelta: number | null;
+      },
+      { documentId: string; versionId: string; otherVersionId: string }
+    >({
+      query: ({ documentId, versionId, otherVersionId }) =>
+        `/documents/${documentId}/versions/${versionId}/integrity/compare/${otherVersionId}`,
+    }),
     getVersionIntegrity: build.query<
       {
         versionId: string;
@@ -299,6 +346,7 @@ export const {
   useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
   useGetVersionIntegrityQuery,
+  useCompareVersionIntegrityQuery,
   useGetVersionPreviewsQuery,
   useSplitPagesMutation,
   useMergeVersionsMutation,

@@ -54,16 +54,6 @@ export function renderAcceptedEditsAppendix(
   });
   layout.y -= 4;
 
-  drawWrappedParagraph(
-    layout,
-    'Ниже — компактный реестр: страница и краткие фрагменты «было / стало».',
-    {
-      fontSize: BODY_SIZE,
-      color: rgb(0.35, 0.35, 0.35),
-      gapAfter: 8,
-    },
-  );
-
   for (const [index, edit] of edits.entries()) {
     layout.y -= 4;
     drawTextLine(layout, `${index + 1}. Стр. ${edit.page}`, {

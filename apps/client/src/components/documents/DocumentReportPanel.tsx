@@ -228,9 +228,9 @@ export function DocumentReportPanel({
                   setSummaryError(null);
                   setIsSummaryExpanded(true);
                 }}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-slate-400 hover:bg-folio-100 hover:text-slate-600"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-lg text-slate-400 hover:bg-folio-100 hover:text-slate-600"
               >
-                ×
+✕
               </button>
             </div>
           </div>

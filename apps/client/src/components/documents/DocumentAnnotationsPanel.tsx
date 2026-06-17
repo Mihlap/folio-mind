@@ -25,6 +25,7 @@ type Props = {
   onSelectVersion: (versionId: string) => void;
   focusedAnnotationId?: string | null;
   injectedEditBefore?: string | null;
+  injectedCoords?: { x?: number; y?: number } | null;
 };
 
 export function DocumentAnnotationsPanel({
@@ -38,6 +39,7 @@ export function DocumentAnnotationsPanel({
   onSelectVersion,
   focusedAnnotationId = null,
   injectedEditBefore = null,
+  injectedCoords = null,
 }: Props) {
   const { data, refetch } = useListAnnotationsQuery(
     { documentId, versionId },
@@ -54,6 +56,7 @@ export function DocumentAnnotationsPanel({
   const [pollApply, setPollApply] = useState(false);
   const [applyHint, setApplyHint] = useState<string | null>(null);
   const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+  const pendingCoordsRef = useRef<{ x?: number; y?: number } | null>(null);
 
   const { data: applyJob } = useGetJobQuery(applyJobId!, {
     skip: !applyJobId,
@@ -100,21 +103,34 @@ export function DocumentAnnotationsPanel({
     setError(null);
   }, [injectedEditBefore]);
 
+  useEffect(() => {
+    if (!injectedCoords) return;
+    pendingCoordsRef.current = injectedCoords;
+  }, [injectedCoords]);
+
   const items = data?.items ?? [];
   const userComments = items.filter((a) => a.kind === 'comment' || a.kind === 'highlight');
   const acceptedEdits = items.filter((a) => a.kind === 'accepted_edit');
+
+  function consumeCoords(): { x?: number; y?: number } {
+    const coords = pendingCoordsRef.current;
+    pendingCoordsRef.current = null;
+    return coords ?? {};
+  }
 
   async function handleAddComment() {
     const text = content.trim();
     if (!text) return;
     setError(null);
     try {
+      const coords = consumeCoords();
       await createAnnotation({
         documentId,
         versionId,
         page: viewerPage,
         content: text,
         kind: 'comment',
+        ...coords,
       }).unwrap();
       setContent('');
       void refetch();
@@ -129,6 +145,7 @@ export function DocumentAnnotationsPanel({
     if (!before || !after) return;
     setError(null);
     try {
+      const coords = consumeCoords();
       await createAnnotation({
         documentId,
         versionId,
@@ -136,6 +153,7 @@ export function DocumentAnnotationsPanel({
         content: after,
         quote: before,
         kind: 'accepted_edit',
+        ...coords,
       }).unwrap();
       setEditBefore('');
       setEditAfter('');
@@ -287,9 +305,9 @@ export function DocumentAnnotationsPanel({
                       void refetch();
                     })();
                   }}
-                  className="cursor-pointer shrink-0 text-xs text-slate-400 hover:text-red-600"
+                  className="cursor-pointer shrink-0 text-lg text-slate-400 hover:text-red-600"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
             </li>

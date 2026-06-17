@@ -86,7 +86,7 @@ export function PdfViewerToolbar({
               ↓
             </IconButton>
             <IconButton label="Очистить поиск" onClick={onClearSearch}>
-              ×
+              ✕
             </IconButton>
           </>
         )}
@@ -134,7 +134,7 @@ function IconButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-sm text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-base text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>

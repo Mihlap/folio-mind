@@ -29,6 +29,7 @@ import { passwordSchema } from '../lib/auth/password-policy.js';
 import { verifyTurnstileToken } from '../lib/auth/turnstile.js';
 import { createMagicLinkToken, buildMagicLinkUrl } from '../lib/auth/magic-link.js';
 import { hashUnusablePassword } from '../lib/auth/password.js';
+import { createSmsSender } from '../lib/auth/sms.js';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -72,6 +73,23 @@ const magicLinkRequestSchema = z.object({
 
 const magicLinkVerifySchema = z.object({
   token: z.string().min(10),
+});
+
+const phoneRegex = /^\+?[1-9]\d{6,14}$/;
+
+const sendCodeSchema = z.object({
+  phone: z.string().regex(phoneRegex, 'Некорректный номер телефона'),
+});
+
+const phoneRegisterSchema = z.object({
+  phone: z.string().regex(phoneRegex, 'Некорректный номер телефона'),
+  code: z.string().length(6),
+  name: z.string().min(1).optional(),
+});
+
+const phoneLoginSchema = z.object({
+  phone: z.string().regex(phoneRegex, 'Некорректный номер телефона'),
+  code: z.string().length(6),
 });
 
 const authUserSchema = z.object({
@@ -527,6 +545,153 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       }
 
       return { ok: true as const };
+    },
+  );
+
+  r.post(
+    '/auth/phone/send-code',
+    {
+      config: { rateLimit: AUTH_MAGIC_LINK_RATE_LIMIT },
+      schema: {
+        body: sendCodeSchema,
+        response: {
+          200: z.object({ ok: z.literal(true) }),
+          429: authErrorSchema,
+        },
+      },
+    },
+    async (request, _reply) => {
+      const phone = request.body.phone.trim();
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const ttlMs = env.SMS_CODE_TTL_MINUTES * 60 * 1000;
+      const expiresAt = new Date(Date.now() + ttlMs);
+
+      await app.prisma.smsCode.create({
+        data: { phone, code, expiresAt },
+      });
+
+      const sms = createSmsSender(env);
+      await sms.sendCode(phone, code);
+
+      return { ok: true as const };
+    },
+  );
+
+  r.post(
+    '/auth/phone/register',
+    {
+      schema: {
+        body: phoneRegisterSchema,
+        response: {
+          200: z.object({ token: z.string(), user: authUserSchema }),
+          400: authErrorSchema,
+          409: authErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const phone = request.body.phone.trim();
+      const code = request.body.code.trim();
+      const existing = await app.prisma.user.findUnique({ where: { phone } });
+      if (existing) {
+        return reply.code(409).send({
+          error: 'PHONE_ALREADY_REGISTERED',
+          message: 'Этот номер уже зарегистрирован',
+        });
+      }
+
+      const smsRecord = await app.prisma.smsCode.findFirst({
+        where: { phone, code, usedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!smsRecord) {
+        return reply.code(400).send({
+          error: 'INVALID_CODE',
+          message: 'Неверный или устаревший код',
+        });
+      }
+
+      await app.prisma.smsCode.update({
+        where: { id: smsRecord.id },
+        data: { usedAt: new Date() },
+      });
+
+      const tenant = await app.prisma.tenant.create({
+        data: { name: request.body.name ?? `user-${phone}` },
+      });
+
+      const user = await app.prisma.user.create({
+        data: {
+          email: `${phone}@phone.folio-mind.app`,
+          phone,
+          passwordHash: await hashUnusablePassword(),
+          name: request.body.name ?? null,
+          tenantId: tenant.id,
+          phoneVerifiedAt: new Date(),
+          emailVerifiedAt: new Date(),
+        },
+      });
+
+      const token = await issueAuthToken(reply, user);
+      return {
+        token,
+        user: { id: user.id, email: user.email, name: user.name, tenantId: user.tenantId, emailVerified: true },
+      };
+    },
+  );
+
+  r.post(
+    '/auth/phone/login',
+    {
+      schema: {
+        body: phoneLoginSchema,
+        response: {
+          200: z.object({ token: z.string(), user: authUserSchema }),
+          400: authErrorSchema,
+          401: authErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const phone = request.body.phone.trim();
+      const code = request.body.code.trim();
+
+      const user = await app.prisma.user.findUnique({ where: { phone } });
+      if (!user) {
+        return reply.code(401).send({
+          error: 'PHONE_NOT_REGISTERED',
+          message: 'Этот номер не зарегистрирован',
+        });
+      }
+
+      const smsRecord = await app.prisma.smsCode.findFirst({
+        where: { phone, code, usedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!smsRecord) {
+        return reply.code(400).send({
+          error: 'INVALID_CODE',
+          message: 'Неверный или устаревший код',
+        });
+      }
+
+      await app.prisma.smsCode.update({
+        where: { id: smsRecord.id },
+        data: { usedAt: new Date() },
+      });
+
+      if (!user.phoneVerifiedAt) {
+        await app.prisma.user.update({
+          where: { id: user.id },
+          data: { phoneVerifiedAt: new Date() },
+        });
+      }
+
+      const token = await issueAuthToken(reply, user);
+      return {
+        token,
+        user: { id: user.id, email: user.email, name: user.name, tenantId: user.tenantId, emailVerified: true },
+      };
     },
   );
 

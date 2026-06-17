@@ -6,7 +6,9 @@ export async function putFileToPresignedUrl(
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    const TIMEOUT_MS = 5 * 60 * 1000; // 5 min
     xhr.open('PUT', uploadUrl);
+    xhr.timeout = TIMEOUT_MS;
     xhr.setRequestHeader('Content-Type', contentType);
     onProgress?.(1);
 
@@ -29,6 +31,10 @@ export async function putFileToPresignedUrl(
 
     xhr.onerror = () => {
       reject(new Error('S3 upload network error — проверьте CORS на бакете'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error('S3 upload timeout — файл слишком большой или медленное соединение'));
     };
 
     xhr.send(file);

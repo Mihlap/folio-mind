@@ -3,8 +3,7 @@ import { TrashIcon } from '../ui/icons/TrashIcon.js';
 type DeleteDocumentButtonProps = {
   title: string;
   disabled?: boolean;
-  onClick: () => void;
-  /** Компактная кнопка в списке или крупнее на странице документа */
+  onClick: () => void; 
   variant?: 'list' | 'page';
 };
 

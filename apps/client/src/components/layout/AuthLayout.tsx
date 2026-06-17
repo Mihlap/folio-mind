@@ -11,7 +11,7 @@ export function AuthLayout({
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-folio-50 via-white to-slate-100 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-200/50">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xl shadow-slate-200/50">
         <div className="text-center">
           <Link
             to="/"
@@ -19,12 +19,12 @@ export function AuthLayout({
           >
             РазУм
           </Link>
-          <h1 className="mt-6 text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
-          <p className="mt-1 inline-block rounded-xl bg-folio-50 px-3 py-1 text-sm font-medium text-folio-950">
+          <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
+          <p className="mt-1 inline-block rounded-xl bg-folio-50 px-3 py-0.5 text-sm font-medium text-folio-950">
             {subtitle}
           </p>
         </div>
-        <div className="mt-8">{children}</div>
+        <div className="mt-6">{children}</div>
       </div>
     </div>
   );
