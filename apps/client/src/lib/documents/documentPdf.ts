@@ -4,11 +4,13 @@ export async function loadDocumentPdfUrl(
   documentId: string,
   versionId: string,
   token: string | null,
+  signal?: AbortSignal,
 ): Promise<string> {
   const res = await fetch(
     `${apiBaseUrl}/documents/${documentId}/versions/${versionId}/file`,
     {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal,
     },
   );
 

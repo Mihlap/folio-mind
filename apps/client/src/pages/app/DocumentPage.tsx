@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PdfViewer, PdfViewerToolbar, type PdfPageMarker } from '@folio-mind/ui';
 import {
@@ -75,6 +75,8 @@ export function DocumentPage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const pdfUrlRef = useRef<string | null>(null);
+  const loadedVersionIdRef = useRef<string | null>(null);
   const [viewerPage, setViewerPage] = useState(1);
   const [focusedAnnotationId, setFocusedAnnotationId] = useState<string | null>(null);
   const [acceptedEditsModalOpen, setAcceptedEditsModalOpen] = useState(false);
@@ -280,33 +282,56 @@ export function DocumentPage() {
       return;
     }
 
+    if (
+      loadedVersionIdRef.current === activeVersion.id &&
+      activeVersion.status === 'ready' &&
+      pdfUrlRef.current
+    ) {
+      return;
+    }
+
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current);
+      pdfUrlRef.current = null;
+    }
+
     let objectUrl: string | null = null;
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let fetchController: AbortController | null = null;
     let attempt = 0;
-    const maxAttempts = activeVersion.status === 'processing' ? 90 : 1;
+    const maxAttempts = activeVersion.status === 'processing' ? 30 : 3;
 
     const loadPdf = () => {
       if (cancelled) return;
       setPdfLoading(true);
       if (attempt === 0) setPdfError(null);
 
-      void loadDocumentPdfUrl(doc.id, activeVersion.id, token)
+      const controller = new AbortController();
+      fetchController = controller;
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      const delay = activeVersion.status === 'processing' ? 2000 : Math.min(1000 * Math.pow(2, attempt), 8000);
+
+      void loadDocumentPdfUrl(doc.id, activeVersion.id, token, controller.signal)
         .then((url) => {
+          clearTimeout(timeout);
           if (cancelled) {
             URL.revokeObjectURL(url);
             return;
           }
           if (objectUrl) URL.revokeObjectURL(objectUrl);
           objectUrl = url;
+          pdfUrlRef.current = url;
+          loadedVersionIdRef.current = activeVersion.id;
           setPdfUrl(url);
           setPdfLoading(false);
         })
         .catch(() => {
+          clearTimeout(timeout);
           if (cancelled) return;
           attempt += 1;
-          if (attempt < maxAttempts && activeVersion.status === 'processing') {
-            retryTimer = setTimeout(loadPdf, 2000);
+          if (attempt < maxAttempts) {
+            retryTimer = setTimeout(loadPdf, delay);
             return;
           }
           setPdfError(
@@ -323,13 +348,20 @@ export function DocumentPage() {
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      setPdfUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
+      if (fetchController) fetchController.abort();
     };
   }, [doc?.id, activeVersion?.id, activeVersion?.status, token]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = null;
+      }
+      loadedVersionIdRef.current = null;
+      setPdfUrl(null);
+    };
+  }, []);
 
   const handleSearchMatches = useCallback(
     (matches: Array<{ page: number; matchIndex: number; snippet: string }>) => {
