@@ -1,10 +1,8 @@
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-
 export const meRoutes: FastifyPluginAsync = async (app) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
-
   r.get(
     '/me',
     {
@@ -33,10 +31,17 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 };
-
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { sub: string; email: string; tenantId: string };
-    user: { sub: string; email: string; tenantId: string };
+    payload: {
+      sub: string;
+      email: string;
+      tenantId: string;
+    };
+    user: {
+      sub: string;
+      email: string;
+      tenantId: string;
+    };
   }
 }

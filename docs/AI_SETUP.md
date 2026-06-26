@@ -22,12 +22,12 @@ GIGACHAT_TIMEOUT=180
 
 ## Переключение провайдера
 
-| Способ | Описание |
-|--------|----------|
-| `.env` | `AI_PROVIDER=gigachat` или `yandex` — для всего API |
-| `GET /ai/providers` | Список провайдеров и что настроено |
-| `POST /ai/complete` | Тело `{ "provider": "yandex", "prompt": "..." }` — разовый запрос |
-| `POST .../ai/summary` | Тело `{ "provider": "gigachat" }` — очередь ИИ по документу |
+| Способ                | Описание                                                          |
+| --------------------- | ----------------------------------------------------------------- |
+| `.env`                | `AI_PROVIDER=gigachat` или `yandex` — для всего API               |
+| `GET /ai/providers`   | Список провайдеров и что настроено                                |
+| `POST /ai/complete`   | Тело `{ "provider": "yandex", "prompt": "..." }` — разовый запрос |
+| `POST .../ai/summary` | Тело `{ "provider": "gigachat" }` — очередь ИИ по документу       |
 
 Без ключей GigaChat/Yandex отвечают **stub-текстом** (для dev).
 

@@ -27,6 +27,7 @@
     "@folio-mind/ai-providers": "workspace:*",
     "@folio-mind/observability": "workspace:*",
     "@folio-mind/pdf-contracts": "workspace:*",
+    "@smithy/node-http-handler": "^4.7.3",
     "@prisma/client": "^6.5.0",
     "bcryptjs": "^3.0.2",
     "bullmq": "^5.41.0",

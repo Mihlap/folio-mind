@@ -1,15 +1,12 @@
-import {
-  shellCollapseBtnClass,
-  shellPanelToolbarClass,
-} from '../layout/shell-chrome.js';
+import { forwardRef } from 'react';
+import { shellPanelToolbarClass } from '../layout/shell-chrome.js';
 import { PanelResizeHandle } from '../layout/PanelResizeHandle.js';
+import { PanelViewportToggle } from '../layout/PanelViewportToggle.js';
 import { DocumentAiPanel } from './DocumentAiPanel.js';
 import { DocumentPdfOperationsPanel } from './DocumentPdfOperationsPanel.js';
 import { DocumentReportPanel } from './DocumentReportPanel.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
-
 export type DocumentRightTab = 'chat' | 'tools' | 'report';
-
 type Props = {
   documentId: string;
   versions: DocumentVersionItem[];
@@ -22,7 +19,10 @@ type Props = {
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
   injectedEditBefore?: string | null;
-  injectedCoords?: { x?: number; y?: number } | null;
+  injectedCoords?: {
+    x?: number;
+    y?: number;
+  } | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -33,14 +33,17 @@ type Props = {
   onTabChange: (tab: DocumentRightTab) => void;
   mode?: 'docked' | 'drawer';
 };
-
-const TABS: Array<{ id: DocumentRightTab; label: string; short: string }> = [
+const TABS: Array<{
+  id: DocumentRightTab;
+  label: string;
+  short: string;
+}> = [
   { id: 'report', label: 'Отчёт', short: '📄' },
   { id: 'tools', label: 'Инструменты', short: '✂' },
   { id: 'chat', label: 'Чат', short: '💬' },
 ];
-
-export function DocumentRightPanel({
+export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function DocumentRightPanel(
+  {
   documentId,
   versions,
   activeVersion,
@@ -62,23 +65,29 @@ export function DocumentRightPanel({
   activeTab,
   onTabChange,
   mode = 'docked',
-}: Props) {
+},
+  ref,
+) {
   const isDrawer = mode === 'drawer';
+  const viewportToggle = !isDrawer ? (
+    <PanelViewportToggle
+      side="right"
+      expanded={!collapsed}
+      syncedToWorkspace
+      onClick={collapsed ? onExpand : onToggleCollapsed}
+      title={collapsed ? 'Развернуть панель' : 'Свернуть'}
+      className="hidden lg:flex"
+    />
+  ) : null;
 
   if (collapsed && !isDrawer) {
     return (
-      <aside className="relative hidden h-full shrink-0 flex-col border-l border-slate-200 bg-white lg:flex lg:w-12">
-        <div className={`${shellPanelToolbarClass} justify-end px-1.5`}>
-          <button
-            type="button"
-            title="Развернуть панель"
-            onClick={onExpand}
-            className={shellCollapseBtnClass}
-          >
-            ◀
-          </button>
-        </div>
-        <div className="flex flex-col items-center gap-1.5 p-1.5">
+      <aside
+        ref={ref}
+        className="relative hidden h-full shrink-0 flex-col border-l border-slate-200 bg-white lg:flex lg:w-12"
+      >
+        {viewportToggle}
+        <div className="flex flex-col items-center gap-1.5 p-1.5 pt-3">
           {TABS.map((tab) => (
             <button
               key={tab.id}
@@ -102,20 +111,20 @@ export function DocumentRightPanel({
       </aside>
     );
   }
-
   return (
     <aside
+      ref={ref}
       style={isDrawer ? undefined : { width: panelWidth }}
       className={
         isDrawer
           ? 'relative flex h-full min-h-0 flex-col overflow-hidden bg-white'
-          : `relative hidden h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-white lg:flex ${
-              isResizing ? '' : 'transition-[width] duration-200'
-            }`
+          : `relative hidden h-full min-h-0 shrink-0 flex-col overflow-visible border-l border-slate-200 bg-white lg:flex ${isResizing ? '' : 'transition-[width] duration-200'}`
       }
     >
+      {viewportToggle}
       {!isDrawer && <PanelResizeHandle edge="left" onMouseDown={onResizeStart} />}
 
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className={`${shellPanelToolbarClass}`}>
         {TABS.map((tab) => (
           <button
@@ -131,16 +140,6 @@ export function DocumentRightPanel({
             <span className="truncate">{tab.label}</span>
           </button>
         ))}
-        {!isDrawer && (
-          <button
-            type="button"
-            title="Свернуть"
-            onClick={onToggleCollapsed}
-            className={`hidden lg:block ${shellCollapseBtnClass}`}
-          >
-            ▶
-          </button>
-        )}
       </div>
       <div className="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
         <div className={activeTab === 'report' ? 'block' : 'hidden'}>
@@ -186,10 +185,10 @@ export function DocumentRightPanel({
           )}
         </div>
       </div>
+      </div>
     </aside>
   );
-}
-
+});
 function EmptyTab({ text }: { text: string }) {
   return <p className="p-4 text-sm text-slate-500">{text}</p>;
 }

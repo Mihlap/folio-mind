@@ -2,11 +2,8 @@ type Props = {
   count: number;
   onClick: () => void;
 };
-
-/** Компактный чип на странице — открывает правки «было / стало» на этой странице */
 export function PdfAcceptedEditsHint({ count, onClick }: Props) {
   if (count <= 0) return null;
-
   const countLabel = String(count);
   const title =
     count === 1
@@ -14,7 +11,6 @@ export function PdfAcceptedEditsHint({ count, onClick }: Props) {
       : count < 5
         ? `${count} правки на странице — открыть`
         : `${count} правок на странице — открыть`;
-
   return (
     <button
       type="button"

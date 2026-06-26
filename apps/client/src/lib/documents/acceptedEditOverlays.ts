@@ -1,9 +1,7 @@
 import type { DocumentAnnotation } from '@folio-mind/store';
-
 export function listAcceptedEditAnnotations(items: DocumentAnnotation[]): DocumentAnnotation[] {
   return items.filter((a) => a.kind === 'accepted_edit');
 }
-
 export function countAcceptedEditsByPage(items: DocumentAnnotation[]): Record<number, number> {
   const counts: Record<number, number> = {};
   for (const a of items) {

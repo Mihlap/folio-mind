@@ -19,11 +19,9 @@ const DISPOSABLE = new Set([
   'moakt.com',
   'inboxkitten.com',
 ]);
-
 export function isDisposableEmailDomain(domain: string): boolean {
   const d = domain.toLowerCase();
   if (DISPOSABLE.has(d)) return true;
-
   for (const blocked of DISPOSABLE) {
     if (d.endsWith(`.${blocked}`)) return true;
   }

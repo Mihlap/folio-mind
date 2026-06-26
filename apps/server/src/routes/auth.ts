@@ -30,7 +30,6 @@ import { verifyTurnstileToken } from '../lib/auth/turnstile.js';
 import { createMagicLinkToken, buildMagicLinkUrl } from '../lib/auth/magic-link.js';
 import { hashUnusablePassword } from '../lib/auth/password.js';
 import { createSmsSender } from '../lib/auth/sms.js';
-
 const registerSchema = z.object({
   email: z.string().email(),
   password: passwordSchema,
@@ -38,60 +37,47 @@ const registerSchema = z.object({
   tenantName: z.string().min(1).optional(),
   captchaToken: z.string().optional(),
 });
-
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
   captchaToken: z.string().optional(),
 });
-
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
 });
-
 const resetPasswordSchema = z.object({
   token: z.string().min(10),
   newPassword: passwordSchema,
 });
-
 const verifyEmailSchema = z.object({
   token: z.string().min(10),
 });
-
 const resendVerificationSchema = z.object({
   email: z.string().email(),
 });
-
 const emailVerificationStatusSchema = z.object({
   email: z.string().email(),
 });
-
 const magicLinkRequestSchema = z.object({
   email: z.string().email(),
   captchaToken: z.string().optional(),
 });
-
 const magicLinkVerifySchema = z.object({
   token: z.string().min(10),
 });
-
 const phoneRegex = /^\+?[1-9]\d{6,14}$/;
-
 const sendCodeSchema = z.object({
   phone: z.string().regex(phoneRegex, 'Некорректный номер телефона'),
 });
-
 const phoneRegisterSchema = z.object({
   phone: z.string().regex(phoneRegex, 'Некорректный номер телефона'),
   code: z.string().length(6),
   name: z.string().min(1).optional(),
 });
-
 const phoneLoginSchema = z.object({
   phone: z.string().regex(phoneRegex, 'Некорректный номер телефона'),
   code: z.string().length(6),
 });
-
 const authUserSchema = z.object({
   id: z.string(),
   email: z.string(),
@@ -99,18 +85,25 @@ const authUserSchema = z.object({
   tenantId: z.string(),
   emailVerified: z.boolean(),
 });
-
 const authErrorSchema = z.object({
   error: z.string(),
   message: z.string().optional(),
   code: z.string().optional(),
 });
-
-type JwtPayload = { sub: string; email: string; tenantId: string };
-
+type JwtPayload = {
+  sub: string;
+  email: string;
+  tenantId: string;
+};
 async function issueAuthToken(
-  reply: { jwtSign: (payload: JwtPayload) => Promise<string> },
-  user: { id: string; email: string; tenantId: string },
+  reply: {
+    jwtSign: (payload: JwtPayload) => Promise<string>;
+  },
+  user: {
+    id: string;
+    email: string;
+    tenantId: string;
+  },
 ) {
   return reply.jwtSign({
     sub: user.id,
@@ -118,11 +111,9 @@ async function issueAuthToken(
     tenantId: user.tenantId,
   });
 }
-
 async function findOrCreateUserForMagicLink(prisma: PrismaClient, email: string) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return existing;
-
   const tenant = await prisma.tenant.create({
     data: { name: `${email.split('@')[0]} workspace` },
   });
@@ -135,13 +126,16 @@ async function findOrCreateUserForMagicLink(prisma: PrismaClient, email: string)
     },
   });
 }
-
 async function sendVerificationEmailForUser(
   prisma: PrismaClient,
   env: Env,
   userId: string,
   email: string,
-  log: { info: Function; warn: Function; error: Function },
+  log: {
+    info: Function;
+    warn: Function;
+    error: Function;
+  },
 ) {
   const { token, tokenHash, expiresAt } = createEmailVerificationToken(env);
   await prisma.emailVerificationToken.create({
@@ -151,12 +145,12 @@ async function sendVerificationEmailForUser(
   const mailer = createMailer(env, log);
   await mailer.sendEmailVerification({ to: email, verifyUrl });
 }
-
-export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
+export const authRoutes: FastifyPluginAsync<{
+  env: Env;
+}> = async (app, opts) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const env = opts.env;
   const skipMx = env.SKIP_EMAIL_MX_CHECK || env.NODE_ENV === 'test';
-
   r.post(
     '/auth/register',
     {
@@ -176,18 +170,13 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       },
     },
     async (request, reply) => {
-      const captchaOk = await verifyTurnstileToken(
-        request.body.captchaToken,
-        request.ip,
-        env,
-      );
+      const captchaOk = await verifyTurnstileToken(request.body.captchaToken, request.ip, env);
       if (!captchaOk) {
         return reply.code(400).send({
           error: 'CAPTCHA_FAILED',
           message: 'Не пройдена проверка CAPTCHA',
         });
       }
-
       const emailCheck = await validateEmailForRegistration(request.body.email, { skipMx });
       if ('error' in emailCheck) {
         return reply.code(400).send({
@@ -196,7 +185,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
         });
       }
       const email = emailCheck.email;
-
       const existing = await app.prisma.user.findUnique({ where: { email } });
       if (existing) {
         return reply.code(409).send({
@@ -204,12 +192,10 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Этот email уже зарегистрирован',
         });
       }
-
       const { password, name, tenantName } = request.body;
       const tenant = await app.prisma.tenant.create({
         data: { name: tenantName ?? `${email.split('@')[0]} workspace` },
       });
-
       const passwordHash = await hashPassword(password);
       const user = await app.prisma.user.create({
         data: {
@@ -220,7 +206,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           emailVerifiedAt: null,
         },
       });
-
       try {
         await sendVerificationEmailForUser(app.prisma, env, user.id, email, request.log);
       } catch (err) {
@@ -231,7 +216,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
             'Аккаунт создан, но письмо не отправлено. Настройте SMTP или запросите повторную отправку.',
         });
       }
-
       return reply.status(201).send({
         needsEmailVerification: true as const,
         email,
@@ -239,27 +223,22 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       });
     },
   );
-
   r.get('/auth/verify-email', async (request, reply) => {
-    const query = request.query as { token?: string };
+    const query = request.query as {
+      token?: string;
+    };
     const token = query.token?.trim() ?? '';
-
     if (!token) {
       return reply
         .type('text/html; charset=utf-8')
         .send(renderVerifyEmailHtmlPage('error', 'В ссылке нет токена.'));
     }
-
     const result = await verifyEmailWithToken(app.prisma, token);
     if (!result.ok) {
-      return reply
-        .type('text/html; charset=utf-8')
-        .send(renderVerifyEmailHtmlPage('error'));
+      return reply.type('text/html; charset=utf-8').send(renderVerifyEmailHtmlPage('error'));
     }
-
     return reply.type('text/html; charset=utf-8').send(renderVerifyEmailHtmlPage('success'));
   });
-
   r.post(
     '/auth/verify-email',
     {
@@ -282,7 +261,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       return { ok: true as const };
     },
   );
-
   r.post(
     '/auth/resend-verification',
     {
@@ -301,7 +279,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       if (!user || user.emailVerifiedAt) {
         return { ok: true as const };
       }
-
       try {
         await sendVerificationEmailForUser(app.prisma, env, user.id, email, request.log);
       } catch (err) {
@@ -311,11 +288,9 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Не удалось отправить письмо. Попробуйте позже.',
         });
       }
-
       return { ok: true as const };
     },
   );
-
   r.post(
     '/auth/email-verification-status',
     {
@@ -335,7 +310,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       return { verified: Boolean(user?.emailVerifiedAt) };
     },
   );
-
   r.post(
     '/auth/login',
     {
@@ -354,18 +328,13 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       },
     },
     async (request, reply) => {
-      const captchaOk = await verifyTurnstileToken(
-        request.body.captchaToken,
-        request.ip,
-        env,
-      );
+      const captchaOk = await verifyTurnstileToken(request.body.captchaToken, request.ip, env);
       if (!captchaOk) {
         return reply.code(400).send({
           error: 'CAPTCHA_FAILED',
           message: 'Не пройдена проверка CAPTCHA',
         });
       }
-
       const email = normalizeEmail(request.body.email);
       const { password } = request.body;
       const user = await app.prisma.user.findUnique({ where: { email } });
@@ -375,16 +344,13 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Неверный email или пароль',
         });
       }
-
       if (!user.emailVerifiedAt) {
         return reply.code(403).send({
           error: 'EMAIL_NOT_VERIFIED',
           message: 'Подтвердите email по ссылке из письма или запросите повторную отправку.',
         });
       }
-
       const token = await issueAuthToken(reply, user);
-
       return {
         token,
         user: {
@@ -397,7 +363,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       };
     },
   );
-
   r.post(
     '/auth/forgot-password',
     {
@@ -416,7 +381,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       if (!user) {
         return { ok: true as const };
       }
-
       const { token, tokenHash, expiresAt } = createPasswordResetToken(env);
       await app.prisma.passwordResetToken.create({
         data: {
@@ -425,7 +389,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           expiresAt,
         },
       });
-
       const url = buildPasswordResetUrl(env, token);
       try {
         const mailer = createMailer(env, request.log);
@@ -438,11 +401,9 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
             'Не удалось отправить письмо. Проверьте SMTP_HOST=smtp.mail.ru и пароль ящика folio_mind@mail.ru',
         });
       }
-
       return { ok: true as const };
     },
   );
-
   r.post(
     '/auth/reset-password',
     {
@@ -458,20 +419,16 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
     async (request, reply) => {
       const token = request.body.token.trim();
       const tokenHash = sha256Hex(token);
-
       const record = await app.prisma.passwordResetToken.findUnique({
         where: { tokenHash },
       });
-
       if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
         return reply.code(400).send({
           error: 'INVALID_TOKEN',
           message: 'Ссылка для сброса пароля недействительна или устарела',
         });
       }
-
       const passwordHash = await hashPassword(request.body.newPassword);
-
       await app.prisma.$transaction([
         app.prisma.user.update({
           where: { id: record.userId },
@@ -486,11 +443,9 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           data: { usedAt: new Date() },
         }),
       ]);
-
       return { ok: true as const };
     },
   );
-
   r.post(
     '/auth/magic-link',
     {
@@ -505,18 +460,13 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       },
     },
     async (request, reply) => {
-      const captchaOk = await verifyTurnstileToken(
-        request.body.captchaToken,
-        request.ip,
-        env,
-      );
+      const captchaOk = await verifyTurnstileToken(request.body.captchaToken, request.ip, env);
       if (!captchaOk) {
         return reply.code(400).send({
           error: 'CAPTCHA_FAILED',
           message: 'Не пройдена проверка CAPTCHA',
         });
       }
-
       const emailCheck = await validateEmailForRegistration(request.body.email, { skipMx });
       if ('error' in emailCheck) {
         return reply.code(400).send({
@@ -525,13 +475,11 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
         });
       }
       const email = emailCheck.email;
-
       const user = await findOrCreateUserForMagicLink(app.prisma, email);
       const { token, tokenHash, expiresAt } = createMagicLinkToken(env);
       await app.prisma.magicLinkToken.create({
         data: { userId: user.id, tokenHash, expiresAt },
       });
-
       const magicUrl = buildMagicLinkUrl(env, token);
       try {
         const mailer = createMailer(env, request.log);
@@ -543,11 +491,9 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Не удалось отправить письмо. Попробуйте позже.',
         });
       }
-
       return { ok: true as const };
     },
   );
-
   r.post(
     '/auth/phone/send-code',
     {
@@ -565,18 +511,14 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const ttlMs = env.SMS_CODE_TTL_MINUTES * 60 * 1000;
       const expiresAt = new Date(Date.now() + ttlMs);
-
       await app.prisma.smsCode.create({
         data: { phone, code, expiresAt },
       });
-
       const sms = createSmsSender(env);
       await sms.sendCode(phone, code);
-
       return { ok: true as const };
     },
   );
-
   r.post(
     '/auth/phone/register',
     {
@@ -599,7 +541,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Этот номер уже зарегистрирован',
         });
       }
-
       const smsRecord = await app.prisma.smsCode.findFirst({
         where: { phone, code, usedAt: null, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: 'desc' },
@@ -610,16 +551,13 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Неверный или устаревший код',
         });
       }
-
       await app.prisma.smsCode.update({
         where: { id: smsRecord.id },
         data: { usedAt: new Date() },
       });
-
       const tenant = await app.prisma.tenant.create({
         data: { name: request.body.name ?? `user-${phone}` },
       });
-
       const user = await app.prisma.user.create({
         data: {
           email: `${phone}@phone.folio-mind.app`,
@@ -631,15 +569,19 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           emailVerifiedAt: new Date(),
         },
       });
-
       const token = await issueAuthToken(reply, user);
       return {
         token,
-        user: { id: user.id, email: user.email, name: user.name, tenantId: user.tenantId, emailVerified: true },
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          tenantId: user.tenantId,
+          emailVerified: true,
+        },
       };
     },
   );
-
   r.post(
     '/auth/phone/login',
     {
@@ -655,7 +597,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
     async (request, reply) => {
       const phone = request.body.phone.trim();
       const code = request.body.code.trim();
-
       const user = await app.prisma.user.findUnique({ where: { phone } });
       if (!user) {
         return reply.code(401).send({
@@ -663,7 +604,6 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Этот номер не зарегистрирован',
         });
       }
-
       const smsRecord = await app.prisma.smsCode.findFirst({
         where: { phone, code, usedAt: null, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: 'desc' },
@@ -674,27 +614,29 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           message: 'Неверный или устаревший код',
         });
       }
-
       await app.prisma.smsCode.update({
         where: { id: smsRecord.id },
         data: { usedAt: new Date() },
       });
-
       if (!user.phoneVerifiedAt) {
         await app.prisma.user.update({
           where: { id: user.id },
           data: { phoneVerifiedAt: new Date() },
         });
       }
-
       const token = await issueAuthToken(reply, user);
       return {
         token,
-        user: { id: user.id, email: user.email, name: user.name, tenantId: user.tenantId, emailVerified: true },
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          tenantId: user.tenantId,
+          emailVerified: true,
+        },
       };
     },
   );
-
   r.post(
     '/auth/magic-link/verify',
     {
@@ -713,19 +655,16 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
     async (request, reply) => {
       const token = request.body.token.trim();
       const tokenHash = sha256Hex(token);
-
       const record = await app.prisma.magicLinkToken.findUnique({
         where: { tokenHash },
         include: { user: true },
       });
-
       if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
         return reply.code(400).send({
           error: 'INVALID_TOKEN',
           message: 'Ссылка для входа недействительна или устарела',
         });
       }
-
       const verifiedAt = new Date();
       const user = await app.prisma.$transaction(async (tx) => {
         await tx.magicLinkToken.update({
@@ -739,9 +678,7 @@ export const authRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =>
           },
         });
       });
-
       const jwt = await issueAuthToken(reply, user);
-
       return {
         ok: true as const,
         token: jwt,

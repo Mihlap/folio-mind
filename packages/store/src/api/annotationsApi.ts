@@ -1,5 +1,4 @@
 import { baseApi } from './baseApi.js';
-
 export type DocumentAnnotation = {
   id: string;
   documentId: string;
@@ -14,12 +13,16 @@ export type DocumentAnnotation = {
   createdAt: string;
   updatedAt: string;
 };
-
 export const annotationsApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     listAnnotations: build.query<
-      { items: DocumentAnnotation[] },
-      { documentId: string; versionId: string }
+      {
+        items: DocumentAnnotation[];
+      },
+      {
+        documentId: string;
+        versionId: string;
+      }
     >({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/annotations`,
@@ -65,7 +68,11 @@ export const annotationsApi = baseApi.injectEndpoints({
     }),
     deleteAnnotation: build.mutation<
       void,
-      { documentId: string; versionId: string; annotationId: string }
+      {
+        documentId: string;
+        versionId: string;
+        annotationId: string;
+      }
     >({
       query: ({ documentId, versionId, annotationId }) => ({
         url: `/documents/${documentId}/versions/${versionId}/annotations/${annotationId}`,
@@ -75,7 +82,6 @@ export const annotationsApi = baseApi.injectEndpoints({
     }),
   }),
 });
-
 export const {
   useListAnnotationsQuery,
   useCreateAnnotationMutation,

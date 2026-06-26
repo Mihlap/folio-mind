@@ -1,6 +1,5 @@
 import { jsonrepair } from 'jsonrepair';
 import { z } from 'zod';
-
 export const aiSuggestionItemSchema = z.object({
   fragmentId: z.string().min(1),
   originalText: z.string().min(1),
@@ -8,13 +7,10 @@ export const aiSuggestionItemSchema = z.object({
   reason: z.string().min(1),
   page: z.number().int().min(1).optional(),
 });
-
 export const aiSuggestionsResponseSchema = z.object({
   suggestions: z.array(aiSuggestionItemSchema).max(30),
 });
-
 export type AiSuggestionItem = z.infer<typeof aiSuggestionItemSchema>;
-
 function parseJsonLenient(jsonStr: string): unknown {
   const trimmed = jsonStr.trim();
   try {
@@ -27,7 +23,6 @@ function parseJsonLenient(jsonStr: string): unknown {
     }
   }
 }
-
 export function extractBalancedJsonSubstring(text: string): string | null {
   const objectStart = text.indexOf('{');
   const arrayStart = text.indexOf('[');
@@ -35,23 +30,16 @@ export function extractBalancedJsonSubstring(text: string): string | null {
     objectStart >= 0 && arrayStart >= 0
       ? Math.min(objectStart, arrayStart)
       : Math.max(objectStart, arrayStart);
-
   if (start < 0) return null;
   return extractBalancedJsonSubstringFromIndex(text, start);
 }
-
-function extractBalancedJsonSubstringFromIndex(
-  text: string,
-  startIndex: number,
-): string | null {
+function extractBalancedJsonSubstringFromIndex(text: string, startIndex: number): string | null {
   const open = text[startIndex];
   if (open !== '{' && open !== '[') return null;
   const close = open === '{' ? '}' : ']';
-
   let depth = 0;
   let inString = false;
   let escaped = false;
-
   for (let i = startIndex; i < text.length; i++) {
     const ch = text[i];
     if (inString) {
@@ -66,31 +54,25 @@ function extractBalancedJsonSubstringFromIndex(
       if (ch === '"') inString = false;
       continue;
     }
-
     if (ch === '"') {
       inString = true;
       continue;
     }
-
     if (ch === open) depth++;
     if (ch === close) {
       depth--;
       if (depth === 0) return text.slice(startIndex, i + 1);
     }
   }
-
   return null;
 }
-
 export function extractJsonFromLlm(text: string): unknown {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced?.[1]) {
     return parseJsonLenient(fenced[1]);
   }
-
   const candidates: string[] = [];
- 
   if (trimmed.startsWith('{')) {
     const cand = extractBalancedJsonSubstringFromIndex(trimmed, 0);
     if (cand) candidates.push(cand);
@@ -98,7 +80,6 @@ export function extractJsonFromLlm(text: string): unknown {
     const cand = extractBalancedJsonSubstringFromIndex(trimmed, 0);
     if (cand) candidates.push(cand);
   }
-
   const suggestionsIdx = trimmed.indexOf('"suggestions"');
   if (suggestionsIdx >= 0) {
     const braceStart = trimmed.lastIndexOf('{', suggestionsIdx);
@@ -106,56 +87,42 @@ export function extractJsonFromLlm(text: string): unknown {
       const cand = extractBalancedJsonSubstringFromIndex(trimmed, braceStart);
       if (cand) candidates.push(cand);
     }
-
     const arrayStart = trimmed.lastIndexOf('[', suggestionsIdx);
     if (arrayStart >= 0) {
       const cand = extractBalancedJsonSubstringFromIndex(trimmed, arrayStart);
       if (cand) candidates.push(cand);
     }
   }
-
- const objectStart = trimmed.indexOf('{');
+  const objectStart = trimmed.indexOf('{');
   if (objectStart >= 0) {
     const cand = extractBalancedJsonSubstringFromIndex(trimmed, objectStart);
     if (cand) candidates.push(cand);
   }
-
   const arrayStart = trimmed.indexOf('[');
   if (arrayStart >= 0) {
     const cand = extractBalancedJsonSubstringFromIndex(trimmed, arrayStart);
     if (cand) candidates.push(cand);
   }
-
   const seen = new Set<string>();
   for (const candidate of candidates) {
     if (!candidate || seen.has(candidate)) continue;
     seen.add(candidate);
     try {
       return parseJsonLenient(candidate);
-    } catch {
-  
-    }
+    } catch {}
   }
-
   throw new Error('JSON not found in model response');
 }
-
 export function parseAiSuggestionsFromLlm(text: string): AiSuggestionItem[] {
   let raw: unknown;
   try {
     raw = extractJsonFromLlm(text);
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'неизвестная ошибка';
-    throw new Error(
-      `ИИ вернул ответ в неверном формате. Попробуйте ещё раз. (${detail})`,
-    );
+    throw new Error(`ИИ вернул ответ в неверном формате. Попробуйте ещё раз. (${detail})`);
   }
-
   const asObject =
-    typeof raw === 'object' && raw !== null && 'suggestions' in raw
-      ? raw
-      : { suggestions: raw };
-
+    typeof raw === 'object' && raw !== null && 'suggestions' in raw ? raw : { suggestions: raw };
   try {
     const parsed = aiSuggestionsResponseSchema.parse(asObject);
     return parsed.suggestions;

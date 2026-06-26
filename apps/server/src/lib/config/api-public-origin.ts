@@ -1,5 +1,4 @@
 import type { Env } from './env.js';
-
 export function getApiPublicOrigin(env: Env): string {
   const port = env.PORT;
   if (env.NODE_ENV === 'production') {

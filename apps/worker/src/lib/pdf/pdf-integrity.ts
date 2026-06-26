@@ -4,16 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { analyzePdfIntegrity, type PdfIntegrityResult } from '@folio-mind/pdf-contracts';
-
 const execFileAsync = promisify(execFile);
-
 async function isQpdfAvailable(qpdfBin: string, pdfBuffer: Buffer): Promise<boolean> {
   const dir = await mkdtemp(join(tmpdir(), 'folio-integrity-'));
   const filePath = join(dir, 'input.pdf');
   try {
     await writeFile(filePath, pdfBuffer);
     await execFileAsync(qpdfBin, ['--json', filePath], {
-      timeout: 30_000,
+      timeout: 30000,
       maxBuffer: 8 * 1024 * 1024,
     });
     return true;
@@ -23,8 +21,6 @@ async function isQpdfAvailable(qpdfBin: string, pdfBuffer: Buffer): Promise<bool
     await rm(dir, { recursive: true, force: true });
   }
 }
-
-/** Анализ целостности PDF: qpdf при наличии, иначе встроенный парсер. */
 export async function analyzePdfIntegrityFromBuffer(
   pdfBuffer: Buffer,
   qpdfBin = process.env.QPDF_BIN ?? 'qpdf',

@@ -20,21 +20,16 @@ import { documentRoutes } from './routes/documents.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { ragRoutes } from './routes/rag.js';
-
 export type BuildAppOptions = {
   env: Env;
-
   skipDatabase?: boolean;
 };
-
 export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: options.env.NODE_ENV !== 'test',
   });
-
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
-
   await app.register(requestIdPlugin);
   await app.register(tracingPlugin);
   await app.register(cors, {
@@ -50,25 +45,19 @@ export async function buildApp(options: BuildAppOptions) {
     },
   });
   await app.register(rateLimit, GLOBAL_RATE_LIMIT);
-
   await app.register(swagger, {
     openapi: {
       info: { title: 'Folio Mind API', version: '0.0.1' },
     },
   });
   await app.register(swaggerUi, { routePrefix: '/docs' });
-
-  app.decorate(
-    'authenticate',
-    async function (request: FastifyRequest, reply: FastifyReply) {
-      try {
-        await request.jwtVerify();
-      } catch (err) {
-        reply.send(err);
-      }
-    },
-  );
-
+  app.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
+    try {
+      await request.jwtVerify();
+    } catch (err) {
+      reply.send(err);
+    }
+  });
   if (!options.skipDatabase && options.env.DATABASE_URL) {
     await app.register(prismaPlugin);
     await app.register(healthRoutes, { env: options.env });
@@ -82,10 +71,8 @@ export async function buildApp(options: BuildAppOptions) {
   } else if (options.skipDatabase) {
     await app.register(healthRoutes, { env: options.env });
   }
-
   return app;
 }
-
 declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;

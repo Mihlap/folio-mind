@@ -9,9 +9,7 @@ import { PhoneAuthForm } from '../../components/auth/PhoneAuthForm.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage, validatePasswordClient } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
-
 type AuthTab = 'email' | 'phone';
-
 export function RegisterPage() {
   const [tab, setTab] = useState<AuthTab>('email');
   const [register, { isLoading, error }] = useRegisterMutation();
@@ -22,27 +20,22 @@ export function RegisterPage() {
   const [name, setName] = useState('');
   const [clientError, setClientError] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setClientError(null);
-
     const pwdErr = validatePasswordClient(password, confirmPassword);
     if (pwdErr) {
       setClientError(pwdErr);
       return;
     }
-
     if (!email.includes('@')) {
       setClientError('Некорректный email');
       return;
     }
-
     if (isTurnstileEnabled && !captchaToken) {
       setClientError('Подтвердите, что вы не робот');
       return;
     }
-
     try {
       const res = await register({
         email,
@@ -51,14 +44,10 @@ export function RegisterPage() {
         captchaToken: captchaToken ?? undefined,
       }).unwrap();
       navigate('/check-email', { state: { email: res.email } });
-    } catch {
-      // error from RTK
-    }
+    } catch {}
   }
-
   const displayError =
     clientError ?? (error ? getAuthErrorMessage(error, 'Не удалось зарегистрироваться') : null);
-
   return (
     <AuthLayout title="Регистрация" subtitle="Создайте рабочее пространство">
       <div className="relative mb-4 flex rounded-lg border border-slate-200 bg-slate-50 p-1">
@@ -73,9 +62,7 @@ export function RegisterPage() {
           type="button"
           onClick={() => setTab('email')}
           className={`relative z-10 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-            tab === 'email'
-              ? 'text-slate-900'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'email' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Почта
@@ -84,9 +71,7 @@ export function RegisterPage() {
           type="button"
           onClick={() => setTab('phone')}
           className={`relative z-10 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-            tab === 'phone'
-              ? 'text-slate-900'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'phone' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Телефон

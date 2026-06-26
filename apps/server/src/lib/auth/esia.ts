@@ -1,15 +1,12 @@
 import type { Env } from '../config/env.js';
 import type { OAuthProfile } from './oauth-providers.js';
 import { getApiPublicOrigin } from '../config/api-public-origin.js';
-
 const ESIA_AUTH_URL = 'https://esia.gosuslugi.ru/aas/oauth2/v2/ac';
 const ESIA_TOKEN_URL = 'https://esia.gosuslugi.ru/aas/oauth2/v2/te';
 const ESIA_PERSON_URL = 'https://esia.gosuslugi.ru/rs/prns';
-
 export function isEsiaConfigured(env: Env): boolean {
   return Boolean(env.ESIA_CLIENT_ID?.trim() && env.ESIA_CLIENT_SECRET?.trim());
 }
-
 export function buildEsiaAuthorizeUrl(env: Env, state: string): string {
   const redirectUri = encodeURIComponent(getEsiaRedirectUri(env));
   const params = new URLSearchParams({
@@ -23,38 +20,20 @@ export function buildEsiaAuthorizeUrl(env: Env, state: string): string {
   });
   return `${ESIA_AUTH_URL}?${params}`;
 }
-
 export function getEsiaRedirectUri(env: Env): string {
   return `${getApiPublicOrigin(env)}/auth/oauth/esia/callback`;
 }
-
-/**
- * ESIA requires PKCS#7 detached CMS signature for token exchange.
- * In production, use a qualified certificate (КЭП) with a GOST crypto library
- * like node-gost-crypto or a native module.
- * This fallback works for testing when ESIA is not fully configured.
- */
-function signEsiaRequest(
-  _env: Env,
-  method: string,
-  url: string,
-  body: string,
-): string {
+function signEsiaRequest(_env: Env, method: string, url: string, body: string): string {
   void method;
   void url;
   void body;
   throw new Error(
     'ESIA requires PKCS#7 GOST R 34.10-2012 signature for token exchange. ' +
-    'Install a qualified certificate and use a GOST crypto library (e.g. node-gost-crypto). ' +
-    'Set ESIA_CLIENT_ID and ESIA_CLIENT_SECRET in env to configure.',
+      'Install a qualified certificate and use a GOST crypto library (e.g. node-gost-crypto). ' +
+      'Set ESIA_CLIENT_ID and ESIA_CLIENT_SECRET in env to configure.',
   );
 }
-
-export async function exchangeEsiaCode(
-  env: Env,
-  code: string,
-  state: string,
-): Promise<string> {
+export async function exchangeEsiaCode(env: Env, code: string, state: string): Promise<string> {
   const redirectUri = getEsiaRedirectUri(env);
   const body = new URLSearchParams({
     client_id: env.ESIA_CLIENT_ID!,
@@ -65,9 +44,7 @@ export async function exchangeEsiaCode(
     state,
     scope: 'openid fullname email mobile',
   }).toString();
-
   const signed = signEsiaRequest(env, 'POST', ESIA_TOKEN_URL, body);
-
   const res = await fetch(ESIA_TOKEN_URL, {
     method: 'POST',
     headers: {
@@ -76,32 +53,25 @@ export async function exchangeEsiaCode(
     },
     body,
   });
-
   if (!res.ok) {
     const errBody = await res.text();
     throw new Error(`ESIA token exchange failed: ${res.status} ${errBody}`);
   }
-
-  const data = (await res.json()) as { access_token?: string };
+  const data = (await res.json()) as {
+    access_token?: string;
+  };
   if (!data.access_token) {
     throw new Error('ESIA access_token missing in response');
   }
-
   return data.access_token;
 }
-
-export async function fetchEsiaProfile(
-  accessToken: string,
-  _env: Env,
-): Promise<OAuthProfile> {
+export async function fetchEsiaProfile(accessToken: string, _env: Env): Promise<OAuthProfile> {
   const res = await fetch(`${ESIA_PERSON_URL}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-
   if (!res.ok) {
     throw new Error(`ESIA profile fetch failed: ${res.status}`);
   }
-
   const data = (await res.json()) as {
     oid?: string;
     firstName?: string;
@@ -110,16 +80,11 @@ export async function fetchEsiaProfile(
     email?: string;
     mobile?: string;
   };
-
   if (!data.oid) {
     throw new Error('ESIA profile missing oid');
   }
-
   const email = data.email ?? `${data.oid}@esia.gosuslugi.ru`;
-  const name = [data.lastName, data.firstName, data.middleName]
-    .filter(Boolean)
-    .join(' ') || null;
-
+  const name = [data.lastName, data.firstName, data.middleName].filter(Boolean).join(' ') || null;
   return {
     providerUserId: data.oid,
     email: email.toLowerCase().trim(),

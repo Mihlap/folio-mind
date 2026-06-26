@@ -30,43 +30,43 @@ pnpm db:migrate       # формальные миграции (фаза 0)
 pnpm dev
 ```
 
-- Web: http://localhost:5173  
-- API: http://localhost:3001 · Swagger: http://localhost:3001/docs  
-- MinIO: http://localhost:9001 (консоль) — бакет `folio-mind` создаётся сервисом `minio-init` в compose; логические префиксы `folioFiles/*` — в приложении  
+- Web: http://localhost:5173
+- API: http://localhost:3001 · Swagger: http://localhost:3001/docs
+- MinIO: http://localhost:9001 (консоль) — бакет `folio-mind` создаётся сервисом `minio-init` в compose; логические префиксы `folioFiles/*` — в приложении
 - Для прод/облака S3: ключи в `apps/server/.env` (Timeweb по умолчанию в `.env.example`)
 
 ### Локальная отладка
 
-| Переменная | Назначение |
-|------------|------------|
-| `OTEL_ENABLED=true` | Консольные трейсы OpenTelemetry (server + worker) |
-| `DATABASE_URL` | `postgresql://folio:folio@localhost:5434/folio_mind` при Docker compose |
+| Переменная          | Назначение                                                              |
+| ------------------- | ----------------------------------------------------------------------- |
+| `OTEL_ENABLED=true` | Консольные трейсы OpenTelemetry (server + worker)                       |
+| `DATABASE_URL`      | `postgresql://folio:folio@localhost:5434/folio_mind` при Docker compose |
 
 Опционально переинициализировать MinIO вручную: `powershell -File .\tools\init-minio.ps1`
 
 ## Документация
 
-| Файл | Содержание |
-|------|------------|
-| [docs/VISION.md](./docs/VISION.md) | Продукт и критерии v1 |
-| [docs/ICP.md](./docs/ICP.md) | ICP и сценарий v1 |
-| [docs/ROADMAP.md](./docs/ROADMAP.md) | Фазы разработки |
-| [docs/DEPLOY.md](./docs/DEPLOY.md) | Порты, PgBouncer, OTEL, S3 |
-| [docs/AUTH.md](./docs/AUTH.md) | Регистрация по телефону, Яндекс OAuth, ЕСИА — настройка провайдеров |
-| [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md) | Лицензии PDF-стека |
-| [docs/legal/](./docs/legal/) | Privacy, DPA, субпроцессоры (черновики) |
+| Файл                                           | Содержание                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------- |
+| [docs/VISION.md](./docs/VISION.md)             | Продукт и критерии v1                                               |
+| [docs/ICP.md](./docs/ICP.md)                   | ICP и сценарий v1                                                   |
+| [docs/ROADMAP.md](./docs/ROADMAP.md)           | Фазы разработки                                                     |
+| [docs/DEPLOY.md](./docs/DEPLOY.md)             | Порты, PgBouncer, OTEL, S3                                          |
+| [docs/AUTH.md](./docs/AUTH.md)                 | Регистрация по телефону, Яндекс OAuth, ЕСИА — настройка провайдеров |
+| [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md) | Лицензии PDF-стека                                                  |
+| [docs/legal/](./docs/legal/)                   | Privacy, DPA, субпроцессоры (черновики)                             |
 
 ## Скрипты
 
-| Команда | Описание |
-|---------|----------|
-| `pnpm dev` | API + Web + Worker (turbo) |
-| `pnpm build` | Сборка всех пакетов |
-| `pnpm test` | Тесты |
-| `pnpm lint` | ESLint (только `.ts`/`.tsx`) |
-| `pnpm typecheck` | TypeScript |
-| `pnpm db:push` | Prisma schema → Postgres |
-| `pnpm db:migrate` | Prisma migrate dev |
+| Команда           | Описание                     |
+| ----------------- | ---------------------------- |
+| `pnpm dev`        | API + Web + Worker (turbo)   |
+| `pnpm build`      | Сборка всех пакетов          |
+| `pnpm test`       | Тесты                        |
+| `pnpm lint`       | ESLint (только `.ts`/`.tsx`) |
+| `pnpm typecheck`  | TypeScript                   |
+| `pnpm db:push`    | Prisma schema → Postgres     |
+| `pnpm db:migrate` | Prisma migrate dev           |
 
 ## Фаза 0 (статус)
 

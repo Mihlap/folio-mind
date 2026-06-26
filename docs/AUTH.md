@@ -2,15 +2,17 @@
 
 ## Способы входа/регистрации (соответствие 406-ФЗ)
 
-| Способ | Статус | Требует настройки | Разрешён 406-ФЗ |
-|--------|--------|-------------------|-----------------|
-| Email + пароль | ✅ Работает | — | ❌ (не входит в список) |
-| **Телефон (SMS-код)** | ✅ Реализован | SMS-шлюз в проде | ✅ п. 1 ст. 8 |
-| **Яндекс OAuth** | ✅ Реализован | `YANDEX_OAUTH_*` ключи | ✅ п. 4 ст. 8 (российская ИС) |
-| **ЕСИА (Госуслуги)** | ✅ Реализован | КЭП + GOST-криптография | ✅ п. 2 ст. 8 |
+| Способ                | Статус        | Требует настройки       | Разрешён 406-ФЗ               |
+| --------------------- | ------------- | ----------------------- | ----------------------------- |
+| Email + пароль        | ✅ Работает   | —                       | ❌ (не входит в список)       |
+| **Телефон (SMS-код)** | ✅ Реализован | SMS-шлюз в проде        | ✅ п. 1 ст. 8                 |
+| **Яндекс OAuth**      | ✅ Реализован | `YANDEX_OAUTH_*` ключи  | ✅ п. 4 ст. 8 (российская ИС) |
+| **ЕСИА (Госуслуги)**  | ✅ Реализован | КЭП + GOST-криптография | ✅ п. 2 ст. 8                 |
+
 <!-- Google OAuth — не соответствует 406-ФЗ (иностранная ИС), отключено
 | Google OAuth | ✅ Реализован | `GOOGLE_OAUTH_*` ключи | ❌ |
 -->
+
 | Magic link | ✅ Работает | SMTP | — |
 
 ---
@@ -39,16 +41,17 @@ SMS_CODE_TTL_MINUTES=5
 ```
 
 **Для продакшена** нужно заменить провайдер в `apps/server/src/lib/auth/sms.ts`:
+
 - Подключить реальный SMS-шлюз (SMS Aero, SMS.RU, VK Экосистема и т.д.)
 - Реализовать класс `SmsProvider` с методом `send(phone, message)`
 
 ### API
 
-| Метод | Endpoint | Тело |
-|-------|----------|------|
-| POST | `/auth/phone/send-code` | `{ phone }` |
-| POST | `/auth/phone/register` | `{ phone, code, name? }` → `{ token, user }` |
-| POST | `/auth/phone/login` | `{ phone, code }` → `{ token, user }` |
+| Метод | Endpoint                | Тело                                         |
+| ----- | ----------------------- | -------------------------------------------- |
+| POST  | `/auth/phone/send-code` | `{ phone }`                                  |
+| POST  | `/auth/phone/register`  | `{ phone, code, name? }` → `{ token, user }` |
+| POST  | `/auth/phone/login`     | `{ phone, code }` → `{ token, user }`        |
 
 ### Клиент
 
@@ -76,10 +79,10 @@ YANDEX_OAUTH_CLIENT_SECRET=ваш-client-secret
 
 ### API
 
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| GET | `/auth/oauth/yandex/start` | Redirect на Яндекс |
-| GET | `/auth/oauth/yandex/callback` | Callback → JWT |
+| Метод | Endpoint                      | Описание           |
+| ----- | ----------------------------- | ------------------ |
+| GET   | `/auth/oauth/yandex/start`    | Redirect на Яндекс |
+| GET   | `/auth/oauth/yandex/callback` | Callback → JWT     |
 
 ### Клиент
 
@@ -92,6 +95,7 @@ YANDEX_OAUTH_CLIENT_SECRET=ваш-client-secret
 ### Принцип работы
 
 OAuth 2.0 с PKCS#7 detached signature (GOST R 34.10-2012):
+
 1. Redirect на ЕСИА → пользователь входит через Госуслуги
 2. Callback → сервер обменивает код на токен (с подписью запроса)
 3. Сервер получает профиль (ФИО, email, телефон) и создаёт/находит пользователя
@@ -99,6 +103,7 @@ OAuth 2.0 с PKCS#7 detached signature (GOST R 34.10-2012):
 ### Настройка
 
 **Требуется для продакшена:**
+
 - КЭП (квалифицированная электронная подпись) юридического лица или ИП
 - Библиотека GOST-криптографии для Node.js (например, `node-gost-crypto`)
 - Регистрация информационной системы в техпортале ЕСИА
@@ -121,7 +126,7 @@ ESIA_REDIRECT_URI=https://api.example.com/auth/oauth/esia/callback
 function signEsiaRequest(env: Env, method: string, url: string, body: string): string {
   throw new Error(
     'ESIA requires PKCS#7 GOST R 34.10-2012 signature. ' +
-    'Install a qualified certificate and GOST crypto library.'
+      'Install a qualified certificate and GOST crypto library.',
   );
 }
 ```
@@ -130,10 +135,10 @@ function signEsiaRequest(env: Env, method: string, url: string, body: string): s
 
 ### API
 
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| GET | `/auth/oauth/esia/start` | Redirect на Госуслуги |
-| GET | `/auth/oauth/esia/callback` | Callback → JWT |
+| Метод | Endpoint                    | Описание              |
+| ----- | --------------------------- | --------------------- |
+| GET   | `/auth/oauth/esia/start`    | Redirect на Госуслуги |
+| GET   | `/auth/oauth/esia/callback` | Callback → JWT        |
 
 ### Клиент
 
@@ -161,21 +166,21 @@ type AuthUser = {
 
 ## Эндпоинты (полный список)
 
-| Метод | Route | Auth | Описание |
-|-------|-------|------|----------|
-| POST | `/auth/register` | — | Email + пароль |
-| POST | `/auth/login` | — | Email + пароль |
-| POST | `/auth/phone/send-code` | — | Отправить SMS |
-| POST | `/auth/phone/register` | — | Регистрация по телефону |
-| POST | `/auth/phone/login` | — | Вход по телефону |
-| GET | `/auth/oauth/:provider/start` | — | OAuth redirect (google, yandex, esia) |
-| GET | `/auth/oauth/:provider/callback` | — | OAuth callback |
-| POST | `/auth/verify-email` | — | Подтвердить email |
-| GET | `/auth/verify-email` | — | HTML-страница подтверждения |
-| POST | `/auth/resend-verification` | — | Повторная отправка письма |
-| POST | `/auth/email-verification-status` | — | Статус верификации |
-| POST | `/auth/forgot-password` | — | Сброс пароля |
-| POST | `/auth/reset-password` | — | Новый пароль |
-| POST | `/auth/magic-link` | — | Ссылка для входа |
-| POST | `/auth/magic-link/verify` | — | Проверить magic link |
-| GET | `/me` | ✅ JWT | Профиль пользователя |
+| Метод | Route                             | Auth   | Описание                              |
+| ----- | --------------------------------- | ------ | ------------------------------------- |
+| POST  | `/auth/register`                  | —      | Email + пароль                        |
+| POST  | `/auth/login`                     | —      | Email + пароль                        |
+| POST  | `/auth/phone/send-code`           | —      | Отправить SMS                         |
+| POST  | `/auth/phone/register`            | —      | Регистрация по телефону               |
+| POST  | `/auth/phone/login`               | —      | Вход по телефону                      |
+| GET   | `/auth/oauth/:provider/start`     | —      | OAuth redirect (google, yandex, esia) |
+| GET   | `/auth/oauth/:provider/callback`  | —      | OAuth callback                        |
+| POST  | `/auth/verify-email`              | —      | Подтвердить email                     |
+| GET   | `/auth/verify-email`              | —      | HTML-страница подтверждения           |
+| POST  | `/auth/resend-verification`       | —      | Повторная отправка письма             |
+| POST  | `/auth/email-verification-status` | —      | Статус верификации                    |
+| POST  | `/auth/forgot-password`           | —      | Сброс пароля                          |
+| POST  | `/auth/reset-password`            | —      | Новый пароль                          |
+| POST  | `/auth/magic-link`                | —      | Ссылка для входа                      |
+| POST  | `/auth/magic-link/verify`         | —      | Проверить magic link                  |
+| GET   | `/me`                             | ✅ JWT | Профиль пользователя                  |

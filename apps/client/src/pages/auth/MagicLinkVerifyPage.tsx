@@ -4,7 +4,6 @@ import { setCredentials, useVerifyMagicLinkMutation } from '@folio-mind/store';
 import { useAppDispatch } from '../../hooks/index.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
-
 export function MagicLinkVerifyPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
@@ -12,7 +11,6 @@ export function MagicLinkVerifyPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [done, setDone] = useState(false);
-
   useEffect(() => {
     if (!token) return;
     void verifyMagicLink({ token })
@@ -24,18 +22,19 @@ export function MagicLinkVerifyPage() {
       })
       .catch(() => {});
   }, [token, verifyMagicLink, dispatch, navigate]);
-
   if (!token) {
     return (
       <AuthLayout title="Вход по ссылке" subtitle="Ссылка недействительна">
         <p className="text-sm text-red-600">В ссылке нет токена.</p>
-        <Link to="/magic-link" className="mt-4 block text-center text-sm font-medium text-folio-600">
+        <Link
+          to="/magic-link"
+          className="mt-4 block text-center text-sm font-medium text-folio-600"
+        >
           Запросить новую ссылку
         </Link>
       </AuthLayout>
     );
   }
-
   if (done) {
     return (
       <AuthLayout title="Готово" subtitle="Вход выполнен">
@@ -43,7 +42,6 @@ export function MagicLinkVerifyPage() {
       </AuthLayout>
     );
   }
-
   return (
     <AuthLayout title="Вход по ссылке" subtitle="Проверяем ссылку…">
       {isLoading && <p className="text-sm text-slate-500">Входим…</p>}

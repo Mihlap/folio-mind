@@ -1,5 +1,4 @@
 import { useId, useState } from 'react';
-
 type PasswordInputProps = {
   label: string;
   value: string;
@@ -10,7 +9,6 @@ type PasswordInputProps = {
   disabled?: boolean;
   hint?: React.ReactNode;
 };
-
 export function PasswordInput({
   label,
   value,
@@ -23,7 +21,6 @@ export function PasswordInput({
 }: PasswordInputProps) {
   const id = useId();
   const [visible, setVisible] = useState(false);
-
   return (
     <div className="block">
       <label htmlFor={id} className="text-sm font-medium text-slate-700">
@@ -56,7 +53,6 @@ export function PasswordInput({
     </div>
   );
 }
-
 function EyeIcon() {
   return (
     <svg
@@ -76,7 +72,6 @@ function EyeIcon() {
     </svg>
   );
 }
-
 function EyeSlashIcon() {
   return (
     <svg

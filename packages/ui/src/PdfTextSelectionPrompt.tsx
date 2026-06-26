@@ -5,16 +5,13 @@ type Props = {
   onUseAsQuote: () => void;
   onDismiss: () => void;
 };
-
 function truncatePreview(text: string, max = 72): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max - 1)}…`;
 }
-
 export function PdfTextSelectionPrompt({ x, y, previewText, onUseAsQuote, onDismiss }: Props) {
   const preview = truncatePreview(previewText);
-
   return (
     <>
       <button

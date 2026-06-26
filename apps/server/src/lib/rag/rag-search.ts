@@ -1,16 +1,20 @@
 import type { PrismaClient } from '@prisma/client';
-import { embedTextLocal, embeddingToPgVector, extractRagSearchTerms } from '@folio-mind/ai-contracts';
-
+import {
+  embedTextLocal,
+  embeddingToPgVector,
+  extractRagSearchTerms,
+} from '@folio-mind/ai-contracts';
 const chunkInclude = { source: { select: { id: true, title: true } } } as const;
-
 export type RagChunkHit = {
   id: string;
   sourceId: string;
   chunkIndex: number;
   content: string;
-  source: { id: string; title: string };
+  source: {
+    id: string;
+    title: string;
+  };
 };
-
 async function searchRagChunksByVector(
   prisma: PrismaClient,
   tenantId: string,
@@ -41,9 +45,7 @@ async function searchRagChunksByVector(
     vectorLiteral,
     limit,
   );
-
   if (rows.length === 0) return null;
-
   return rows.map((row) => ({
     id: row.id,
     sourceId: row.sourceId,
@@ -52,7 +54,6 @@ async function searchRagChunksByVector(
     source: { id: row.source_id, title: row.source_title },
   }));
 }
-
 async function searchRagChunksByKeyword(
   prisma: PrismaClient,
   tenantId: string,
@@ -60,7 +61,6 @@ async function searchRagChunksByKeyword(
   limit: number,
 ) {
   const terms = extractRagSearchTerms(query, 6);
-
   if (terms.length > 0) {
     const matched = await prisma.ragChunk.findMany({
       where: {
@@ -75,7 +75,6 @@ async function searchRagChunksByKeyword(
     });
     if (matched.length > 0) return matched;
   }
-
   return prisma.ragChunk.findMany({
     where: { tenantId, source: { status: 'ready' } },
     orderBy: [{ sourceId: 'asc' }, { chunkIndex: 'asc' }],
@@ -83,7 +82,6 @@ async function searchRagChunksByKeyword(
     include: chunkInclude,
   });
 }
-
 export async function searchRagChunks(
   prisma: PrismaClient,
   tenantId: string,
@@ -93,9 +91,6 @@ export async function searchRagChunks(
   try {
     const vectorHits = await searchRagChunksByVector(prisma, tenantId, query, limit);
     if (vectorHits && vectorHits.length > 0) return vectorHits;
-  } catch {
-    /* pgvector недоступен — keyword fallback */
-  }
-
+  } catch {}
   return searchRagChunksByKeyword(prisma, tenantId, query, limit);
 }

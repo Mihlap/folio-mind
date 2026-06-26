@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DocumentAnnotation } from '@folio-mind/store';
 import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
-
 type Props = {
   open: boolean;
-  edits: DocumentAnnotation[]; 
+  edits: DocumentAnnotation[];
   pageFilter?: number | null;
   focusedId?: string | null;
   onClose: () => void;
@@ -12,11 +11,13 @@ type Props = {
   onDelete?: (annotationId: string) => void;
   onUpdate?: (
     annotationId: string,
-    payload: { quote: string; content: string },
+    payload: {
+      quote: string;
+      content: string;
+    },
   ) => void | Promise<void>;
   saving?: boolean;
 };
-
 export function AcceptedEditsModal({
   open,
   edits,
@@ -33,13 +34,11 @@ export function AcceptedEditsModal({
   const [draftBefore, setDraftBefore] = useState('');
   const [draftAfter, setDraftAfter] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
-
   useEffect(() => {
     if (!open || !focusedId) return;
     const el = itemRefs.current.get(focusedId);
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [open, focusedId]);
-
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -55,21 +54,18 @@ export function AcceptedEditsModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose, editingId]);
-
   useEffect(() => {
     if (!open) {
       setEditingId(null);
       setEditError(null);
     }
   }, [open]);
-
   function startEdit(item: DocumentAnnotation) {
     setEditingId(item.id);
     setDraftBefore(item.quote ?? '');
     setDraftAfter(item.content);
     setEditError(null);
   }
-
   async function saveEdit(annotationId: string) {
     const quote = draftBefore.trim();
     const content = draftAfter.trim();
@@ -86,9 +82,7 @@ export function AcceptedEditsModal({
       setEditError('Не удалось сохранить правку');
     }
   }
-
   if (!open) return null;
-
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4"
@@ -193,9 +187,7 @@ export function AcceptedEditsModal({
                           placeholder="Стало…"
                           className="w-full resize-none rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm disabled:opacity-50"
                         />
-                        {editError && (
-                          <p className="text-xs text-red-600">{editError}</p>
-                        )}
+                        {editError && <p className="text-xs text-red-600">{editError}</p>}
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"

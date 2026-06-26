@@ -1,26 +1,20 @@
 import IORedis from 'ioredis';
-
 let client: IORedis | null = null;
-
 export function getRedis(redisUrl: string): IORedis {
   if (!client) {
     client = new IORedis(redisUrl, { maxRetriesPerRequest: null });
   }
   return client;
 }
-
 export const AI_SUMMARY_CACHE_PREFIX = 'ai:summary:';
-
 export type CachedSummary = {
   summary: string;
   model: string;
   provider: string;
 };
-
 export function summaryCacheKey(versionId: string): string {
   return `${AI_SUMMARY_CACHE_PREFIX}${versionId}`;
 }
-
 export async function getCachedSummary(
   redisUrl: string,
   versionId: string,
@@ -33,7 +27,6 @@ export async function getCachedSummary(
     return null;
   }
 }
-
 export async function setCachedSummary(
   redisUrl: string,
   versionId: string,

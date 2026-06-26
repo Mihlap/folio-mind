@@ -4,26 +4,20 @@ import { useResetPasswordMutation } from '@folio-mind/store';
 import { Button } from '../../components/ui/Button.js';
 import { PasswordInput } from '../../components/auth/PasswordInput.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
-
 export function ResetPasswordPage() {
   const [params] = useSearchParams();
   const token = useMemo(() => params.get('token') ?? '', [params]);
-
   const [newPassword, setNewPassword] = useState('');
   const [done, setDone] = useState(false);
   const [resetPassword, { isLoading, error }] = useResetPasswordMutation();
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setDone(false);
     try {
       await resetPassword({ token, newPassword }).unwrap();
       setDone(true);
-    } catch {
-  
-    }
+    } catch {}
   }
-
   return (
     <AuthLayout title="Сброс пароля" subtitle="Задайте новый пароль">
       {!token && (
@@ -68,4 +62,3 @@ export function ResetPasswordPage() {
     </AuthLayout>
   );
 }
-

@@ -3,10 +3,8 @@ type ApiErrorPayload = {
   message?: string;
   code?: string;
 };
-
 export function getAuthErrorMessage(error: unknown, fallback: string): string {
   if (!error || typeof error !== 'object') return fallback;
-
   if ('data' in error && error.data && typeof error.data === 'object') {
     const data = error.data as ApiErrorPayload;
     if (data.message) return data.message;
@@ -23,14 +21,11 @@ export function getAuthErrorMessage(error: unknown, fallback: string): string {
     }
     if (data.error === 'NO_MX') return data.message ?? 'Домен почты не принимает письма';
   }
-
   if ('status' in error && error.status === 409) {
     return 'Этот email уже зарегистрирован';
   }
-
   return fallback;
 }
-
 export function validatePasswordClient(password: string, confirm: string): string | null {
   if (password.length < 8) return 'Пароль должен быть не короче 8 символов';
   if (!/[a-zа-яё]/.test(password)) return 'Нужна хотя бы одна строчная буква';

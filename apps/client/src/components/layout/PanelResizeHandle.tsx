@@ -3,7 +3,6 @@ type Props = {
   onMouseDown: (event: React.MouseEvent) => void;
   className?: string;
 };
-
 export function PanelResizeHandle({ edge, onMouseDown, className }: Props) {
   return (
     <div

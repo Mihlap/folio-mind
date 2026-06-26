@@ -1,9 +1,10 @@
 import { z } from 'zod';
-
 const envSchema = z.object({
   REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
   DATABASE_URL: z.string(),
-
+  GOTENBERG_URL: z.string().default('http://127.0.0.1:3003'),
+  PDF_TO_DOCX_URL: z.string().default('http://127.0.0.1:8080'),
+  JODCONVERTER_URL: z.string().optional(),
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_BUCKET_NAME: z.string().optional(),
@@ -13,7 +14,6 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
-
   AI_PROVIDER: z.enum(['gigachat', 'yandex']).default('gigachat'),
   GIGACHAT_CREDENTIALS: z.string().optional(),
   GIGACHAT_SCOPE: z.string().default('GIGACHAT_API_PERS'),
@@ -24,14 +24,12 @@ const envSchema = z.object({
   YANDEX_MODEL: z.string().default('yandexgpt/latest'),
   PREVIEW_INITIAL_PAGES: z.coerce.number().int().min(1).default(15),
   PREVIEW_MAX_PAGES: z.coerce.number().int().min(1).default(200),
-  PREVIEW_JOB_TIMEOUT_MS: z.coerce.number().int().min(10_000).default(300_000),
+  PREVIEW_JOB_TIMEOUT_MS: z.coerce.number().int().min(10000).default(300000),
   PREVIEW_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(2),
   OPTIMIZE_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(1),
   AI_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(1),
 });
-
 export type WorkerEnv = z.infer<typeof envSchema>;
-
 export function loadWorkerEnv(): WorkerEnv {
   return envSchema.parse(process.env);
 }

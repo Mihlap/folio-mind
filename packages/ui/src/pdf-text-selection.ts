@@ -1,11 +1,9 @@
 import type { PdfSelectionHighlightRect } from './PdfTextSelectionHighlight.js';
-
 export type PdfTextSelectionSnapshot = {
   text: string;
   rect: DOMRect;
   highlightRects: PdfSelectionHighlightRect[];
 };
-
 export type PdfTextSelectionDrag = {
   textLayer: HTMLElement;
   pageRoot: HTMLElement;
@@ -14,35 +12,28 @@ export type PdfTextSelectionDrag = {
   lastX: number;
   lastY: number;
 };
-
 const TINY_DRAG_PX = 5;
 const MIN_EXTRACTED_LEN = 1;
 const MAX_QUOTE_LEN = 4000;
-
 export function normalizePdfSelectionText(raw: string): string {
   return raw.replace(/\s+/g, ' ').trim();
 }
-
 export function isTextLayerSelectable(layer: HTMLElement | null): boolean {
   if (!layer?.classList.contains('textLayer')) return false;
   return layer.classList.contains('select-text') || layer.classList.contains('textLayer--quote');
 }
-
 export function pdfPageRootFromTextLayer(textLayer: HTMLElement): HTMLElement | null {
   const pageRoot = textLayer.closest('[data-pdf-page]');
   return pageRoot instanceof HTMLElement ? pageRoot : null;
 }
-
 function rectsIntersect(a: DOMRect, b: DOMRect): boolean {
   return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
 }
-
 function clientRectFromPoints(x1: number, y1: number, x2: number, y2: number): DOMRect {
   const left = Math.min(x1, x2);
   const top = Math.min(y1, y2);
   return new DOMRect(left, top, Math.abs(x2 - x1), Math.abs(y2 - y1));
 }
-
 function caretRangeAtPoint(x: number, y: number): Range | null {
   const doc = document as Document & {
     caretRangeFromPoint?: (x: number, y: number) => Range | null;
@@ -58,35 +49,101 @@ function caretRangeAtPoint(x: number, y: number): Range | null {
   range.setEnd(pos.offsetNode, pos.offset);
   return range;
 }
-
+function caretRangeAtPointInTextLayer(x: number, y: number, textLayer: HTMLElement): Range | null {
+  const caret = caretRangeAtPoint(x, y);
+  if (caret && textLayer.contains(caret.startContainer)) return caret;
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (!(el instanceof HTMLElement)) continue;
+    const span = el.closest('span');
+    if (!(span instanceof HTMLElement) || !textLayer.contains(span)) continue;
+    const textNode = span.firstChild;
+    if (textNode?.nodeType !== Node.TEXT_NODE) continue;
+    const text = textNode.textContent ?? '';
+    if (!text.length) continue;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, text.length);
+    return range;
+  }
+  return null;
+}
+function rangeFromCaretPoints(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  textLayer: HTMLElement,
+): Range | null {
+  const startCaret = caretRangeAtPointInTextLayer(x1, y1, textLayer);
+  const endCaret = caretRangeAtPointInTextLayer(x2, y2, textLayer);
+  if (!startCaret || !endCaret) return null;
+  const range = document.createRange();
+  const backward = startCaret.compareBoundaryPoints(Range.START_TO_START, endCaret) > 0;
+  if (!backward) {
+    range.setStart(startCaret.startContainer, startCaret.startOffset);
+    range.setEnd(endCaret.startContainer, endCaret.startOffset);
+  } else {
+    range.setStart(endCaret.startContainer, endCaret.startOffset);
+    range.setEnd(startCaret.startContainer, startCaret.startOffset);
+  }
+  if (range.collapsed) return null;
+  return range;
+}
+function snapshotFromRange(
+  range: Range,
+  textLayer: HTMLElement,
+  pageRoot: HTMLElement,
+): {
+  text: string;
+  highlightRects: PdfSelectionHighlightRect[];
+  rect: DOMRect;
+} | null {
+  const text = getTextFromRange(range, textLayer);
+  if (text.length < MIN_EXTRACTED_LEN) return null;
+  const highlightRects = selectionHighlightRectsInPage(range, pageRoot);
+  const clientRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
+  const rect =
+    clientRects.length > 0 ? unionClientRect(clientRects) : range.getBoundingClientRect();
+  return { text, highlightRects, rect };
+}
+export function getTextFromCaretPoints(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  textLayer: HTMLElement,
+  pageRoot: HTMLElement,
+): {
+  text: string;
+  highlightRects: PdfSelectionHighlightRect[];
+  rect: DOMRect;
+} | null {
+  const range = rangeFromCaretPoints(x1, y1, x2, y2, textLayer);
+  if (!range) return null;
+  return snapshotFromRange(range, textLayer, pageRoot);
+}
 function isWordChar(ch: string): boolean {
   return /[\p{L}\p{N}]/u.test(ch);
 }
-
-/** Расширяет точку до границ слова внутри текстового слоя PDF */
 export function expandRangeToWord(range: Range, textLayer: HTMLElement): Range | null {
   const out = range.cloneRange();
   const startNode = out.startContainer;
   const endNode = out.endContainer;
   if (startNode.nodeType !== Node.TEXT_NODE || endNode.nodeType !== Node.TEXT_NODE) return null;
   if (!textLayer.contains(startNode) || !textLayer.contains(endNode)) return null;
-
   const startText = startNode as Text;
   const endText = endNode as Text;
   let start = out.startOffset;
   let end = out.endOffset;
   const startContent = startText.textContent ?? '';
   const endContent = endText.textContent ?? '';
-
   while (start > 0 && isWordChar(startContent[start - 1] ?? '')) start -= 1;
   while (end < endContent.length && isWordChar(endContent[end] ?? '')) end += 1;
-
   if (start >= end) return null;
   out.setStart(startText, start);
   out.setEnd(endText, end);
   return out;
 }
-
 function isTextNodeInRange(node: Text, range: Range): boolean {
   try {
     return range.intersectsNode(node);
@@ -99,7 +156,6 @@ function isTextNodeInRange(node: Text, range: Range): boolean {
     );
   }
 }
-
 function sliceTextNode(node: Text, range: Range): string {
   const full = node.textContent ?? '';
   if (!full) return '';
@@ -110,30 +166,41 @@ function sliceTextNode(node: Text, range: Range): string {
   if (start >= end) return '';
   return full.slice(start, end);
 }
-
-/** Текст по Range — только узлы, реально попавшие в выделение */
 export function getTextFromRange(range: Range, textLayer: HTMLElement): string {
-  const chunks: string[] = [];
+  const lineTexts: string[] = [];
+  let lineChunks: string[] = [];
+  let lastTop: number | null = null;
   const walker = document.createTreeWalker(textLayer, NodeFilter.SHOW_TEXT);
   let node: Node | null;
   while ((node = walker.nextNode())) {
     if (!(node instanceof Text)) continue;
     if (!isTextNodeInRange(node, range)) continue;
     const slice = sliceTextNode(node, range);
-    if (slice) chunks.push(slice);
+    if (!slice) continue;
+    const parent = node.parentElement;
+    const top = parent?.getBoundingClientRect().top ?? null;
+    if (top != null && lastTop != null && Math.abs(top - lastTop) > 2) {
+      if (lineChunks.length > 0) {
+        lineTexts.push(normalizePdfSelectionText(lineChunks.join('')));
+        lineChunks = [];
+      }
+    }
+    lineChunks.push(slice);
+    if (top != null) lastTop = top;
   }
-  return normalizePdfSelectionText(chunks.join(''));
+  if (lineChunks.length > 0) {
+    lineTexts.push(normalizePdfSelectionText(lineChunks.join('')));
+  }
+  if (lineTexts.length <= 1) return lineTexts[0] ?? '';
+  return lineTexts.filter(Boolean).join('\n');
 }
-
 export function textLayerForRange(range: Range, root: HTMLElement): HTMLElement | null {
   const startEl =
     range.startContainer instanceof Element
       ? range.startContainer
       : range.startContainer.parentElement;
   const endEl =
-    range.endContainer instanceof Element
-      ? range.endContainer
-      : range.endContainer.parentElement;
+    range.endContainer instanceof Element ? range.endContainer : range.endContainer.parentElement;
   const startLayer = startEl?.closest('.textLayer');
   const endLayer = endEl?.closest('.textLayer');
   if (
@@ -146,7 +213,6 @@ export function textLayerForRange(range: Range, root: HTMLElement): HTMLElement 
   }
   return startLayer;
 }
-
 export function highlightRectsForSpans(
   spans: Element[],
   pageRoot: HTMLElement,
@@ -154,7 +220,6 @@ export function highlightRectsForSpans(
   const pageRect = pageRoot.getBoundingClientRect();
   const seen = new Set<string>();
   const out: PdfSelectionHighlightRect[] = [];
-
   for (const span of spans) {
     const r = span.getBoundingClientRect();
     if (r.width <= 0 && r.height <= 0) continue;
@@ -165,19 +230,19 @@ export function highlightRectsForSpans(
     seen.add(key);
     out.push({ left, top, width: r.width, height: r.height });
   }
-
   return out;
 }
-
-/** Текст по прямоугольнику перетаскивания — совпадает с видимой областью, без «лишних» span */
 export function getTextFromDragRect(
   dragRect: DOMRect,
   textLayer: HTMLElement,
   pageRoot: HTMLElement,
-): { text: string; highlightRects: PdfSelectionHighlightRect[]; rect: DOMRect } | null {
+): {
+  text: string;
+  highlightRects: PdfSelectionHighlightRect[];
+  rect: DOMRect;
+} | null {
   const hits: Element[] = [];
   const parts: string[] = [];
-
   for (const span of textLayer.querySelectorAll('span')) {
     const r = span.getBoundingClientRect();
     if (r.width <= 0 && r.height <= 0) continue;
@@ -186,10 +251,8 @@ export function getTextFromDragRect(
     const t = span.textContent ?? '';
     if (t) parts.push(t);
   }
-
   const text = normalizePdfSelectionText(parts.join(''));
   if (text.length < MIN_EXTRACTED_LEN) return null;
-
   const highlightRects = highlightRectsForSpans(hits, pageRoot);
   const rect =
     highlightRects.length > 0
@@ -197,10 +260,8 @@ export function getTextFromDragRect(
           hits.map((s) => s.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0),
         )
       : dragRect;
-
   return { text, highlightRects, rect };
 }
-
 function unionClientRect(rects: DOMRect[]): DOMRect {
   if (rects.length === 0) return new DOMRect(0, 0, 0, 0);
   let left = rects[0].left;
@@ -215,72 +276,48 @@ function unionClientRect(rects: DOMRect[]): DOMRect {
   }
   return new DOMRect(left, top, right - left, bottom - top);
 }
-
 export function getWordSelectionAtPoint(
   x: number,
   y: number,
   textLayer: HTMLElement,
   pageRoot: HTMLElement,
-): { text: string; highlightRects: PdfSelectionHighlightRect[]; rect: DOMRect } | null {
-  const caret = caretRangeAtPoint(x, y);
-  if (!caret || !textLayer.contains(caret.startContainer)) return null;
+): {
+  text: string;
+  highlightRects: PdfSelectionHighlightRect[];
+  rect: DOMRect;
+} | null {
+  const caret = caretRangeAtPointInTextLayer(x, y, textLayer);
+  if (!caret) return null;
   const wordRange = expandRangeToWord(caret, textLayer);
   if (!wordRange) return null;
-
-  const text = getTextFromRange(wordRange, textLayer);
-  if (text.length < MIN_EXTRACTED_LEN) return null;
-
-  const hits: Element[] = [];
-  for (const span of textLayer.querySelectorAll('span')) {
-    try {
-      if (wordRange.intersectsNode(span)) hits.push(span);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  const highlightRects = highlightRectsForSpans(hits, pageRoot);
-  const rect = unionClientRect(
-    hits.map((s) => s.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0),
-  );
-
-  return { text, highlightRects, rect: rect.width || rect.height ? rect : wordRange.getBoundingClientRect() };
+  return snapshotFromRange(wordRange, textLayer, pageRoot);
 }
-
 export function readBrowserSelectionInTextLayer(
   textLayer: HTMLElement,
   pageRoot: HTMLElement,
-): { text: string; highlightRects: PdfSelectionHighlightRect[]; rect: DOMRect } | null {
+): {
+  text: string;
+  highlightRects: PdfSelectionHighlightRect[];
+  rect: DOMRect;
+} | null {
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
-
   const range = sel.getRangeAt(0);
   if (!textLayer.contains(range.commonAncestorContainer)) return null;
-
   const text = getTextFromRange(range, textLayer);
   if (text.length < MIN_EXTRACTED_LEN) return null;
-
   const hits: Element[] = [];
   for (const span of textLayer.querySelectorAll('span')) {
     try {
       if (range.intersectsNode(span)) hits.push(span);
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
-
-  const highlightRects = highlightRectsForSpans(hits, pageRoot);
-  const spanRects = hits
-    .map((s) => s.getBoundingClientRect())
-    .filter((r) => r.width > 0 || r.height > 0);
+  const highlightRects = selectionHighlightRectsInPage(range, pageRoot);
+  const clientRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
   const rect =
-    spanRects.length > 0
-      ? unionClientRect(spanRects)
-      : range.getBoundingClientRect();
-
+    clientRects.length > 0 ? unionClientRect(clientRects) : range.getBoundingClientRect();
   return { text, highlightRects, rect };
 }
-
 export function captureTextSelectionFromDrag(
   drag: PdfTextSelectionDrag,
   endX: number,
@@ -289,14 +326,16 @@ export function captureTextSelectionFromDrag(
   const { textLayer, pageRoot, startX, startY } = drag;
   const dragRect = clientRectFromPoints(startX, startY, endX, endY);
   const isTiny = dragRect.width < TINY_DRAG_PX && dragRect.height < TINY_DRAG_PX;
-
-  const attempts: Array<{ text: string; highlightRects: PdfSelectionHighlightRect[]; rect: DOMRect } | null> =
-    [
-      readBrowserSelectionInTextLayer(textLayer, pageRoot),
-      isTiny ? null : getTextFromDragRect(dragRect, textLayer, pageRoot),
-      getWordSelectionAtPoint(endX, endY, textLayer, pageRoot),
-    ];
-
+  const attempts: Array<{
+    text: string;
+    highlightRects: PdfSelectionHighlightRect[];
+    rect: DOMRect;
+  } | null> = isTiny
+    ? [getWordSelectionAtPoint(endX, endY, textLayer, pageRoot)]
+    : [
+        getTextFromCaretPoints(startX, startY, endX, endY, textLayer, pageRoot),
+        readBrowserSelectionInTextLayer(textLayer, pageRoot),
+      ];
   for (const captured of attempts) {
     if (!captured) continue;
     const text = captured.text.slice(0, MAX_QUOTE_LEN);
@@ -305,21 +344,17 @@ export function captureTextSelectionFromDrag(
     if (rect.width === 0 && rect.height === 0) continue;
     return { text, rect, highlightRects: captured.highlightRects };
   }
-
   return null;
 }
-
 export function pdfPageRootFromSelection(root: HTMLElement | null): HTMLElement | null {
   if (!root) return null;
   const sel = window.getSelection();
   if (!sel?.anchorNode) return null;
-  const node =
-    sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement;
+  const node = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement;
   const pageRoot = node?.closest('[data-pdf-page]');
   if (!pageRoot || !(pageRoot instanceof HTMLElement) || !root.contains(pageRoot)) return null;
   return pageRoot;
 }
-
 export function selectionHighlightRectsInPage(
   range: Range,
   pageRoot: HTMLElement,
@@ -327,7 +362,6 @@ export function selectionHighlightRectsInPage(
   const pageRect = pageRoot.getBoundingClientRect();
   const seen = new Set<string>();
   const out: PdfSelectionHighlightRect[] = [];
-
   for (const r of range.getClientRects()) {
     if (r.width <= 0 && r.height <= 0) continue;
     const left = r.left - pageRect.left;
@@ -337,66 +371,38 @@ export function selectionHighlightRectsInPage(
     seen.add(key);
     out.push({ left, top, width: r.width, height: r.height });
   }
-
   return out;
 }
-
-/** Запасной путь: точное чтение из Range, если перетаскивание не зафиксировано */
 export function readPdfTextSelection(root: HTMLElement | null): PdfTextSelectionSnapshot | null {
   if (!root) return null;
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
-
   const range = sel.getRangeAt(0);
   if (!root.contains(range.commonAncestorContainer)) return null;
-
   const textLayer = textLayerForRange(range, root);
   const pageRoot = textLayer ? pdfPageRootFromTextLayer(textLayer) : pdfPageRootFromSelection(root);
   const text = textLayer
     ? getTextFromRange(range, textLayer)
     : normalizePdfSelectionText(sel.toString());
   if (!text) return null;
-
-  const clientRects = Array.from(range.getClientRects()).filter(
-    (r) => r.width > 0 || r.height > 0,
-  );
+  const clientRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
   const rect =
     clientRects.length > 0 ? unionClientRect(clientRects) : range.getBoundingClientRect();
-
-  const highlightRects =
-    textLayer && pageRoot
-      ? highlightRectsForSpans(
-          Array.from(textLayer.querySelectorAll('span')).filter((span) => {
-            try {
-              return range.intersectsNode(span);
-            } catch {
-              return false;
-            }
-          }),
-          pageRoot,
-        )
-      : pageRoot
-        ? selectionHighlightRectsInPage(range, pageRoot)
-        : [];
-
+  const highlightRects = pageRoot != null ? selectionHighlightRectsInPage(range, pageRoot) : [];
   return { text: text.slice(0, MAX_QUOTE_LEN), rect, highlightRects };
 }
-
 export function pageNumberFromSelection(root: HTMLElement | null): number | null {
   const pageRoot = pdfPageRootFromSelection(root);
   if (!pageRoot) return null;
   const fromPdfPage = Number(pageRoot.getAttribute('data-pdf-page'));
   if (Number.isFinite(fromPdfPage) && fromPdfPage > 0) return fromPdfPage;
-
   const page = Number(pageRoot.closest('[data-page]')?.getAttribute('data-page'));
   return Number.isFinite(page) && page > 0 ? page : null;
 }
-
 export function pageNumberFromPageRoot(pageRoot: HTMLElement): number | null {
   const page = Number(pageRoot.getAttribute('data-pdf-page'));
   return Number.isFinite(page) && page > 0 ? page : null;
 }
-
 export function clearDocumentSelection() {
   window.getSelection()?.removeAllRanges();
 }

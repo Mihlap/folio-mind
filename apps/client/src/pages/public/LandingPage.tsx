@@ -1,10 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useHealthQuery } from '@folio-mind/store';
 import { Button } from '../../components/ui/Button.js';
-
 export function LandingPage() {
   const { data: health } = useHealthQuery();
-
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">

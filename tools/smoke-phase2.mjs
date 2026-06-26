@@ -56,7 +56,9 @@ async function api(path, options = {}) {
     json = { raw: text };
   }
   if (!res.ok) {
-    throw new Error(`${options.method ?? 'GET'} ${path} \u2192 ${res.status}: ${text.slice(0, 300)}`);
+    throw new Error(
+      `${options.method ?? 'GET'} ${path} \u2192 ${res.status}: ${text.slice(0, 300)}`,
+    );
   }
   return json;
 }
@@ -104,7 +106,12 @@ async function uploadDocument(token, pdfBuffer, title) {
   const created = await api('/documents', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, fileName: `${title}.pdf`, mimeType: 'application/pdf', size: pdfBuffer.length }),
+    body: JSON.stringify({
+      title,
+      fileName: `${title}.pdf`,
+      mimeType: 'application/pdf',
+      size: pdfBuffer.length,
+    }),
   });
   const putRes = await fetch(created.uploadUrl, {
     method: 'PUT',
@@ -120,10 +127,36 @@ async function uploadDocument(token, pdfBuffer, title) {
   return { documentId: created.document.id, versionId: created.versionId };
 }
 
+async function uploadVersion(token, documentId, pdfBuffer, fileName) {
+  const created = await api(`/documents/${documentId}/versions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: `${fileName}.pdf`,
+      mimeType: 'application/pdf',
+      size: pdfBuffer.length,
+    }),
+  });
+  const putRes = await fetch(created.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/pdf' },
+    body: pdfBuffer,
+  });
+  if (!putRes.ok) throw new Error(`Presigned PUT failed: ${putRes.status}`);
+  await api(`/documents/${documentId}/versions/${created.versionId}/complete`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return created.versionId;
+}
+
 async function waitForReady(token, documentId, versionId) {
   const started = Date.now();
   while (Date.now() - started < TIMEOUT_MS) {
-    const doc = await api(`/documents/${documentId}`, { headers: { Authorization: `Bearer ${token}` } });
+    const doc = await api(`/documents/${documentId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const version = doc.versions.find((v) => v.id === versionId);
     if (version?.status === 'ready') return version;
     if (version?.status === 'failed') throw new Error('Preview job failed');
@@ -134,8 +167,14 @@ async function waitForReady(token, documentId, versionId) {
 
 function step(name) {
   return {
-    ok() { passed++; console.log(`  \u2714 ${name}`); },
-    fail(err) { failed++; console.error(`  \u2718 ${name}: ${err.message ?? err}`); },
+    ok() {
+      passed++;
+      console.log(`  \u2714 ${name}`);
+    },
+    fail(err) {
+      failed++;
+      console.error(`  \u2718 ${name}: ${err.message ?? err}`);
+    },
   };
 }
 
@@ -177,7 +216,9 @@ async function main() {
       });
       if (detail.status && detail.score !== undefined) s.ok();
       else s.fail(new Error('incomplete integrity detail response'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
 
   /* ---------- annotations CRUD ---------- */
@@ -194,7 +235,9 @@ async function main() {
       createdAnnotationId = ann.id;
       if (ann.id && ann.page === 1) s.ok();
       else s.fail(new Error('create response missing id/page'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('create accepted_edit');
@@ -202,11 +245,18 @@ async function main() {
       const ann = await api(`/documents/${documentId}/versions/${versionId}/annotations`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page: 1, content: 'new text', quote: 'old text', kind: 'accepted_edit' }),
+        body: JSON.stringify({
+          page: 1,
+          content: 'new text',
+          quote: 'old text',
+          kind: 'accepted_edit',
+        }),
       });
       if (ann.kind === 'accepted_edit' && ann.quote === 'old text') s.ok();
       else s.fail(new Error('accepted_edit not created correctly'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('list annotations');
@@ -216,29 +266,41 @@ async function main() {
       });
       if (Array.isArray(list.items) && list.items.length >= 2) s.ok();
       else s.fail(new Error(`expected >=2 items, got ${list.items?.length}`));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('update annotation');
     try {
-      const updated = await api(`/documents/${documentId}/versions/${versionId}/annotations/${createdAnnotationId}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Updated smoke comment' }),
-      });
+      const updated = await api(
+        `/documents/${documentId}/versions/${versionId}/annotations/${createdAnnotationId}`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'Updated smoke comment' }),
+        },
+      );
       if (updated.content === 'Updated smoke comment') s.ok();
       else s.fail(new Error('update content mismatch'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('delete annotation');
     try {
-      await api(`/documents/${documentId}/versions/${versionId}/annotations/${createdAnnotationId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api(
+        `/documents/${documentId}/versions/${versionId}/annotations/${createdAnnotationId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       s.ok();
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
 
   /* ---------- annotation coordinates ---------- */
@@ -249,11 +311,19 @@ async function main() {
       const ann = await api(`/documents/${documentId}/versions/${versionId}/annotations`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page: 2, content: 'Positioned comment', kind: 'comment', x: 150, y: 300 }),
+        body: JSON.stringify({
+          page: 2,
+          content: 'Positioned comment',
+          kind: 'comment',
+          x: 150,
+          y: 300,
+        }),
       });
       if (ann.x === 150 && ann.y === 300) s.ok();
       else s.fail(new Error(`x/y mismatch: ${ann.x},${ann.y}`));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('list returns x,y');
@@ -264,7 +334,9 @@ async function main() {
       const withCoords = list.items.find((a) => a.x != null && a.y != null);
       if (withCoords) s.ok();
       else s.fail(new Error('no annotation with coordinates found'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
 
   /* ---------- PDF operations ---------- */
@@ -273,36 +345,51 @@ async function main() {
     const s = step('upload second version for merge');
     try {
       const pdf2 = buildSmokePdf(5);
-      const { versionId: v2 } = await uploadDocument(token, pdf2, 'smoke-phase2-merge-src');
+      const v2 = await uploadVersion(token, documentId, pdf2, 'smoke-phase2-merge-src');
       await waitForReady(token, documentId, v2);
       s.ok();
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('merge versions');
     try {
-      const doc = await api(`/documents/${documentId}`, { headers: { Authorization: `Bearer ${token}` } });
-      const allIds = doc.versions.map((v) => v.id);
-      const result = await api(`/documents/${documentId}/merge`, {
+      const doc = await api(`/documents/${documentId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const readyIds = doc.versions.filter((v) => v.status === 'ready').map((v) => v.id);
+      if (readyIds.length < 2) {
+        s.fail(new Error('need >=2 ready versions for merge'));
+        return;
+      }
+      const result = await api(`/documents/${documentId}/operations/merge`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ versionIds: allIds }),
+        body: JSON.stringify({ versionIds: readyIds }),
       });
       if (result.operationJobId) s.ok();
       else s.fail(new Error('merge did not return operationJobId'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('split pages');
     try {
-      const result = await api(`/documents/${documentId}/split`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ versionId, pages: [1, 2, 3] }),
-      });
+      const result = await api(
+        `/documents/${documentId}/versions/${versionId}/operations/split`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pages: [1, 2, 3] }),
+        },
+      );
       if (result.operationJobId) s.ok();
       else s.fail(new Error('split did not return operationJobId'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
 
   /* ---------- RAG ---------- */
@@ -312,12 +399,20 @@ async function main() {
     try {
       const ragContent = RAG_FILE
         ? require('fs').readFileSync(RAG_FILE)
-        : Buffer.from('Тестовый регламент: договор должен быть подписан обеими сторонами.', 'utf-8');
+        : Buffer.from(
+            'Тестовый регламент: договор должен быть подписан обеими сторонами.',
+            'utf-8',
+          );
       const isPdf = RAG_FILE ? RAG_FILE.endsWith('.pdf') : false;
       const created = await api('/rag/sources', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Smoke regulation', fileName: isPdf ? 'test.pdf' : 'test.txt', mimeType: isPdf ? 'application/pdf' : 'text/plain', size: ragContent.length }),
+        body: JSON.stringify({
+          title: 'Smoke regulation',
+          fileName: isPdf ? 'test.pdf' : 'test.txt',
+          mimeType: isPdf ? 'application/pdf' : 'text/plain',
+          size: ragContent.length,
+        }),
       });
       const putRes = await fetch(created.uploadUrl, {
         method: 'PUT',
@@ -325,13 +420,15 @@ async function main() {
         body: ragContent,
       });
       if (!putRes.ok) throw new Error(`RAG PUT failed: ${putRes.status}`);
-      await api(`/rag/sources/${created.source.id}/complete`, {
+      await api(`/rag/sources/${created.sourceId}/complete`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
       s.ok();
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
   {
     const s = step('rag query');
@@ -344,7 +441,9 @@ async function main() {
       });
       if (Array.isArray(result.chunks)) s.ok();
       else s.fail(new Error('rag query did not return chunks array'));
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
 
   /* ---------- version diff ---------- */
@@ -352,25 +451,35 @@ async function main() {
   {
     const s = step('version diff endpoint');
     try {
-      const doc = await api(`/documents/${documentId}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (doc.versions.length >= 2) {
-        const vA = doc.versions[0].id;
-        const vB = doc.versions[1].id;
-        const diff = await api(`/documents/${documentId}/versions/${vA}/diff/${vB}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (diff && typeof diff === 'object') s.ok();
+      const doc = await api(`/documents/${documentId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const ready = doc.versions.filter((v) => v.status === 'ready');
+      if (ready.length >= 2) {
+        const vA = ready[0].id;
+        const vB = ready[1].id;
+        const diff = await api(
+          `/documents/${documentId}/versions/compare?baseVersionId=${vA}&compareVersionId=${vB}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        if (diff && typeof diff === 'object' && diff.baseVersionId) s.ok();
         else s.fail(new Error('diff response invalid'));
       } else {
         s.fail(new Error('need >=2 versions for diff test'));
       }
-    } catch (e) { s.fail(e); }
+    } catch (e) {
+      s.fail(e);
+    }
   }
 
   /* ---------- summary ---------- */
   const total = passed + failed;
   console.log(`\n\u2500${'\u2500'.repeat(48)}`);
-  console.log(`Phase 2 smoke: ${passed}/${total} passed${failed > 0 ? `, ${failed} failed` : ''}\n`);
+  console.log(
+    `Phase 2 smoke: ${passed}/${total} passed${failed > 0 ? `, ${failed} failed` : ''}\n`,
+  );
   if (failed > 0) process.exit(1);
 }
 

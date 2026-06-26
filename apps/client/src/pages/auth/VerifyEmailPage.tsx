@@ -4,13 +4,11 @@ import { useVerifyEmailMutation } from '@folio-mind/store';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { notifyEmailVerified } from '../../lib/auth/authCrossTab.js';
-
 export function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
   const [verifyEmail, { isLoading, error }] = useVerifyEmailMutation();
   const [done, setDone] = useState(false);
-
   useEffect(() => {
     if (!token) return;
     void verifyEmail({ token })
@@ -21,7 +19,6 @@ export function VerifyEmailPage() {
       })
       .catch(() => {});
   }, [token, verifyEmail]);
-
   if (!token) {
     return (
       <AuthLayout title="Подтверждение email" subtitle="Ссылка недействительна">
@@ -32,7 +29,6 @@ export function VerifyEmailPage() {
       </AuthLayout>
     );
   }
-
   if (done) {
     return (
       <AuthLayout title="Спасибо!" subtitle="Почта подтверждена">
@@ -48,7 +44,6 @@ export function VerifyEmailPage() {
       </AuthLayout>
     );
   }
-
   return (
     <AuthLayout title="Подтверждение email" subtitle="Проверяем ссылку…">
       {isLoading && <p className="text-sm text-slate-500">Подтверждаем…</p>}

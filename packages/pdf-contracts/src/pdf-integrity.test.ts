@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { analyzePdfIntegrity, parsePdfDate } from './pdf-integrity.js';
-
 function minimalPdf(infoLines: string): Buffer {
   const body = `1 0 obj
 << /Type /Catalog /Pages 2 0 R >>
@@ -21,7 +20,6 @@ startxref
 %%EOF`;
   return Buffer.from(`%PDF-1.4\n${body}`, 'latin1');
 }
-
 describe('parsePdfDate', () => {
   it('parses PDF date string', () => {
     const d = parsePdfDate("D:20231015143022+03'00'");
@@ -30,7 +28,6 @@ describe('parsePdfDate', () => {
     expect(d?.getUTCDate()).toBe(15);
   });
 });
-
 describe('analyzePdfIntegrity', () => {
   it('marks single-save Word-like export as cannot_verify', () => {
     const pdf = minimalPdf(
@@ -40,7 +37,6 @@ describe('analyzePdfIntegrity', () => {
     expect(result.verdict).toBe('cannot_verify');
     expect(result.revisionCount).toBe(1);
   });
-
   it('detects multiple revisions', () => {
     const single = minimalPdf(
       '/Creator (Adobe Acrobat) /Producer (Adobe Acrobat) /CreationDate (D:20240101120000Z) /ModDate (D:20240201120000Z)',
@@ -52,7 +48,6 @@ describe('analyzePdfIntegrity', () => {
     expect(result.verdict).toBe('modified');
     expect(result.score).toBeGreaterThanOrEqual(45);
   });
-
   it('strips null bytes from pdf metadata strings', () => {
     const pdf = minimalPdf(
       '/Creator (\u0000Adobe\u0000) /Producer (Test) /CreationDate (D:20240101120000Z) /ModDate (D:20240101120000Z)',

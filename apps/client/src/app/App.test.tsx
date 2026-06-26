@@ -4,7 +4,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { createAppStore } from '@folio-mind/store';
 import { App } from './App';
-
 describe('App', () => {
   it('renders landing', () => {
     const store = createAppStore();

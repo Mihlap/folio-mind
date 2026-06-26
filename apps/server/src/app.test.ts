@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
-
 const testEnv = {
   NODE_ENV: 'test' as const,
   PORT: 3001,
@@ -23,8 +22,8 @@ const testEnv = {
   PREVIEW_INITIAL_PAGES: 15,
   PREVIEW_MAX_PAGES: 200,
   PREVIEW_THUMB_BATCH: 20,
-  PREVIEW_JOB_TIMEOUT_MS: 300_000,
-  AI_JOB_TIMEOUT_MS: 180_000,
+  PREVIEW_JOB_TIMEOUT_MS: 300000,
+  AI_JOB_TIMEOUT_MS: 180000,
   QUEUE_WARN_WAITING: 50,
   EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: 60,
   MAGIC_LINK_TOKEN_TTL_MINUTES: 15,
@@ -32,14 +31,12 @@ const testEnv = {
   SMS_PROVIDER: 'dummy' as const,
   SMS_CODE_TTL_MINUTES: 5,
 };
-
 describe('API /health', () => {
   it('returns ok without database', async () => {
     const app = await buildApp({
-      env: { ...testEnv, DATABASE_URL: undefined },
+      env: { ...testEnv, DATABASE_URL: undefined, REDIS_URL: '' },
       skipDatabase: true,
     });
-
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -48,20 +45,20 @@ describe('API /health', () => {
     await app.close();
   });
 });
-
 describe('API /auth/register', () => {
   it('creates tenant and user', async () => {
     const app = await buildApp({ env: testEnv });
     const email = `reg-${Date.now()}@folio-mind.test`;
-
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
       payload: { email, password: 'Password123', name: 'vv' },
     });
-
     expect(res.statusCode).toBe(201);
-    const body = res.json() as { needsEmailVerification: boolean; email: string };
+    const body = res.json() as {
+      needsEmailVerification: boolean;
+      email: string;
+    };
     expect(body.needsEmailVerification).toBe(true);
     expect(body.email).toBe(email.toLowerCase());
     await app.close();

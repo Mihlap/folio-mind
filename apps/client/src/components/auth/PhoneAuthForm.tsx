@@ -7,9 +7,7 @@ import {
 } from '@folio-mind/store';
 import { useAppDispatch } from '../../hooks/index.js';
 import { Button } from '../ui/Button.js';
-
 type Mode = 'register' | 'login';
-
 export function PhoneAuthForm({ mode }: { mode: Mode }) {
   const dispatch = useAppDispatch();
   const [phone, setPhone] = useState('');
@@ -19,17 +17,14 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
   const [timer, setTimer] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const [sendCode, { isLoading: sendingCode }] = useSendPhoneCodeMutation();
   const [phoneRegister, { isLoading: registering }] = usePhoneRegisterMutation();
   const [phoneLogin, { isLoading: loggingIn }] = usePhoneLoginMutation();
-
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
-
   function startTimer() {
     setTimer(60);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -43,7 +38,6 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
       });
     }, 1000);
   }
-
   function normalizePhone(raw: string): string {
     const digits = raw.replace(/\D/g, '');
     if (digits.length === 10) return `+7${digits}`;
@@ -51,7 +45,6 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
     if (digits.length === 11 && digits.startsWith('8')) return `+7${digits.slice(1)}`;
     return `+${digits}`;
   }
-
   async function handleSendCode() {
     setError(null);
     if (phone.replace(/\D/g, '').length < 10) {
@@ -66,16 +59,13 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
       setError('Не удалось отправить код. Попробуйте позже.');
     }
   }
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-
     if (mode === 'register' && !name.trim()) {
       setError('Укажите имя');
       return;
     }
-
     try {
       const normalizedPhone = normalizePhone(phone);
       if (mode === 'register') {
@@ -95,16 +85,20 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
       window.location.href = '/app';
     } catch (err) {
       if (err && typeof err === 'object' && 'data' in err) {
-        const data = (err as { data?: { message?: string } }).data;
+        const data = (
+          err as {
+            data?: {
+              message?: string;
+            };
+          }
+        ).data;
         setError(data?.message ?? 'Ошибка входа');
       } else {
         setError('Не удалось войти');
       }
     }
   }
-
   const isLoading = sendingCode || registering || loggingIn;
-
   if (!codeSent) {
     return (
       <div className="space-y-4">
@@ -136,7 +130,6 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
       </div>
     );
   }
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <p className="text-sm text-slate-500">Код отправлен на {normalizePhone(phone)}</p>

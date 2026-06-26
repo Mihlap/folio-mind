@@ -37,6 +37,9 @@ secrets/
 .DS_Store
 Thumbs.db
 
+# Shared tmp for LibreOffice docker exec
+/tmp/
+
 # Mobile native (if generated locally)
 apps/mobile/android
 apps/mobile/ios

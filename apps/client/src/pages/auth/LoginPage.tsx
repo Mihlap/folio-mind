@@ -10,9 +10,7 @@ import { PhoneAuthForm } from '../../components/auth/PhoneAuthForm.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
-
 type AuthTab = 'email' | 'phone';
-
 export function LoginPage() {
   const [tab, setTab] = useState<AuthTab>('email');
   const [login, { isLoading, error }] = useLoginMutation();
@@ -25,8 +23,11 @@ export function LoginPage() {
     error &&
     typeof error === 'object' &&
     'status' in error &&
-    (error as { status?: number }).status === 403;
-
+    (
+      error as {
+        status?: number;
+      }
+    ).status === 403;
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (isTurnstileEnabled && !captchaToken) return;
@@ -38,11 +39,8 @@ export function LoginPage() {
       }).unwrap();
       dispatch(setCredentials(res));
       navigate('/app');
-    } catch {
-      // error shown below
-    }
+    } catch {}
   }
-
   return (
     <AuthLayout title="Вход" subtitle="Продолжите работу с документами">
       <div className="relative mb-4 flex rounded-lg border border-slate-200 bg-slate-50 p-1">
@@ -57,9 +55,7 @@ export function LoginPage() {
           type="button"
           onClick={() => setTab('email')}
           className={`relative z-10 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-            tab === 'email'
-              ? 'text-slate-900'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'email' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Почта
@@ -68,9 +64,7 @@ export function LoginPage() {
           type="button"
           onClick={() => setTab('phone')}
           className={`relative z-10 flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-            tab === 'phone'
-              ? 'text-slate-900'
-              : 'text-slate-500 hover:text-slate-700'
+            tab === 'phone' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Телефон
@@ -148,7 +142,6 @@ export function LoginPage() {
     </AuthLayout>
   );
 }
-
 function Field({
   label,
   type,

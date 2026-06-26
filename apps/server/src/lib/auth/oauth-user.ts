@@ -1,7 +1,6 @@
 import type { PrismaClient, User } from '@prisma/client';
 import { hashUnusablePassword } from './password.js';
 import type { OAuthProfile } from './oauth-providers.js';
-
 export async function findOrCreateUserFromOAuth(
   prisma: PrismaClient,
   provider: string,
@@ -25,7 +24,6 @@ export async function findOrCreateUserFromOAuth(
     }
     return linked.user;
   }
-
   const byEmail = await prisma.user.findUnique({ where: { email: profile.email } });
   if (byEmail) {
     await prisma.oAuthAccount.create({
@@ -43,7 +41,6 @@ export async function findOrCreateUserFromOAuth(
     }
     return byEmail;
   }
-
   const tenant = await prisma.tenant.create({
     data: { name: `${profile.email.split('@')[0]} workspace` },
   });

@@ -16,19 +16,19 @@ pnpm dev                      # turbo: client(5173), server(3001), worker
 
 ## Commands
 
-| Command | What |
-|---|---|
-| `pnpm dev` | client + server + worker (turbo) |
-| `pnpm dev:client` | client only |
-| `pnpm dev:server` | server only |
-| `pnpm build` | all packages → dist/ |
-| `pnpm lint` | ESLint flat config across all `**/*.{ts,tsx}` |
-| `pnpm typecheck` | turbo (dependsOn `^build`) |
-| `pnpm test` | turbo (dependsOn `^build`) |
-| `pnpm format` | prettier `**/*.{ts,tsx,js,mjs,json,md}` |
-| `pnpm db:push` | fast schema sync (use instead of migrate) |
-| `pnpm db:generate` | re-generate Prisma client |
-| `pnpm smoke:phase1` | smoke test via `tools/smoke-phase1.mjs` |
+| Command             | What                                          |
+| ------------------- | --------------------------------------------- |
+| `pnpm dev`          | client + server + worker (turbo)              |
+| `pnpm dev:client`   | client only                                   |
+| `pnpm dev:server`   | server only                                   |
+| `pnpm build`        | all packages → dist/                          |
+| `pnpm lint`         | ESLint flat config across all `**/*.{ts,tsx}` |
+| `pnpm typecheck`    | turbo (dependsOn `^build`)                    |
+| `pnpm test`         | turbo (dependsOn `^build`)                    |
+| `pnpm format`       | prettier `**/*.{ts,tsx,js,mjs,json,md}`       |
+| `pnpm db:push`      | fast schema sync (use instead of migrate)     |
+| `pnpm db:generate`  | re-generate Prisma client                     |
+| `pnpm smoke:phase1` | smoke test via `tools/smoke-phase1.mjs`       |
 
 CI order: `lint` → `typecheck` → `test`. Typecheck & test need build first (turbo handles this).
 

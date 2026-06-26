@@ -217,10 +217,9 @@ async function runOneUpload(token, pdfBuffer, index) {
   const targetThumbs = Math.min(PAGE_COUNT, 60);
   const previews = await waitForPreviewRange(token, documentId, versionId, targetThumbs);
 
-  const fileRes = await fetch(
-    `${API}/documents/${documentId}/versions/${versionId}/file`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const fileRes = await fetch(`${API}/documents/${documentId}/versions/${versionId}/file`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (!fileRes.ok) {
     throw new Error(`file download failed: ${fileRes.status}`);
   }
@@ -288,7 +287,9 @@ async function main() {
   }
 
   const meta = await measureMetaLatency(token, results[0].documentId);
-  console.log(`\nAPI latency p95: GET /documents ${meta.listP95.toFixed(0)} ms, GET /documents/:id ${meta.getP95.toFixed(0)} ms`);
+  console.log(
+    `\nAPI latency p95: GET /documents ${meta.listP95.toFixed(0)} ms, GET /documents/:id ${meta.getP95.toFixed(0)} ms`,
+  );
 
   const failedMeta = meta.listP95 > P95_LIMIT_MS || meta.getP95 > P95_LIMIT_MS;
   if (failedMeta) {

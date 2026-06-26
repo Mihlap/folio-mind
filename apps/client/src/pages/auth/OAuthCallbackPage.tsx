@@ -3,21 +3,18 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { setToken } from '@folio-mind/store';
 import { useAppDispatch } from '../../hooks/index.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
-
 export function OAuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const token = searchParams.get('token');
   const error = searchParams.get('error');
-
   useEffect(() => {
     if (token) {
       dispatch(setToken(token));
       navigate('/app', { replace: true });
     }
   }, [token, dispatch, navigate]);
-
   if (error) {
     return (
       <AuthLayout title="Ошибка входа" subtitle="OAuth">
@@ -28,7 +25,6 @@ export function OAuthCallbackPage() {
       </AuthLayout>
     );
   }
-
   if (token) {
     return (
       <AuthLayout title="Вход…" subtitle="OAuth">
@@ -36,7 +32,6 @@ export function OAuthCallbackPage() {
       </AuthLayout>
     );
   }
-
   return (
     <AuthLayout title="OAuth" subtitle="Нет данных для входа">
       <Link to="/login" className="block text-center text-sm font-medium text-folio-600">

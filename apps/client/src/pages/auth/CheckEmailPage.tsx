@@ -10,9 +10,9 @@ import { Button } from '../../components/ui/Button.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { getStoredAuthToken, subscribeToAuthFromOtherTabs } from '../../lib/auth/authCrossTab.js';
-
-type LocationState = { email?: string };
-
+type LocationState = {
+  email?: string;
+};
 export function CheckEmailPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -22,7 +22,6 @@ export function CheckEmailPage() {
   const [verifiedInOtherTab, setVerifiedInOtherTab] = useState(false);
   const [resend, { isLoading, isSuccess, error }] = useResendVerificationMutation();
   const [checkVerificationStatus] = useEmailVerificationStatusMutation();
-
   useEffect(() => {
     function enterApp() {
       const token = getStoredAuthToken();
@@ -33,22 +32,18 @@ export function CheckEmailPage() {
       dispatch(setToken(token));
       navigate('/app', { replace: true });
     }
-
     const existing = getStoredAuthToken();
     if (existing) {
       dispatch(setToken(existing));
       navigate('/app', { replace: true });
       return;
     }
-
     return subscribeToAuthFromOtherTabs(enterApp);
   }, [dispatch, navigate]);
-
   useEffect(() => {
     const currentEmail = email.trim();
     if (!currentEmail) return;
     if (verifiedInOtherTab) return;
-
     const interval = window.setInterval(() => {
       void checkVerificationStatus({ email: currentEmail })
         .unwrap()
@@ -59,16 +54,13 @@ export function CheckEmailPage() {
         })
         .catch(() => {});
     }, 3000);
-
     return () => window.clearInterval(interval);
   }, [email, verifiedInOtherTab, checkVerificationStatus]);
-
   async function onResend(e: FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
     await resend({ email: email.trim() });
   }
-
   if (verifiedInOtherTab) {
     return (
       <AuthLayout title="Email подтверждён" subtitle="Регистрация завершена">
@@ -82,7 +74,6 @@ export function CheckEmailPage() {
       </AuthLayout>
     );
   }
-
   return (
     <AuthLayout title="Проверьте почту" subtitle="Подтвердите регистрацию">
       <p className="text-sm text-slate-600">
@@ -106,7 +97,9 @@ export function CheckEmailPage() {
         </Button>
       </form>
       {isSuccess && (
-        <p className="mt-3 text-sm text-green-700">Если аккаунт не подтверждён, письмо отправлено.</p>
+        <p className="mt-3 text-sm text-green-700">
+          Если аккаунт не подтверждён, письмо отправлено.
+        </p>
       )}
       {error && (
         <p className="mt-3 text-sm text-red-600">

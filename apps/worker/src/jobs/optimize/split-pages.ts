@@ -12,7 +12,6 @@ import {
   isWorkerS3Configured,
   putObjectBuffer,
 } from '../../lib/storage/s3.js';
-
 type SplitPagesPayload = WorkerJobPayload & {
   operationJobId?: string;
   documentId?: string;
@@ -22,7 +21,6 @@ type SplitPagesPayload = WorkerJobPayload & {
   targetS3Key?: string;
   pages?: number[];
 };
-
 export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPayload): Promise<void> {
   const {
     operationJobId,
@@ -34,7 +32,6 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
     pages,
     requestId,
   } = data;
-
   if (
     !operationJobId ||
     !documentId ||
@@ -47,15 +44,12 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
   ) {
     throw new Error('Split pages job: missing required payload fields');
   }
-
   const prisma = getPrisma();
   await prisma.job.update({ where: { id: operationJobId }, data: { status: 'processing' } });
-
   try {
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
     }
-
     const exists = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },
       select: { id: true },
@@ -67,7 +61,6 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
       });
       return;
     }
-
     const sourcePdfBuffer = await getObjectBuffer(sourceS3Key);
     const sourcePdf = await PDFDocument.load(sourcePdfBuffer);
     const sourcePageCount = sourcePdf.getPageCount();
@@ -76,7 +69,6 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
         throw new Error(`Page ${page} out of range 1..${sourcePageCount}`);
       }
     }
-
     const outputPdf = await PDFDocument.create();
     const copiedPages = await outputPdf.copyPages(
       sourcePdf,
@@ -85,7 +77,6 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
     copiedPages.forEach((page) => outputPdf.addPage(page));
     const outputBytes = await outputPdf.save();
     const outputBuffer = Buffer.from(outputBytes);
-
     const existsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },
       select: { id: true },
@@ -97,13 +88,11 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
       });
       return;
     }
-
     await putObjectBuffer({
       key: targetS3Key,
       body: outputBuffer,
       contentType: 'application/pdf',
     });
-
     const previewJobId = await finalizeOptimizeVersion({
       env,
       data,
@@ -116,7 +105,6 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
       operationMeta: { sourceVersionId },
       requestId,
     });
-
     await prisma.job.update({
       where: { id: operationJobId },
       data: {
@@ -136,9 +124,7 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
     const message = err instanceof Error ? err.message : 'Split pages failed';
     try {
       await deleteObjectByKey(targetS3Key);
-    } catch {
-      // часть S3 объектов могла уже быть удалена/не создана
-    }
+    } catch {}
     try {
       await failOptimizeOperation({
         operationJobId,
@@ -146,9 +132,7 @@ export async function processSplitPagesJob(env: WorkerEnv, data: SplitPagesPaylo
         error: message,
         payload: { documentId, sourceVersionId, pages },
       });
-    } catch {
-      // версия могла быть удалена в момент выполнения
-    }
+    } catch {}
     throw err;
   }
 }

@@ -6,13 +6,11 @@ import { TurnstileWidget } from '../../components/auth/TurnstileWidget.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
-
 export function MagicLinkPage() {
   const [email, setEmail] = useState('');
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [requestMagicLink, { isLoading, error }] = useRequestMagicLinkMutation();
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (isTurnstileEnabled && !captchaToken) return;
@@ -23,11 +21,8 @@ export function MagicLinkPage() {
         captchaToken: captchaToken ?? undefined,
       }).unwrap();
       setSent(true);
-    } catch {
-      // shown below
-    }
+    } catch {}
   }
-
   return (
     <AuthLayout title="Вход по ссылке" subtitle="Без пароля — письмо на почту">
       <form onSubmit={onSubmit} className="space-y-4">

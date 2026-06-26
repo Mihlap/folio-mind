@@ -13,30 +13,32 @@ import { findDocumentForUser, getAuthUser } from '../lib/documents/document-acce
 import { getCachedSummary } from '../lib/ai/ai-cache.js';
 import { AiLimitError, checkAndIncrementAiUsage, getAiUsageToday } from '../lib/ai/ai-limits.js';
 import type { Env } from '../lib/config/env.js';
-import { createLLMFromEnv, getAiProviderCatalog, getConfiguredProviderName } from '../lib/ai/llm.js';
+import {
+  createLLMFromEnv,
+  getAiProviderCatalog,
+  getConfiguredProviderName,
+} from '../lib/ai/llm.js';
 import { enqueueAiJob, enqueueApplyAcceptedSuggestionsJob } from '../lib/queue/queue.js';
 import { getPresignedGetUrl, isS3Configured, putObjectByKey } from '../lib/storage/s3.js';
 import { resolveDefaultProvider, type AIProviderName } from '@folio-mind/ai-providers';
-
 const errorBody = z.object({ error: z.string() });
 const require = createRequire(import.meta.url);
-
 function buildOriginalKey(documentId: string, version: number, fileName: string) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   return resolveS3Key('originals', `${documentId}/v${version}-${safeName}`);
 }
-
 const chatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
-  content: z.string().max(16_000),
+  content: z.string().max(16000),
 });
-
-
 function buildReportMarkdown(params: {
   title: string;
   version: number;
   summary: string;
-  chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  chatMessages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
 }): string {
   const lines = [
     `# Отчёт по документу: ${params.title}`,
@@ -48,7 +50,6 @@ function buildReportMarkdown(params: {
     '',
     params.summary,
   ];
-
   if (params.chatMessages.length > 0) {
     lines.push('', '## Диалог с ИИ', '');
     for (const msg of params.chatMessages) {
@@ -56,16 +57,17 @@ function buildReportMarkdown(params: {
       lines.push(`### ${label}`, '', msg.content, '');
     }
   }
-
   lines.push('', '---', '_Сгенерировано Folio Mind / РазУм_');
   return lines.join('\n');
 }
-
 function buildWordHtml(params: {
   title: string;
   version: number;
   summary: string;
-  chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  chatMessages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
 }): string {
   const escapeHtml = (value: string) =>
     value
@@ -74,7 +76,6 @@ function buildWordHtml(params: {
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
-
   const chatHtml =
     params.chatMessages.length === 0
       ? ''
@@ -84,7 +85,6 @@ function buildWordHtml(params: {
               `<h3>${msg.role === 'user' ? 'Вопрос' : 'Ответ'}</h3><p>${escapeHtml(msg.content).replaceAll('\n', '<br/>')}</p>`,
           )
           .join('')}`;
-
   return `<!doctype html>
 <html lang="ru">
 <head>
@@ -109,12 +109,14 @@ function buildWordHtml(params: {
 </body>
 </html>`;
 }
-
 async function buildPdfReport(params: {
   title: string;
   version: number;
   summary: string;
-  chatMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  chatMessages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
 }): Promise<Buffer> {
   const PdfKitModule = require('pdfkit');
   const PDFDocument = PdfKitModule?.default ?? PdfKitModule;
@@ -123,13 +125,11 @@ async function buildPdfReport(params: {
     try {
       const doc = new PDFDocument({ size: 'A4', margin: 48 });
       const chunks: Buffer[] = [];
-
       const fontCandidates = ['C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/segoeui.ttf'];
       const fontPath = fontCandidates.find((candidate) => existsSync(candidate));
       if (fontPath) {
         doc.font(fontPath);
       }
-
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
       doc.on('end', () => {
         clearTimeout(timeout);
@@ -139,18 +139,15 @@ async function buildPdfReport(params: {
         clearTimeout(timeout);
         reject(error);
       });
-
       doc.fontSize(18).text(`Отчёт по документу: ${params.title}`);
       doc.moveDown(0.4);
       doc.fillColor('#4B5563').fontSize(10).text(`Версия: ${params.version}`);
       doc.text(`Дата: ${new Date().toISOString()}`);
       doc.fillColor('#111827');
-
       doc.moveDown(1);
       doc.fontSize(14).text('Пересказ');
       doc.moveDown(0.3);
       doc.fontSize(11).text(params.summary, { lineGap: 2 });
-
       if (params.chatMessages.length > 0) {
         doc.moveDown(1);
         doc.fontSize(14).text('Диалог с ИИ');
@@ -161,7 +158,6 @@ async function buildPdfReport(params: {
           doc.fontSize(11).text(msg.content, { lineGap: 2 });
         }
       }
-
       doc.moveDown(1.2);
       doc.fillColor('#6B7280').fontSize(9).text('Сгенерировано Folio Mind / РазУм');
       doc.end();
@@ -171,11 +167,11 @@ async function buildPdfReport(params: {
     }
   });
 }
-
-export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
+export const aiRoutes: FastifyPluginAsync<{
+  env: Env;
+}> = async (app, opts) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const env = opts.env;
-
   r.get(
     '/ai/providers',
     {
@@ -209,15 +205,14 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       };
     },
   );
-
   r.post(
     '/ai/complete',
     {
       preHandler: [app.authenticate],
       schema: {
         body: z.object({
-          prompt: z.string().min(1).max(32_000),
-          system: z.string().max(8_000).optional(),
+          prompt: z.string().min(1).max(32000),
+          system: z.string().max(8000).optional(),
           provider: z.enum(['gigachat', 'yandex']).optional(),
         }),
         response: {
@@ -240,9 +235,7 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         }
         throw err;
       }
-
-      const providerName: AIProviderName =
-        request.body.provider ?? getConfiguredProviderName(env);
+      const providerName: AIProviderName = request.body.provider ?? getConfiguredProviderName(env);
       const llm = createLLMFromEnv(env, providerName);
       const result = await llm.complete({
         prompt: request.body.prompt,
@@ -255,7 +248,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       };
     },
   );
-
   r.post(
     '/documents/:documentId/versions/:versionId/ai/summary',
     {
@@ -281,17 +273,14 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status === 'pending_upload') {
         return reply.code(400).send({ error: 'Version not ready' });
       }
-
       const cached = await getCachedSummary(env, versionId);
       if (cached) {
         const job = await app.prisma.job.create({
@@ -311,7 +300,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         });
         return { jobId: job.id, status: 'completed', cached: true };
       }
-
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
       } catch (err) {
@@ -320,7 +308,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         }
         throw err;
       }
-
       const job = await app.prisma.job.create({
         data: {
           type: 'ai-summary',
@@ -333,7 +320,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           },
         },
       });
-
       await enqueueAiJob(env, {
         jobId: job.id,
         documentId,
@@ -342,11 +328,9 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         type: 'summary',
         requestId: request.requestId,
       });
-
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
-
   r.post(
     '/documents/:documentId/versions/:versionId/ai/chat',
     {
@@ -357,7 +341,7 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           versionId: z.string(),
         }),
         body: z.object({
-          prompt: z.string().min(1).max(8_000),
+          prompt: z.string().min(1).max(8000),
           provider: z.enum(['gigachat', 'yandex']).optional(),
           history: z.array(chatMessageSchema).max(20).optional(),
         }),
@@ -373,17 +357,14 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status === 'pending_upload') {
         return reply.code(400).send({ error: 'Version not ready' });
       }
-
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
       } catch (err) {
@@ -392,7 +373,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         }
         throw err;
       }
-
       const job = await app.prisma.job.create({
         data: {
           type: 'ai-chat',
@@ -407,7 +387,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           },
         },
       });
-
       await enqueueAiJob(env, {
         jobId: job.id,
         documentId,
@@ -417,11 +396,9 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         prompt: request.body.prompt,
         requestId: request.requestId,
       });
-
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
-
   const suggestionItemSchema = z.object({
     id: z.string(),
     fragmentId: z.string(),
@@ -432,7 +409,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
     status: z.string(),
     createdAt: z.string(),
   });
-
   r.get(
     '/documents/:documentId/versions/:versionId/ai/suggestions',
     {
@@ -452,12 +428,10 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-
       const items = await app.prisma.aiSuggestion.findMany({
         where: { documentId, versionId, tenantId: user.tenantId },
         orderBy: { createdAt: 'asc' },
       });
-
       return {
         items: items.map((item) => ({
           id: item.id,
@@ -472,7 +446,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       };
     },
   );
-
   r.post(
     '/documents/:documentId/versions/:versionId/ai/suggestions',
     {
@@ -492,7 +465,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
@@ -501,7 +473,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       if (!version || version.status !== 'ready') {
         return reply.code(400).send({ error: 'Version not ready' });
       }
-
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
       } catch (err) {
@@ -510,7 +481,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         }
         throw err;
       }
-
       const job = await app.prisma.job.create({
         data: {
           type: 'ai-suggestions',
@@ -519,7 +489,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           payload: { documentId, versionId, provider },
         },
       });
-
       await enqueueAiJob(env, {
         jobId: job.id,
         documentId,
@@ -528,11 +497,9 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         type: 'suggestions',
         requestId: request.requestId,
       });
-
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
-
   r.patch(
     '/documents/:documentId/versions/:versionId/ai/suggestions/:suggestionId',
     {
@@ -553,7 +520,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId, suggestionId } = request.params;
-
       const suggestion = await app.prisma.aiSuggestion.findFirst({
         where: {
           id: suggestionId,
@@ -565,12 +531,10 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       if (!suggestion) {
         return reply.code(404).send({ error: 'Suggestion not found' });
       }
-
       const updated = await app.prisma.aiSuggestion.update({
         where: { id: suggestionId },
         data: { status: request.body.status },
       });
-
       if (request.body.status === 'accepted') {
         await app.prisma.documentAnnotation.create({
           data: {
@@ -585,7 +549,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           },
         });
       }
-
       await app.prisma.auditLog.create({
         data: {
           action:
@@ -598,7 +561,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           meta: { suggestionId, versionId, fragmentId: suggestion.fragmentId },
         },
       });
-
       return {
         id: updated.id,
         fragmentId: updated.fragmentId,
@@ -611,7 +573,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       };
     },
   );
-
   r.post(
     '/documents/:documentId/versions/:versionId/ai/apply-accepted',
     {
@@ -635,19 +596,16 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       if (!isS3Configured()) {
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
-
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-
       const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!sourceVersion || sourceVersion.status !== 'ready') {
         return reply.code(400).send({ error: 'Source version is not ready' });
       }
-
       const [acceptedAiCount, manualEditsCount] = await Promise.all([
         app.prisma.aiSuggestion.count({
           where: { documentId, versionId, tenantId: user.tenantId, status: 'accepted' },
@@ -658,18 +616,15 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       ]);
       if (acceptedAiCount === 0 && manualEditsCount === 0) {
         return reply.code(400).send({
-          error:
-            'Нет правок для сборки. Добавьте свои в «Аннотации» или примите предложения ИИ.',
+          error: 'Нет правок для сборки. Добавьте свои в «Аннотации» или примите предложения ИИ.',
         });
       }
-
       const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
       const targetS3Key = buildOriginalKey(
         document.id,
         nextVersionNumber,
         `edits-from-v${sourceVersion.version}.pdf`,
       );
-
       const [targetVersion, operationJob] = await app.prisma.$transaction([
         app.prisma.documentVersion.create({
           data: {
@@ -679,6 +634,7 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
             size: BigInt(0),
             mimeType: sourceVersion.mimeType,
             status: 'processing',
+            sourceVersionId: sourceVersion.id,
           },
         }),
         app.prisma.job.create({
@@ -695,7 +651,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           },
         }),
       ]);
-
       await enqueueApplyAcceptedSuggestionsJob(env, {
         jobId: `apply-edits-${targetVersion.id}`,
         operationJobId: operationJob.id,
@@ -707,7 +662,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         targetS3Key,
         requestId: request.requestId,
       });
-
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_apply_ai_edits',
@@ -723,7 +677,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           },
         },
       });
-
       return reply.status(202).send({
         operationJobId: operationJob.id,
         versionId: targetVersion.id,
@@ -732,7 +685,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       });
     },
   );
-
   r.post(
     '/documents/:documentId/versions/:versionId/rag/compare',
     {
@@ -755,7 +707,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
@@ -764,7 +715,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
       if (!version || version.status !== 'ready') {
         return reply.code(400).send({ error: 'Version not ready' });
       }
-
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
       } catch (err) {
@@ -773,7 +723,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         }
         throw err;
       }
-
       const job = await app.prisma.job.create({
         data: {
           type: 'rag-compare',
@@ -787,7 +736,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           },
         },
       });
-
       await enqueueAiJob(env, {
         jobId: job.id,
         documentId,
@@ -797,11 +745,9 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         prompt: request.body.query,
         requestId: request.requestId,
       });
-
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
-
   r.post(
     '/documents/:documentId/versions/:versionId/ai/export',
     {
@@ -826,28 +772,23 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-
       const version = document.versions.find(
         (v: { id: string; version: number; status: string }) => v.id === versionId,
       );
       if (!version || version.status === 'pending_upload') {
         return reply.code(400).send({ error: 'Version not ready' });
       }
-
       const cached = await getCachedSummary(env, versionId);
       if (!cached?.summary) {
         return reply.code(400).send({ error: 'Сначала получите пересказ документа' });
       }
-
       if (!isS3Configured()) {
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
-
       const reportPayload = {
         title: document.title,
         version: version.version,
@@ -855,7 +796,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
         chatMessages: request.body.chatMessages ?? [],
       };
       const markdown = buildReportMarkdown(reportPayload);
-
       const format = request.body.format ?? 'md';
       const key =
         format === 'word'
@@ -863,7 +803,6 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           : format === 'pdf'
             ? exportReportPdfKey(documentId, versionId)
             : exportReportKey(documentId, versionId);
-
       const payload =
         format === 'word'
           ? {
@@ -883,9 +822,7 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
                 contentType: 'text/markdown; charset=utf-8',
               };
       await putObjectByKey(payload);
-
       const url = await getPresignedGetUrl({ key, expiresInSeconds: 3600 });
-
       await app.prisma.auditLog.create({
         data: {
           action: 'document.export_report',
@@ -895,11 +832,9 @@ export const aiRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
           meta: { versionId, key },
         },
       });
-
       return { url, key };
     },
   );
-
   r.get(
     '/jobs/:jobId',
     {

@@ -1,13 +1,22 @@
 import type { FastifyRequest } from 'fastify';
-
 export function getAuthUser(request: FastifyRequest) {
-  return request.user as { sub: string; email: string; tenantId: string };
+  return request.user as {
+    sub: string;
+    email: string;
+    tenantId: string;
+  };
 }
-
 export async function findDocumentForUser(
-  prisma: { document: { findFirst: Function } },
+  prisma: {
+    document: {
+      findFirst: Function;
+    };
+  },
   documentId: string,
-  user: { sub: string; tenantId: string },
+  user: {
+    sub: string;
+    tenantId: string;
+  },
 ) {
   return prisma.document.findFirst({
     where: {

@@ -1,15 +1,12 @@
 import type { ReactNode } from 'react';
-
 type Props = {
   open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
 };
-
 export function DocumentMobileSheet({ open, title, onClose, children }: Props) {
   if (!open) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end lg:hidden">
       <button

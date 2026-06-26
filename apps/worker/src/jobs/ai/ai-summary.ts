@@ -7,42 +7,33 @@ import type { WorkerEnv } from '../../lib/config/env.js';
 import { getCachedSummary, setCachedSummary } from '../../lib/infra/redis.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import { getObjectBuffer, isWorkerS3Configured } from '../../lib/storage/s3.js';
-
 const SUMMARY_SYSTEM = `Ты помощник по анализу PDF-документов.
 Сделай краткий пересказ на русском языке: суть, ключевые разделы, важные даты и суммы (если есть).
 Не выдумывай факты, которых нет в документе. 5–10 предложений.`;
-
 const SUMMARY_PDF_PROMPT =
   'Сделай краткий пересказ приложенного PDF-документа на русском языке (5–10 предложений).';
-
 type SummaryJobPayload = WorkerJobPayload & {
   jobId?: string;
   documentId?: string;
   versionId?: string;
   tenantId?: string;
 };
-
 export async function processAiSummaryJob(env: WorkerEnv, data: SummaryJobPayload): Promise<void> {
   const prisma = getPrisma();
   const jobId = data.jobId;
   const versionId = data.versionId;
   const documentId = data.documentId;
-
   if (!jobId || !versionId || !documentId) {
     throw new Error('AI summary job: missing jobId, versionId or documentId');
   }
-
   const dbJob = await prisma.job.findUnique({ where: { id: jobId } });
   if (!dbJob) throw new Error(`Job not found: ${jobId}`);
-
   const jobPayload = (dbJob.payload ?? {}) as Record<string, unknown>;
   const provider = (jobPayload.provider as AIProviderName | undefined) ?? env.AI_PROVIDER;
-
   await prisma.job.update({
     where: { id: jobId },
     data: { status: 'processing' },
   });
-
   try {
     const cached = await getCachedSummary(env.REDIS_URL, versionId);
     if (cached) {
@@ -63,7 +54,6 @@ export async function processAiSummaryJob(env: WorkerEnv, data: SummaryJobPayloa
       });
       return;
     }
-
     const version = await prisma.documentVersion.findUnique({
       where: { id: versionId },
       select: { s3Key: true, mimeType: true },
@@ -74,11 +64,9 @@ export async function processAiSummaryJob(env: WorkerEnv, data: SummaryJobPayloa
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker (.env)');
     }
-
     const pdfBuffer = await getObjectBuffer(version.s3Key);
     const documentText = await loadDocumentText(documentId, versionId, pdfBuffer);
     const llm = createLLMFromWorkerEnv(env, provider);
-
     const result = documentText.trim()
       ? await llm.complete({
           system: SUMMARY_SYSTEM,
@@ -93,7 +81,6 @@ export async function processAiSummaryJob(env: WorkerEnv, data: SummaryJobPayloa
           SUMMARY_SYSTEM,
           SUMMARY_PDF_PROMPT,
         );
-
     const summaryPayload = {
       ...jobPayload,
       documentId,
@@ -103,13 +90,11 @@ export async function processAiSummaryJob(env: WorkerEnv, data: SummaryJobPayloa
       summary: result.text,
       cached: false,
     };
-
     await setCachedSummary(env.REDIS_URL, versionId, {
       summary: result.text,
       model: result.model,
       provider,
     });
-
     await prisma.job.update({
       where: { id: jobId },
       data: {

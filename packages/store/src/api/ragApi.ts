@@ -1,5 +1,4 @@
 import { baseApi } from './baseApi.js';
-
 export type RagSourceItem = {
   id: string;
   title: string;
@@ -8,23 +7,42 @@ export type RagSourceItem = {
   chunkCount: number;
   createdAt: string;
 };
-
 export const ragApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
-    listRagSources: build.query<{ items: RagSourceItem[] }, void>({
+    listRagSources: build.query<
+      {
+        items: RagSourceItem[];
+      },
+      void
+    >({
       query: () => '/rag/sources',
       providesTags: [{ type: 'RagSources', id: 'LIST' }],
     }),
     createRagSource: build.mutation<
-      { sourceId: string; uploadUrl?: string; status: string },
-      { title: string; fileName: string; mimeType: string; size: number }
+      {
+        sourceId: string;
+        uploadUrl?: string;
+        status: string;
+      },
+      {
+        title: string;
+        fileName: string;
+        mimeType: string;
+        size: number;
+      }
     >({
       query: (body) => ({ url: '/rag/sources', method: 'POST', body }),
       invalidatesTags: [{ type: 'RagSources', id: 'LIST' }],
     }),
     completeRagSource: build.mutation<
-      { sourceId: string; status: string; jobId: string },
-      { sourceId: string }
+      {
+        sourceId: string;
+        status: string;
+        jobId: string;
+      },
+      {
+        sourceId: string;
+      }
     >({
       query: ({ sourceId }) => ({
         url: `/rag/sources/${sourceId}/complete`,
@@ -33,12 +51,25 @@ export const ragApi = baseApi.injectEndpoints({
       invalidatesTags: [{ type: 'RagSources', id: 'LIST' }],
     }),
     uploadRagSourceFile: build.mutation<
-      { sourceId: string; status: string; jobId: string },
-      { sourceId: string; file: File }
+      {
+        sourceId: string;
+        status: string;
+        jobId: string;
+      },
+      {
+        sourceId: string;
+        file: File;
+      }
     >({
       async queryFn({ sourceId, file }, { getState }) {
         const { apiBaseUrl } = await import('./baseApi.js');
-        const token = (getState() as { auth: { token: string | null } }).auth.token;
+        const token = (
+          getState() as {
+            auth: {
+              token: string | null;
+            };
+          }
+        ).auth.token;
         const formData = new FormData();
         formData.append('file', file);
         try {
@@ -51,11 +82,23 @@ export const ragApi = baseApi.injectEndpoints({
           if (!res.ok) {
             const err =
               typeof data === 'object' && data && 'error' in data
-                ? String((data as { error: string }).error)
+                ? String(
+                    (
+                      data as {
+                        error: string;
+                      }
+                    ).error,
+                  )
                 : `Ошибка (${res.status})`;
             return { error: { status: res.status, data: err } };
           }
-          return { data: data as { sourceId: string; status: string; jobId: string } };
+          return {
+            data: data as {
+              sourceId: string;
+              status: string;
+              jobId: string;
+            },
+          };
         } catch {
           return { error: { status: 'FETCH_ERROR', error: 'Не удалось загрузить файл' } };
         }
@@ -76,13 +119,15 @@ export const ragApi = baseApi.injectEndpoints({
           content: string;
         }>;
       },
-      { query: string; limit?: number }
+      {
+        query: string;
+        limit?: number;
+      }
     >({
       query: (body) => ({ url: '/rag/query', method: 'POST', body }),
     }),
   }),
 });
-
 export const {
   useListRagSourcesQuery,
   useCreateRagSourceMutation,

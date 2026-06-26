@@ -36,8 +36,6 @@ const STOP_WORDS = new Set([
   'регламент',
   'сверка',
 ]);
-
-/** Ключевые слова из текста договора для подбора фрагментов регламента */
 export function extractRagSearchTerms(text: string, max = 8): string[] {
   const words = text
     .toLowerCase()
@@ -45,7 +43,6 @@ export function extractRagSearchTerms(text: string, max = 8): string[] {
     .split(/\s+/)
     .map((w) => w.trim())
     .filter((w) => w.length >= 4 && !STOP_WORDS.has(w));
-
   const seen = new Set<string>();
   const result: string[] = [];
   for (const word of words) {

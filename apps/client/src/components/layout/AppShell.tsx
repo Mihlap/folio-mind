@@ -1,17 +1,16 @@
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
+import { useRef } from 'react';
 import { logout, useMeQuery } from '@folio-mind/store';
 import { DocumentVersionsSidebar } from '../documents/DocumentVersionsSidebar.js';
 import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
+import { usePanelToggleLeftEdge } from '../../hooks/usePanelToggleCenterY.js';
 import { useAppDispatch } from '../../hooks/index.js';
 import { Button } from '../ui/Button.js';
-import {
-  shellCollapseBtnClass,
-  shellPanelToolbarClass,
-  shellTopHeaderClass,
-} from './shell-chrome.js';
+import { shellTopHeaderClass } from './shell-chrome.js';
 import { PanelResizeHandle } from './PanelResizeHandle.js';
-
+import { PanelViewportToggle } from './PanelViewportToggle.js';
+import { BackgroundUploadBanner } from './BackgroundUploadBanner.js';
 const nav: Array<{
   to: string;
   label: string;
@@ -23,55 +22,48 @@ const nav: Array<{
   { to: '/app/regulations', label: 'Регламенты', end: true, icon: '📋' },
   { to: '/app', label: 'ИИ-проверка', end: false, disabled: true, icon: '🤖' },
 ];
-
 const LEFT_PANEL = {
   defaultWidth: 224,
   minExpandedWidth: 168,
   collapseBelow: 152,
   maxWidth: 320,
 } as const;
-
 export function AppShell() {
   const dispatch = useAppDispatch();
   const { data: me } = useMeQuery();
   const workspaceCtx = useDocumentWorkspaceOptional();
   const isDocumentPage = Boolean(useMatch('/app/documents/:id'));
   const hasVersions = Boolean(workspaceCtx?.workspace && isDocumentPage);
-
   const sidebar = useHorizontalPanelResize({
     side: 'left',
     ...LEFT_PANEL,
   });
-
   const activeVersionLabel = workspaceCtx?.workspace?.versions.find(
     (v) => v.id === workspaceCtx.workspace?.selectedVersionId,
   )?.version;
-
+  const sidebarRef = useRef<HTMLElement>(null);
+  usePanelToggleLeftEdge(sidebarRef, isDocumentPage);
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 md:h-screen md:flex-row md:overflow-hidden">
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-50 md:flex-row">
       <aside
+        ref={sidebarRef}
         style={{ width: sidebar.collapsed ? undefined : sidebar.panelWidth }}
-        className={`relative hidden shrink-0 flex-col border-r border-slate-200 bg-white md:flex ${
-          sidebar.collapsed ? 'md:w-12' : ''
-        } ${sidebar.isResizing ? 'transition-none' : 'transition-[width] duration-200'}`}
+        className={`relative hidden shrink-0 flex-col border-r border-slate-200 bg-white md:flex ${sidebar.collapsed ? 'md:w-12' : ''} ${sidebar.isResizing ? 'transition-none' : 'transition-[width] duration-200'}`}
       >
+        <PanelViewportToggle
+          side="left"
+          expanded={!sidebar.collapsed}
+          syncedToWorkspace={isDocumentPage}
+          onClick={sidebar.collapsed ? sidebar.expand : sidebar.toggleCollapsed}
+          title={sidebar.collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          className="hidden md:flex"
+        />
         {sidebar.collapsed ? (
           <>
             <div className={`${shellTopHeaderClass} justify-center px-1.5`}>
               <span className="font-display text-lg leading-none text-folio-950" title="РазУм">
                 Р
               </span>
-            </div>
-
-            <div className={`${shellPanelToolbarClass} justify-start px-1.5`}>
-              <button
-                type="button"
-                title="Развернуть меню"
-                onClick={sidebar.expand}
-                className={shellCollapseBtnClass}
-              >
-                ▶
-              </button>
             </div>
 
             <nav className="flex flex-col items-center gap-1 p-1.5">
@@ -116,11 +108,7 @@ export function AppShell() {
             {hasVersions && (
               <button
                 type="button"
-                title={
-                  activeVersionLabel
-                    ? `Версии · v${activeVersionLabel}`
-                    : 'Версии документа'
-                }
+                title={activeVersionLabel ? `Версии · v${activeVersionLabel}` : 'Версии документа'}
                 onClick={sidebar.expand}
                 className="mx-auto mt-2 flex h-10 w-10 cursor-pointer flex-col items-center justify-center rounded-lg text-[11px] font-medium text-folio-700 hover:bg-folio-50"
               >
@@ -140,24 +128,13 @@ export function AppShell() {
                 onClick={() => dispatch(logout())}
                 className="flex h-10 w-full cursor-pointer items-center justify-center rounded-lg text-xs text-slate-500 hover:bg-slate-50"
               >
-                ⎋
-                <span className="sr-only">Выйти</span>
+                ⎋<span className="sr-only">Выйти</span>
               </button>
             </div>
           </>
         ) : (
           <>
             <div className={`${shellTopHeaderClass} gap-2 px-2 md:px-3`}>
-              {!isDocumentPage && (
-                <button
-                  type="button"
-                  title="Свернуть меню"
-                  onClick={sidebar.toggleCollapsed}
-                  className={shellCollapseBtnClass}
-                >
-                  ◀
-                </button>
-              )}
               <div className="min-w-0 flex-1 py-1">
                 <span className="font-display text-lg leading-tight text-folio-950 md:text-xl">
                   РазУм
@@ -168,19 +145,6 @@ export function AppShell() {
               </div>
             </div>
 
-            {isDocumentPage && (
-              <div className={`${shellPanelToolbarClass} justify-start px-1.5 md:px-2`}>
-                <button
-                  type="button"
-                  title="Свернуть меню"
-                  onClick={sidebar.toggleCollapsed}
-                  className={shellCollapseBtnClass}
-                >
-                  ◀
-                </button>
-              </div>
-            )}
-
             <nav
               className={`overflow-x-auto p-1.5 md:p-2 ${hasVersions ? 'shrink-0' : 'flex-1 md:overflow-y-auto'}`}
             >
@@ -190,9 +154,7 @@ export function AppShell() {
                   end
                   className={({ isActive }) =>
                     `block rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition ${
-                      isActive
-                        ? 'bg-folio-50 text-folio-700'
-                        : 'text-slate-600 hover:bg-slate-50'
+                      isActive ? 'bg-folio-50 text-folio-700' : 'text-slate-600 hover:bg-slate-50'
                     }`
                   }
                 >
@@ -240,7 +202,6 @@ export function AppShell() {
         )}
       </aside>
 
-      {/* Мобильная шапка навигации */}
       <aside className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white md:hidden">
         <div className="border-b border-slate-100 px-3 py-3">
           <span className="font-display text-lg text-folio-950">РазУм</span>
@@ -275,14 +236,12 @@ export function AppShell() {
     </div>
   );
 }
-
 function MainContent({ isDocumentPage }: { isDocumentPage: boolean }) {
   return (
     <main
-      className={`flex min-h-0 flex-1 flex-col ${
-        isDocumentPage ? 'overflow-hidden' : 'overflow-auto'
-      }`}
+      className={`flex min-h-0 flex-1 flex-col ${isDocumentPage ? 'overflow-hidden' : 'overflow-auto'}`}
     >
+      <BackgroundUploadBanner />
       <Outlet />
     </main>
   );

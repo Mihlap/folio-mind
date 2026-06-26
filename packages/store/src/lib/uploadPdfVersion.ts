@@ -1,52 +1,84 @@
 import { putFileToPresignedUrl, isLikelyCorsOrNetworkError } from './presignedUpload.js';
-
 export type UploadPdfVersionArgs = {
   documentId: string;
   versionId: string;
   file: File;
   uploadUrl: string;
-  completeUpload: (args: {
-    documentId: string;
+  completeUpload: (args: { documentId: string; versionId: string }) => Promise<{
     versionId: string;
-  }) => Promise<{ versionId: string; status: string; jobId: string }>;
-  fallbackProxyUpload: (args: {
-    documentId: string;
+    status: string;
+    jobId: string;
+  }>;
+  fallbackProxyUpload: (args: { documentId: string; versionId: string; file: File }) => Promise<{
     versionId: string;
-    file: File;
-  }) => Promise<{ versionId: string; status: string; jobId: string }>;
+    status: string;
+    jobId: string;
+  }>;
   onProgress?: (percent: number) => void;
 };
-
-export async function uploadPdfVersion(
-  args: UploadPdfVersionArgs,
-): Promise<{ versionId: string; status: string; jobId: string; via: 'presigned' | 'proxy' }> {
+function isProxyStorageError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  if (
+    'status' in err &&
+    (
+      err as {
+        status: unknown;
+      }
+    ).status === 503
+  )
+    return true;
+  if (
+    'data' in err &&
+    typeof (
+      err as {
+        data: unknown;
+      }
+    ).data === 'string'
+  ) {
+    return /S3|хранилищ|ECONNRESET|недоступн/i.test(
+      (
+        err as {
+          data: string;
+        }
+      ).data,
+    );
+  }
+  return isLikelyCorsOrNetworkError(err);
+}
+export async function uploadPdfVersion(args: UploadPdfVersionArgs): Promise<{
+  versionId: string;
+  status: string;
+  jobId: string;
+  via: 'presigned' | 'proxy';
+}> {
   const contentType = args.file.type || 'application/pdf';
-
+  let smoothProgress = 5;
+  args.onProgress?.(smoothProgress);
+  const timer = setInterval(() => {
+    smoothProgress = Math.min(92, smoothProgress + 3);
+    args.onProgress?.(smoothProgress);
+  }, 350);
   try {
-    await putFileToPresignedUrl(args.uploadUrl, args.file, contentType, args.onProgress);
-    const result = await args.completeUpload({
+    const result = await args.fallbackProxyUpload({
       documentId: args.documentId,
       versionId: args.versionId,
+      file: args.file,
     });
-    return { ...result, via: 'presigned' };
-  } catch (err) {
-    if (!isLikelyCorsOrNetworkError(err)) throw err;
-    args.onProgress?.(10);
-    let smoothProgress = 10;
-    const timer = setInterval(() => {
-      smoothProgress = Math.min(95, smoothProgress + 5);
-      args.onProgress?.(smoothProgress);
-    }, 250);
+    args.onProgress?.(100);
+    return { ...result, via: 'proxy' };
+  } catch (proxyErr) {
+    if (!isProxyStorageError(proxyErr)) throw proxyErr;
     try {
-      const result = await args.fallbackProxyUpload({
+      await putFileToPresignedUrl(args.uploadUrl, args.file, contentType, args.onProgress);
+      const result = await args.completeUpload({
         documentId: args.documentId,
         versionId: args.versionId,
-        file: args.file,
       });
-      args.onProgress?.(100);
-      return { ...result, via: 'proxy' };
-    } finally {
-      clearInterval(timer);
+      return { ...result, via: 'presigned' };
+    } catch {
+      throw proxyErr;
     }
+  } finally {
+    clearInterval(timer);
   }
 }

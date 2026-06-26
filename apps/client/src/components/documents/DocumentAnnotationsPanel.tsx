@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   useApplyAcceptedSuggestionsMutation,
+  useApplyEditsFinalMutation,
   useCreateAnnotationMutation,
   useDeleteAnnotationMutation,
+  useGetDocumentQuery,
   useGetJobQuery,
+  useLazyGetDownloadUrlQuery,
+  useLazyGetSourceDocxUrlQuery,
   useListAnnotationsQuery,
 } from '@folio-mind/store';
 import {
@@ -13,7 +17,9 @@ import {
   reportActionBtnPrimary,
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
-
+import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
+import { ExpandableEditField } from './ExpandableEditField.js';
+import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 type Props = {
   documentId: string;
   versionId: string;
@@ -25,9 +31,11 @@ type Props = {
   onSelectVersion: (versionId: string) => void;
   focusedAnnotationId?: string | null;
   injectedEditBefore?: string | null;
-  injectedCoords?: { x?: number; y?: number } | null;
+  injectedCoords?: {
+    x?: number;
+    y?: number;
+  } | null;
 };
-
 export function DocumentAnnotationsPanel({
   documentId,
   versionId,
@@ -48,6 +56,10 @@ export function DocumentAnnotationsPanel({
   const [createAnnotation, { isLoading: creating }] = useCreateAnnotationMutation();
   const [deleteAnnotation] = useDeleteAnnotationMutation();
   const [applyAccepted, { isLoading: applying }] = useApplyAcceptedSuggestionsMutation();
+  const [applyEditsFinal, { isLoading: applyingFinal }] = useApplyEditsFinalMutation();
+  const { data: docData } = useGetDocumentQuery(documentId, { skip: !documentId });
+  const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
+  const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [content, setContent] = useState('');
   const [editBefore, setEditBefore] = useState('');
   const [editAfter, setEditAfter] = useState('');
@@ -56,13 +68,14 @@ export function DocumentAnnotationsPanel({
   const [pollApply, setPollApply] = useState(false);
   const [applyHint, setApplyHint] = useState<string | null>(null);
   const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
-  const pendingCoordsRef = useRef<{ x?: number; y?: number } | null>(null);
-
+  const pendingCoordsRef = useRef<{
+    x?: number;
+    y?: number;
+  } | null>(null);
   const { data: applyJob } = useGetJobQuery(applyJobId!, {
     skip: !applyJobId,
     pollingInterval: pollApply ? 2000 : 0,
   });
-
   useEffect(() => {
     setContent('');
     setEditBefore('');
@@ -72,52 +85,75 @@ export function DocumentAnnotationsPanel({
     setPollApply(false);
     setApplyHint(null);
   }, [versionId]);
-
   useEffect(() => {
     if (!applyJob) return;
     if (applyJob.status === 'completed') {
       setPollApply(false);
-      setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
+      const p = applyJob.payload as Record<string, unknown> | null;
+      if (p?.status === 'success') {
+        setApplyHint(
+          p?.method === 'docx-fallback-overlay'
+            ? String(
+                p.message ??
+                  'Текст из PDF не совпал с Word — правки наложены на PDF. Для идеального качества сверьте «было» с DOCX.',
+              )
+            : 'Новая версия с правками готова!',
+        );
+      } else if (p?.status === 'docx_only') {
+        setApplyHint(String(p.message ?? 'Правки применены — DOCX готов, PDF не создан.'));
+      } else if (p?.status === 'partial' || p?.method === 'docx-fallback-overlay') {
+        setApplyHint(
+          String(
+            p.message ??
+              ((p.applied as number) === 0
+                ? 'Правки не применились — проверьте поле «было» или загрузите DOCX.'
+                : 'Правки применены частично.'),
+          ),
+        );
+      } else {
+        setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
+      }
     }
     if (applyJob.status === 'failed') {
       setPollApply(false);
       setApplyHint(
-        typeof applyJob.payload === 'object' &&
-          applyJob.payload &&
-          'error' in applyJob.payload
-          ? String((applyJob.payload as { error?: string }).error)
+        typeof applyJob.payload === 'object' && applyJob.payload && 'error' in applyJob.payload
+          ? String(
+              (
+                applyJob.payload as {
+                  error?: string;
+                }
+              ).error,
+            )
           : 'Не удалось собрать PDF с правками',
       );
     }
   }, [applyJob]);
-
   useEffect(() => {
     if (!focusedAnnotationId) return;
     const el = itemRefs.current.get(focusedAnnotationId);
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [focusedAnnotationId]);
-
   useEffect(() => {
     if (!injectedEditBefore) return;
     setEditBefore(injectedEditBefore);
     setError(null);
   }, [injectedEditBefore]);
-
   useEffect(() => {
     if (!injectedCoords) return;
     pendingCoordsRef.current = injectedCoords;
   }, [injectedCoords]);
-
   const items = data?.items ?? [];
   const userComments = items.filter((a) => a.kind === 'comment' || a.kind === 'highlight');
   const acceptedEdits = items.filter((a) => a.kind === 'accepted_edit');
-
-  function consumeCoords(): { x?: number; y?: number } {
+  function consumeCoords(): {
+    x?: number;
+    y?: number;
+  } {
     const coords = pendingCoordsRef.current;
     pendingCoordsRef.current = null;
     return coords ?? {};
   }
-
   async function handleAddComment() {
     const text = content.trim();
     if (!text) return;
@@ -138,7 +174,6 @@ export function DocumentAnnotationsPanel({
       setError(e instanceof Error ? e.message : 'Не удалось сохранить заметку');
     }
   }
-
   async function handleAddManualEdit() {
     const before = editBefore.trim();
     const after = editAfter.trim();
@@ -162,7 +197,59 @@ export function DocumentAnnotationsPanel({
       setError(e instanceof Error ? e.message : 'Не удалось сохранить правку');
     }
   }
-
+  const sourceVersion = docData?.versions.find((v) => v.id === versionId);
+  const hasSourceDocx = hasUserSourceDocx(sourceVersion?.sourceDocxKey);
+  async function handleApplyFinal() {
+    setError(null);
+    setApplyHint(null);
+    try {
+      const result = await applyEditsFinal({ documentId, versionId }).unwrap();
+      setApplyJobId(result.operationJobId);
+      setPollApply(true);
+      onSelectVersion(result.versionId);
+      setApplyHint(`Создана версия ${result.version}. Применяем правки в исходном DOCX…`);
+    } catch (err) {
+      const msg =
+        typeof err === 'object' && err && 'data' in err
+          ? typeof (
+              err as {
+                data: unknown;
+              }
+            ).data === 'string'
+            ? (
+                err as {
+                  data: string;
+                }
+              ).data
+            : 'Не удалось применить правки'
+          : 'Не удалось применить правки';
+      setError(msg);
+    }
+  }
+  function getApplyTargetVersionId(): string | undefined {
+    const p = applyJob?.payload as Record<string, unknown> | null;
+    return (p?.targetVersionId as string) ?? undefined;
+  }
+  async function handleDownloadPdf() {
+    const targetId = getApplyTargetVersionId();
+    if (!targetId) return;
+    try {
+      const { url } = await fetchDownloadUrl({ documentId, versionId: targetId }).unwrap();
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      setError('Не удалось скачать PDF');
+    }
+  }
+  async function handleDownloadDocx() {
+    const targetId = getApplyTargetVersionId();
+    if (!targetId) return;
+    try {
+      const { url } = await fetchDocxUrl({ documentId, versionId: targetId }).unwrap();
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      setError('Не удалось скачать DOCX');
+    }
+  }
   async function handleApplyPdf() {
     setError(null);
     setApplyHint(null);
@@ -175,14 +262,21 @@ export function DocumentAnnotationsPanel({
     } catch (err) {
       const msg =
         typeof err === 'object' && err && 'data' in err
-          ? typeof (err as { data: unknown }).data === 'string'
-            ? (err as { data: string }).data
+          ? typeof (
+              err as {
+                data: unknown;
+              }
+            ).data === 'string'
+            ? (
+                err as {
+                  data: string;
+                }
+              ).data
             : 'Не удалось собрать PDF с правками'
           : 'Не удалось собрать PDF с правками';
       setError(msg);
     }
   }
-
   return (
     <div className="space-y-4">
       <PanelSectionHeader
@@ -229,21 +323,21 @@ export function DocumentAnnotationsPanel({
         <p className="text-[11px] text-slate-500">
           Выделите фрагмент в PDF → «В правку «было»» — текст попадёт в поле ниже.
         </p>
-        <textarea
+        <ExpandableEditField
+          label="Было (исходный текст)"
           value={editBefore}
-          onChange={(e) => setEditBefore(e.target.value)}
+          onChange={setEditBefore}
           disabled={!versionReady || creating}
           placeholder="Было (исходный текст)…"
-          rows={2}
-          className="w-full resize-none rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm disabled:opacity-50"
+          fieldClassName="w-full rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm disabled:opacity-50"
         />
-        <textarea
+        <ExpandableEditField
+          label="Стало (новая формулировка)"
           value={editAfter}
-          onChange={(e) => setEditAfter(e.target.value)}
+          onChange={setEditAfter}
           disabled={!versionReady || creating}
           placeholder="Стало (новая формулировка)…"
-          rows={2}
-          className="w-full resize-none rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm disabled:opacity-50"
+          fieldClassName="w-full rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm disabled:opacity-50"
         />
         <div className={reportActionsColumnClass}>
           <FeatureHelpActionButton
@@ -287,9 +381,7 @@ export function DocumentAnnotationsPanel({
                   onClick={() => onGoToPage(item.page, item.id)}
                   className="min-w-0 flex-1 cursor-pointer text-left"
                 >
-                  <span className="text-[11px] font-medium text-folio-700">
-                    стр. {item.page}
-                  </span>
+                  <span className="text-[11px] font-medium text-folio-700">стр. {item.page}</span>
                   <p className="mt-0.5 text-xs text-slate-700">{item.content}</p>
                 </button>
                 <button
@@ -319,7 +411,8 @@ export function DocumentAnnotationsPanel({
         <div className="space-y-2 border-t border-slate-100 pt-3">
           <p className="text-[11px] text-slate-500">
             Полный текст — «Правки» над PDF или «Открыть все» здесь. После «Собрать PDF» в
-            приложении в конце файла — компактный реестр (краткие фрагменты), без блоков на страницах.
+            приложении в конце файла — компактный реестр (краткие фрагменты), без блоков на
+            страницах.
           </p>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-medium text-slate-600">
@@ -349,16 +442,69 @@ export function DocumentAnnotationsPanel({
                   </p>
                   <p>
                     Исходный текст в PDF не переписывается автоматически — это рабочая версия для
-                    согласования. Для финального договора правки вносят в Word и загружают новый PDF.
+                    согласования. Для финального договора правки вносят в Word и загружают новый
+                    PDF.
                   </p>
                 </>
               }
             >
               {applying || pollApply ? 'Сборка PDF…' : 'Собрать PDF с правками'}
             </FeatureHelpActionButton>
+            <FeatureHelpActionButton
+              helpTitle="Применить правки"
+              disabled={!versionReady || creating || applyingFinal || pollApply}
+              onClick={() => void handleApplyFinal()}
+              buttonClassName={reportActionBtnHighlight}
+              helpContent={
+                <>
+                  <p>
+                    Создаёт новую версию: текст изменяется прямо в теле документа через исходный
+                    DOCX. Таблицы, формулы и стили сохраняются.
+                  </p>
+                  {hasSourceDocx ? (
+                    <p>
+                      Исходный DOCX найден — правки будут внесены в Word-документ и сконвертированы
+                      обратно в PDF.
+                    </p>
+                  ) : (
+                    <p>
+                      Исходный DOCX не загружен. Правки будут внесены напрямую в PDF (белая подложка
+                      + новый текст на месте «было»). Для договоров с таблицами лучше загрузить PDF
+                      вместе с DOCX.
+                    </p>
+                  )}
+                </>
+              }
+            >
+              {applyingFinal ? 'Применение…' : 'Применить правки'}
+            </FeatureHelpActionButton>
           </div>
 
-          {applyHint && <p className="text-xs text-folio-700">{applyHint}</p>}
+          {applyHint && (
+            <div className="space-y-1">
+              <p className="text-xs text-folio-700">{applyHint}</p>
+              {applyJob?.status === 'completed' && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadPdf()}
+                    className="flex cursor-pointer items-center gap-1 rounded-md bg-folio-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-folio-700"
+                  >
+                    <DownloadIcon className="h-3 w-3" />
+                    Скачать PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadDocx()}
+                    className="flex cursor-pointer items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
+                  >
+                    <DownloadIcon className="h-3 w-3" />
+                    Скачать DOCX
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <ul className="space-y-1.5">
             {acceptedEdits.map((item) => (

@@ -5,9 +5,7 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
-
 const AUTH_CHANNEL = 'folio-auth';
-
 function crossTabNotifyScript(): string {
   return `<script>
 (function () {
@@ -19,18 +17,13 @@ function crossTabNotifyScript(): string {
 })();
 </script>`;
 }
-
-export function renderVerifyEmailHtmlPage(
-  outcome: 'success' | 'error',
-  detail?: string,
-): string {
+export function renderVerifyEmailHtmlPage(outcome: 'success' | 'error', detail?: string): string {
   const isSuccess = outcome === 'success';
   const title = isSuccess ? 'Спасибо!' : 'Не удалось подтвердить';
   const subtitle = isSuccess ? 'Почта подтверждена' : 'Ссылка недействительна';
   const body = isSuccess
     ? 'Можете закрыть эту вкладку и вернуться на страницу регистрации или войти в РазУм.'
     : (detail ?? 'Ссылка устарела или уже была использована. Запросите новое письмо на сайте.');
-
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>

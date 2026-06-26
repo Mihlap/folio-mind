@@ -2,9 +2,7 @@ import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
-
 const errorBody = z.object({ error: z.string() });
-
 const annotationSchema = z.object({
   id: z.string(),
   documentId: z.string(),
@@ -19,7 +17,6 @@ const annotationSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-
 const createAnnotationSchema = z
   .object({
     page: z.number().int().min(1),
@@ -38,7 +35,6 @@ const createAnnotationSchema = z
       });
     }
   });
-
 const updateAnnotationSchema = z
   .object({
     page: z.number().int().min(1).optional(),
@@ -53,10 +49,8 @@ const updateAnnotationSchema = z
       });
     }
   });
-
 export const annotationRoutes: FastifyPluginAsync = async (app) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
-
   r.get(
     '/documents/:documentId/versions/:versionId/annotations',
     {
@@ -79,12 +73,10 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!document.versions.some((v: { id: string }) => v.id === versionId)) {
         return reply.code(404).send({ error: 'Version not found' });
       }
-
       const items = await app.prisma.documentAnnotation.findMany({
         where: { documentId, versionId },
         orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
       });
-
       return {
         items: items.map((item) => ({
           id: item.id,
@@ -103,7 +95,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       };
     },
   );
-
   r.post(
     '/documents/:documentId/versions/:versionId/annotations',
     {
@@ -128,7 +119,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!version || version.status === 'pending_upload') {
         return reply.code(404).send({ error: 'Version not found' });
       }
-
       const created = await app.prisma.documentAnnotation.create({
         data: {
           documentId,
@@ -142,7 +132,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           y: request.body.y,
         },
       });
-
       await app.prisma.auditLog.create({
         data: {
           action: 'document.annotation_created',
@@ -152,7 +141,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId: created.id, versionId, page: created.page },
         },
       });
-
       return reply.status(201).send({
         id: created.id,
         documentId: created.documentId,
@@ -169,7 +157,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
-
   r.patch(
     '/documents/:documentId/versions/:versionId/annotations/:annotationId',
     {
@@ -196,7 +183,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-
       const annotation = await app.prisma.documentAnnotation.findFirst({
         where: { id: annotationId, documentId, versionId },
       });
@@ -206,19 +192,15 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (annotation.userId !== user.sub) {
         return reply.code(403).send({ error: 'Можно изменить только свою заметку' });
       }
-
-      const nextQuote =
-        request.body.quote !== undefined ? request.body.quote : annotation.quote;
+      const nextQuote = request.body.quote !== undefined ? request.body.quote : annotation.quote;
       const nextContent =
         request.body.content !== undefined ? request.body.content : annotation.content;
-
       if (annotation.kind === 'accepted_edit' && !String(nextQuote ?? '').trim()) {
         return reply.code(400).send({ error: 'Для правки нужен исходный текст (было)' });
       }
       if (!String(nextContent).trim()) {
         return reply.code(400).send({ error: 'Текст правки не может быть пустым' });
       }
-
       const updated = await app.prisma.documentAnnotation.update({
         where: { id: annotationId },
         data: {
@@ -227,7 +209,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           quote: nextQuote,
         },
       });
-
       await app.prisma.auditLog.create({
         data: {
           action: 'document.annotation_updated',
@@ -237,7 +218,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId, versionId },
         },
       });
-
       return {
         id: updated.id,
         documentId: updated.documentId,
@@ -254,7 +234,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       };
     },
   );
-
   r.delete(
     '/documents/:documentId/versions/:versionId/annotations/:annotationId',
     {
@@ -275,7 +254,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-
       const annotation = await app.prisma.documentAnnotation.findFirst({
         where: { id: annotationId, documentId, versionId },
       });
@@ -285,7 +263,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (annotation.userId !== user.sub) {
         return reply.code(403).send({ error: 'Можно удалить только свою заметку' });
       }
-
       await app.prisma.documentAnnotation.delete({ where: { id: annotationId } });
       await app.prisma.auditLog.create({
         data: {
@@ -296,7 +273,6 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId, versionId },
         },
       });
-
       return reply.status(204).send(null);
     },
   );

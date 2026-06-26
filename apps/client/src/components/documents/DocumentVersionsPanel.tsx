@@ -1,19 +1,16 @@
 import { useRef, useState } from 'react';
 import {
-  uploadPdfVersion,
-  useCompleteUploadMutation,
-  useCreateDocumentVersionMutation,
   useDeleteDocumentVersionMutation,
-  useLazyGetDownloadUrlQuery,
-  useUploadVersionFileMutation,
+  useLazyGetSourceDocxUrlQuery,
 } from '@folio-mind/store';
+import { useAppSelector } from '../../hooks/index.js';
+import { useBackgroundUpload } from '../../context/background-upload-provider.js';
+import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
+import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
+import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
 import { DeleteDocumentButton } from './DeleteDocumentButton.js';
 import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.js';
-
-async function waitMs(ms: number) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'не загружен',
@@ -21,18 +18,15 @@ const STATUS_LABEL: Record<string, string> = {
   ready: 'готов',
   failed: 'ошибка',
 };
-
 function getDisplayStatus(status: string): string {
   if (status === 'processing') return 'готов к просмотру';
   return STATUS_LABEL[status] ?? status;
 }
 
-function getUploadStage(progress: number | null): string {
-  if (progress === null || progress <= 0) return 'Подготовка…';
-  if (progress < 100) return 'Загрузка файла в хранилище…';
-  return 'Подтверждение загрузки…';
-}
-
+const versionActionBtn =
+  'inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-folio-300 hover:bg-folio-50';
+const versionActionBtnEmerald =
+  'inline-flex cursor-pointer items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50/60 px-2.5 py-1 text-xs font-medium text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50';
 export type DocumentVersionItem = {
   id: string;
   version: number;
@@ -44,15 +38,14 @@ export type DocumentVersionItem = {
   integrityStatus?: string | null;
   integritySummary?: string | null;
   integrityScore?: number | null;
+  sourceDocxKey?: string | null;
 };
-
 type Props = {
   documentId: string;
   versions: DocumentVersionItem[];
   selectedVersionId: string | undefined;
   onSelectVersion: (versionId: string) => void;
 };
-
 export function DocumentVersionsPanel({
   documentId,
   versions,
@@ -60,79 +53,49 @@ export function DocumentVersionsPanel({
   onSelectVersion,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [showUploadDone, setShowUploadDone] = useState(false);
+  const token = useAppSelector((s) => s.auth.token);
+  const uploadState = useAppSelector((s) => s.backgroundUpload);
+  const { uploadDocumentVersion } = useBackgroundUpload();
+  const uploading =
+    uploadState.active &&
+    uploadState.kind === 'version' &&
+    uploadState.documentId === documentId;
+  const uploadProgress = uploading ? uploadState.progress : null;
+  const showUploadDone = uploading && uploadState.showDone;
   const [error, setError] = useState<string | null>(null);
-  const [createVersion] = useCreateDocumentVersionMutation();
-  const [completeUpload] = useCompleteUploadMutation();
-  const [uploadVersionFile] = useUploadVersionFileMutation();
   const [deleteVersion, { isLoading: deletingVersion }] = useDeleteDocumentVersionMutation();
-  const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
+  const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
 
-  async function handleNewVersion(file: File) {
-    let latestProgress = 0;
-    const handleProgress = (percent: number) => {
-      latestProgress = percent;
-      setUploadProgress(percent);
-    };
+  function handleNewVersion(file: File) {
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       setError('Только PDF');
       return;
     }
     setError(null);
-    setUploading(true);
-    setShowUploadDone(false);
-    setUploadProgress(0);
+    uploadDocumentVersion(documentId, file, undefined, ({ versionId }) => {
+      onSelectVersion(versionId);
+    });
+    if (inputRef.current) inputRef.current.value = '';
+  }
+  function handleSelectVersion(versionId: string) {
+    onSelectVersion(versionId);
+  }
+  async function handlePdfDownload(versionId: string, versionNumber: number) {
     try {
-      const created = await createVersion({
-        documentId,
-        fileName: file.name,
-        mimeType: file.type || 'application/pdf',
-        size: file.size,
-      }).unwrap();
-
-      await uploadPdfVersion({
-        documentId,
-        versionId: created.versionId,
-        file,
-        uploadUrl: created.uploadUrl,
-        completeUpload: (args) => completeUpload(args).unwrap(),
-        fallbackProxyUpload: (args) => uploadVersionFile(args).unwrap(),
-        onProgress: handleProgress,
-      });
-
-      onSelectVersion(created.versionId);
-      setShowUploadDone(true);
-      await waitMs(350);
-    } catch (e) {
-      const msg =
-        e && typeof e === 'object' && 'data' in e && typeof (e as { data: unknown }).data === 'string'
-          ? (e as { data: string }).data
-          : e instanceof Error
-            ? e.message
-            : 'Не удалось загрузить версию';
-      setError(msg);
-    } finally {
-      if (latestProgress === 100) {
-        await waitMs(150);
-      }
-      setUploading(false);
-      setShowUploadDone(false);
-      setUploadProgress(null);
-      if (inputRef.current) inputRef.current.value = '';
+      setError(null);
+      await downloadDocumentPdf(documentId, versionId, `v${versionNumber}.pdf`, token);
+    } catch {
+      setError('Не удалось скачать PDF');
     }
   }
-
-  async function handleDownload(versionId: string) {
+  async function handleDocxDownload(versionId: string) {
     try {
-      const { url } = await fetchDownloadUrl({ documentId, versionId }).unwrap();
+      const { url } = await fetchDocxUrl({ documentId, versionId }).unwrap();
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch {
-      setError('Не удалось получить ссылку на скачивание');
+      setError('Не удалось получить ссылку на DOCX');
     }
   }
-
   async function handleDeleteVersion(versionId: string, versionNumber: number) {
     const ok = window.confirm(
       `Удалить версию ${versionNumber}?\n\nБудут удалены файл, превью и пересказ этой версии. Восстановить нельзя.`,
@@ -145,7 +108,6 @@ export function DocumentVersionsPanel({
       setError('Не удалось удалить версию');
     }
   }
-
   return (
     <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -158,7 +120,7 @@ export function DocumentVersionsPanel({
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void handleNewVersion(file);
+              if (file) handleNewVersion(file);
             }}
           />
           <button
@@ -195,19 +157,16 @@ export function DocumentVersionsPanel({
             minute: '2-digit',
           });
           const sizeMb = v.size ? (Number(v.size) / (1024 * 1024)).toFixed(1) : '—';
-
           return (
             <li
               key={v.id}
-              className={`flex flex-wrap items-center gap-2 py-3 text-sm ${
-                isSelected ? 'bg-folio-50/60 -mx-2 rounded-lg px-2' : ''
-              }`}
+              className={`py-3 text-sm ${isSelected ? 'bg-folio-50/60 -mx-2 rounded-lg px-2' : ''}`}
             >
               <button
                 type="button"
-                onClick={() => onSelectVersion(v.id)}
                 disabled={v.status === 'pending_upload'}
-                className="min-w-0 flex-1 cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => handleSelectVersion(v.id)}
+                className="w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="font-medium text-slate-900">Версия {v.version}</span>
                 {isLatest && (
@@ -216,49 +175,68 @@ export function DocumentVersionsPanel({
                   </span>
                 )}
                 {isSelected && (
-                  <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600">
-                    просмотр
-                  </span>
+                  <span className="ml-2 text-xs font-normal text-folio-600">· в просмотре</span>
                 )}
                 <span className="mt-0.5 block text-xs text-slate-500">
                   {date} · {getDisplayStatus(v.status)} · {sizeMb} МБ
                 </span>
-                {(v.status === 'ready' || v.integrityStatus) && (
-                  <span className="mt-1 block">
-                    <DocumentVersionIntegrityBadge
-                      status={
-                        v.status === 'processing' && !v.integrityStatus
-                          ? 'pending'
-                          : (v.integrityStatus as
-                              | 'intact'
-                              | 'modified'
-                              | 'cannot_verify'
-                              | 'failed'
-                              | null)
-                      }
-                      summary={v.integritySummary}
-                      score={v.integrityScore}
+              </button>
+              {(v.status === 'ready' || v.integrityStatus) && (
+                <div className="mt-1">
+                  <DocumentVersionIntegrityBadge
+                    status={
+                      v.status === 'processing' && !v.integrityStatus
+                        ? 'pending'
+                        : (v.integrityStatus as
+                            | 'intact'
+                            | 'modified'
+                            | 'cannot_verify'
+                            | 'failed'
+                            | null)
+                    }
+                    summary={v.integritySummary}
+                    score={v.integrityScore}
+                  />
+                </div>
+              )}
+              {v.status !== 'pending_upload' && (
+                <div
+                  className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2"
+                  role="toolbar"
+                  aria-label={`Скачать версию ${v.version}`}
+                >
+                  {v.status === 'ready' && (
+                    <button
+                      type="button"
+                      title="Скачать PDF этой версии"
+                      onClick={() => void handlePdfDownload(v.id, v.version)}
+                      className={versionActionBtn}
+                    >
+                      <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span>PDF</span>
+                    </button>
+                  )}
+                  {hasUserSourceDocx(v.sourceDocxKey) && (
+                    <button
+                      type="button"
+                      title="Скачать исходный DOCX"
+                      onClick={() => void handleDocxDownload(v.id)}
+                      className={versionActionBtnEmerald}
+                    >
+                      <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span>DOCX</span>
+                    </button>
+                  )}
+                  <span className="ml-auto">
+                    <DeleteDocumentButton
+                      title={`Удалить версию ${v.version}`}
+                      disabled={deletingVersion || versions.length <= 1}
+                      onClick={() => void handleDeleteVersion(v.id, v.version)}
+                      variant="list"
                     />
                   </span>
-                )}
-              </button>
-              {v.status !== 'pending_upload' && (
-                <button
-                  type="button"
-                  title="Скачать PDF этой версии"
-                  onClick={() => void handleDownload(v.id)}
-                  className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-folio-700 hover:bg-folio-50"
-                >
-                  <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
-                  <span>Скачать</span>
-                </button>
+                </div>
               )}
-              <DeleteDocumentButton
-                title={`Удалить версию ${v.version}`}
-                disabled={deletingVersion || versions.length <= 1}
-                onClick={() => void handleDeleteVersion(v.id, v.version)}
-                variant="list"
-              />
             </li>
           );
         })}

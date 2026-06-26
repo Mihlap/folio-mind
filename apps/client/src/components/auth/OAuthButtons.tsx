@@ -1,14 +1,12 @@
 import { apiBaseUrl } from '@folio-mind/store';
-
-type Provider = { id: string; label: string };
-
+type Provider = {
+  id: string;
+  label: string;
+};
 const providers: Provider[] = [
-  // Google OAuth — не соответствует 406-ФЗ (иностранная ИС)
-  // { id: 'google', label: 'Google' },
   { id: 'yandex', label: 'Яндекс' },
   { id: 'esia', label: 'Госуслуги' },
 ];
-
 export function OAuthButtons() {
   return (
     <div className="space-y-2">

@@ -1,11 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { isTurnstileEnabled, turnstileSiteKey } from '../../lib/auth/authConfig.js';
-
 type TurnstileWidgetProps = {
   onToken: (token: string | null) => void;
   className?: string;
 };
-
 declare global {
   interface Window {
     turnstile?: {
@@ -24,9 +22,7 @@ declare global {
     onTurnstileLoad?: () => void;
   }
 }
-
 let scriptLoading: Promise<void> | null = null;
-
 function loadTurnstileScript(): Promise<void> {
   if (window.turnstile) return Promise.resolve();
   if (scriptLoading) return scriptLoading;
@@ -47,16 +43,12 @@ function loadTurnstileScript(): Promise<void> {
   });
   return scriptLoading;
 }
-
 export function TurnstileWidget({ onToken, className }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!isTurnstileEnabled || !containerRef.current) return;
-
     let cancelled = false;
-
     void loadTurnstileScript().then(() => {
       if (cancelled || !containerRef.current || !window.turnstile) return;
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
@@ -66,7 +58,6 @@ export function TurnstileWidget({ onToken, className }: TurnstileWidgetProps) {
         'error-callback': () => onToken(null),
       });
     });
-
     return () => {
       cancelled = true;
       if (widgetIdRef.current && window.turnstile) {
@@ -76,8 +67,6 @@ export function TurnstileWidget({ onToken, className }: TurnstileWidgetProps) {
       onToken(null);
     };
   }, [onToken]);
-
   if (!isTurnstileEnabled) return null;
-
   return <div ref={containerRef} className={className} />;
 }

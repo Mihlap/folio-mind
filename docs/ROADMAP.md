@@ -2,144 +2,189 @@
 
 Ориентиры по срокам и критерии готовности. Детальные чеклисты — в [PROJECT_PLAN.md](../PROJECT_PLAN.md) §5.
 
+**Легенда:** ✅ 100% · `~N%` — оценка готовности по коду и E2E.
+
 ## Сводка фаз
 
-| Фаза | Срок (ориентир) | Результат | Статус |
-|------|-----------------|-----------|--------|
-| **0** Подготовка | 3–6 нед. | Dev-стек, auth, compose, каркас | ✅ в основном готово |
-| **1** Web MVP | 2–4 мес. | S3, viewer, превью, ИИ v0 | ✅ завершено |
-| **2** Правки и RAG | 3–6 мес. | Операции PDF, правки ИИ, регламенты | ⏳ |
-| **2b** Буклеты | 3–6 мес. | Макет, медиатека, согласование | ⏳ |
-| **3** Конвертация | 4–8 мес. | Office ↔ PDF, формы, подпись | ⏳ |
-| **4** Mobile | 2–5 мес. | PWA, APK, офлайн буклет | ⏳ |
+| Фаза               | Срок (ориентир) | Результат                           | Статус                                                      |
+| ------------------ | --------------- | ----------------------------------- | ----------------------------------------------------------- |
+| **0** Подготовка   | 3–6 нед.        | Dev-стек, auth, compose, каркас     | ✅ **100%**                                                 |
+| **1** Web MVP      | 2–4 мес.        | S3, viewer, превью, ИИ v0           | ✅ **100%**                                                 |
+| **2** Правки и RAG | 3–6 мес.        | Операции PDF, правки ИИ, регламенты | **~97%**                                                    |
+| **2b** Буклеты     | 3–6 мес.        | Макет, медиатека, согласование      | **0%**                                                      |
+| **3** Конвертация  | 4–8 мес.        | Office ↔ PDF, формы, подпись        | **~58%** _(PDF-only ✅; DOCX E2E — нет)_                    |
+| **4** Mobile       | 2–5 мес.        | PWA, APK, офлайн буклет             | **0%**                                                      |
 
-*Вне плана v1–v4 (бэклог): Enterprise SSO, on-prem, real-time co-editing.*
+_Вне плана v1–v4 (бэклог): Enterprise SSO, on-prem, real-time co-editing._
 
 ---
 
-## Фаза 0 — Подготовка (3–6 недель)
+## Фаза 0 — Подготовка (3–6 недель) — **100%**
 
 **Цель:** рабочее dev-окружение и каркас монорепо.
 
-- [x] Монорепо pnpm + turbo, ESLint, Prettier
-- [x] Docker Compose: Postgres, Redis, MinIO
-- [x] Prisma: User, Tenant, Document, DocumentVersion, Job, AuditLog
-- [x] Auth: регистрация, вход, JWT, tenant isolation
-- [x] Fastify API, React client, worker (очереди preview, ai)
-- [x] OpenTelemetry/request-id, rate-limit (черновик)
-- [x] `docs/` в репозитории (этот коммит)
-- [x] CI GitHub Actions (lint + typecheck + test на PR)
+- [x] Монорепо pnpm + turbo, ESLint, Prettier — **100%**
+- [x] Docker Compose: Postgres, Redis, MinIO — **100%**
+- [x] Prisma: User, Tenant, Document, DocumentVersion, Job, AuditLog — **100%**
+- [x] Auth: регистрация, вход, JWT, tenant isolation — **100%**
+- [x] Fastify API, React client, worker (очереди preview, ai) — **100%**
+- [x] OpenTelemetry/request-id, rate-limit (черновик) — **100%**
+- [x] `docs/` в репозитории — **100%**
+- [x] CI GitHub Actions (lint + typecheck + test на PR) — **100%**
 
 **Критерий:** `docker compose up` + `pnpm dev` → API, UI, worker работают.
 
 ---
 
-## Фаза 1 — Web MVP (2–4 месяца)
+## Фаза 1 — Web MVP (2–4 месяца) — **100%**
 
 **Цель:** сценарий v1 — договор → просмотр → ИИ → отчёт + чат.
 
-- [x] Presigned upload в S3, список документов (курсорная пагинация), `POST /documents` + `complete`
-- [x] Базовый viewer PDF.js (`packages/ui`), маршрут `/app/documents/:id`
-- [x] ИИ: фабрика GigaChat/Yandex, `GET /ai/providers`, `POST /ai/complete`, summary через очередь (stub worker)
-- [x] Аудит: создание/просмотр/скачивание в `AuditLog`
-- [x] Viewer: виртуализация (continuous scroll), поиск по тексту, zoom, `viewerSlice`
-- [x] Worker: `generate-previews` (миниатюры PNG → S3) + `extract-text` (text.json → S3)
-- [x] Viewer: полоса миниатюр (presigned URLs)
-- [x] Версии: UI истории, новая версия upload
-- [x] ИИ: пересказ через очередь (worker → GigaChat/Yandex), кэш Redis, polling статуса в UI
-- [x] ИИ: чат-панель (очередь + polling), экспорт отчёта (Markdown → S3), лимиты tenant, выбор провайдера
-- [x] Нагрузочный smoke: `pnpm smoke:phase1` — upload + preview + file на 50+ стр. (скрипт `tools/smoke-phase1.mjs`)
+- [x] Presigned upload в S3, список документов (курсорная пагинация), `POST /documents` + `complete` — **100%**
+- [x] Базовый viewer PDF.js (`packages/ui`), маршрут `/app/documents/:id` — **100%**
+- [x] ИИ: фабрика GigaChat/Yandex, `GET /ai/providers`, `POST /ai/complete`, summary через очередь — **100%**
+- [x] Аудит: создание/просмотр/скачивание в `AuditLog` — **100%**
+- [x] Viewer: виртуализация (continuous scroll), поиск по тексту, zoom, `viewerSlice` — **100%**
+- [x] Worker: `generate-previews` + `extract-text` — **100%**
+- [x] Viewer: полоса миниатюр (presigned URLs) — **100%**
+- [x] Версии: UI истории, новая версия upload — **100%**
+- [x] ИИ: пересказ, кэш Redis, polling — **100%**
+- [x] ИИ: чат-панель, экспорт отчёта, лимиты tenant — **100%**
+- [x] Нагрузочный smoke: `pnpm smoke:phase1` — **100%**
+- [x] Загрузка PDF+DOCX на дашборде (любой порядок выбора файлов) — **100%**
+- [x] Фоновая загрузка: прогресс в Redux, баннер в AppShell, не прерывается при навигации — **100%**
+- [x] Понятные ошибки сети при upload (прокси → presigned, `formatUploadError`) — **100%**
 
 **Критерий:** PDF 10+ МБ загружается, превью асинхронно, ИИ не блокирует API.
 
 ---
 
-## Фаза 2 — Редактирование и RAG (3–6 месяцев)
+## Фаза 2 — Редактирование и RAG (3–6 месяцев) — **~97%**
 
-- [x] pdf-lib / worker: merge, split, страницы
-- [x] Текстовый diff по извлечённому слою + UI сравнения версий
-- [x] Аннотации (комментарии, принятые правки)
-- [x] Viewer: маркеры аннотаций на страницах PDF (overlay, без координат на листе)
-- [x] Режим «было / стало»: ручные правки + ИИ; модальное окно с полным текстом; на PDF — кнопка «N правок — открыть»
-- [x] ИИ: структурированные правки accept/reject + **«Собрать PDF»** (согласование: тело без изменений + компактный реестр в приложении)
-- [ ] **«Применить правки»** — финальная версия PDF с изменённым текстом (DOCX-пайплайн, см. §2.4 PROJECT_PLAN)
-- [x] RAG v1: загрузка регламентов, индексация, сверка с договором
-- [x] RAG pgvector: эмбеддинги при индексации, семантический поиск (fallback на keyword)
-- [x] PDF integrity v1: эвристика структуры файла (xref, метаданные) при upload, бейдж в списке версий, `GET .../integrity` (qpdf + fallback)
-- [x] PDF integrity v2: сравнение integrity между версиями, `/Sig` детекция, модалка с детальным отчётом, `IntegrityCompareBadge` в панели сравнения
-- [x] Координаты аннотаций (x/y): позиция маркера на странице, передача через text selection
-- [x] Embeddings API: `embed()` в GigaChat (через `client.embeddings`) и YandexGPT (через `/foundationModels/v1/textEmbedding`), fallback на локальные эмбеддинги
-
----
-
-## Фаза 2b — Буклеты и коллаб (3–6 месяцев)
-
-*Параллельно с фазой 2 после стабильного viewer.*
-
-- [ ] Режим макета: crop, линейки, градиенты
-- [ ] Проект, медиатека, шаблоны бюро
-- [ ] Пресеты сжатия (worker optimize)
-- [ ] Guest-view, watermark, комментарии, статусы согласования
+- [x] pdf-lib / worker: merge, split, страницы — **100%**
+- [x] Текстовый diff по извлечённому слою + UI сравнения версий — **100%**
+- [x] Аннотации (комментарии, принятые правки) — **100%**
+- [x] Viewer: маркеры аннотаций на страницах PDF (overlay + координаты x/y) — **100%**
+- [x] Режим «было / стало»: ручные правки + ИИ; модальное окно — **100%**
+- [x] ИИ: accept/reject + **«Собрать PDF»** (согласование: реестр в приложении) — **100%**
+- [x] **«Применить правки»** — финальный PDF с изменённым текстом — **~85%** _(см. статус верификации ниже)_
+- [x] RAG v1: загрузка регламентов, индексация, сверка с договором — **100%**
+- [x] RAG pgvector: эмбеддинги, семантический поиск — **100%**
+- [x] PDF integrity v1 — **100%**
+- [x] PDF integrity v2 — **100%**
+- [x] Координаты аннотаций (x/y) — **100%**
+- [x] Embeddings API (GigaChat / YandexGPT) — **100%**
 
 ---
 
+## Фаза 2b — Буклеты и коллаб (3–6 месяцев) — **0%**
 
-## Фаза 3 — Конвертация, формы, подпись (4–8 месяцев)
+_Параллельно с фазой 2 после стабильного viewer._
+
+- [ ] Режим макета: crop, линейки, градиенты — **0%**
+- [ ] Проект, медиатека, шаблоны бюро — **0%**
+- [ ] Пресеты сжатия (worker optimize) — **0%**
+- [ ] Guest-view, watermark, комментарии, статусы согласования — **0%**
+
+---
+
+## Фаза 3 — Конвертация, формы, подпись (4–8 месяцев) — **~58%**
+
+### Инфраструктура и качество кода (2026-06)
+
+| Задача | % |
+| ------ | --- |
+| Рефакторинг: `documents` routes → модули, `PdfViewer` / `DocumentPage` → подкомпоненты | **100%** |
+| Smoke: `pnpm smoke:phase2` (15/15), актуальные URL API | **100%** |
+| Стабильность dev: health timeout Redis, удаление документов (S3 lineage) | **~90%** |
+| `PREVIEW_MAX_PAGES` до 500 (крупные PDF, миниатюры) | **100%** _(настройка `.env`)_ |
+
+### Статус верификации «Применить правки» (2026-06)
+
+| Сценарий                                                           | Код           | Ручная проверка     |
+| ------------------------------------------------------------------ | ------------- | ------------------- |
+| Только PDF (overlay: белая подложка + новый текст)                 | ✅ реализован | ✅ **проверено**    |
+| PDF + исходный DOCX при загрузке (правки в Word → Gotenberg → PDF) | ✅ реализован | ⏳ **не проверено** |
+| Только PDF через pdf2docx → правки в DOCX → Gotenberg              | ✅ реализован | ⏳ **не проверено** |
+
+_Ограничение PDF-only:_ качество зависит от позиций текста в PDF-слое; для договоров рекомендуется загрузка PDF вместе с исходным DOCX.
 
 ### Финальная версия PDF (приоритет фазы 3)
 
-Выбранный сценарий: **DOCX-центричный пайплайн**, не PDF→Markdown→PDF. Подходит для договоров, ТЗ, смет и отчётов с чертежами: рисунки не трогаем, меняем текст, формулы и расчёты.
+Выбранный сценарий: **DOCX-центричный пайплайн**.
 
-| Этап | Задача |
-|------|--------|
-| D | **Source-first (приоритет):** `sourceDocxKey`, pipeline замен в DOCX → PDF; максимальное качество |
-| B | Gotenberg / LibreOffice в compose; job PDF ↔ DOCX; pre-convert при upload; кэш DOCX; экспорт DOCX с подсветкой |
-| C | Worker `apply-edits-final`: автозамены + confidence scoring + отчёт + новая версия PDF |
-| E | Координаты выделения в аннотациях → точнее матчинг (✅ фаза 2: x/y в Prisma, API, UI) |
-| F | Гранулярность правок: text-only / structural / table / image (бэклог) |
+```
+PDF + принятые правки
+        │
+        ├─ есть исходный DOCX? ──► правки в DOCX ──► DOCX → PDF (Gotenberg)
+        │
+        └─ только PDF ──► PDF → DOCX (pdf2docx) ──► правки ──► DOCX → PDF
+```
+
+| Этап | Задача                                                   | %                                         |
+| ---- | -------------------------------------------------------- | ----------------------------------------- |
+| D    | `sourceDocxKey`, UI загрузки DOCX, source-first pipeline | **~93%**                                  |
+| B    | Gotenberg в compose (DOCX → PDF)                         | **~95%**                                  |
+| B    | pdf2docx в compose (PDF → DOCX), pre-convert, кэш        | **~88%**                                  |
+| C    | `apply-edits-final`: автозамены, отчёт applied/failed    | **~82%**                                  |
+| C    | PDF-only fallback (overlay через pdf-lib)                | **~80%** _(проверено вручную)_            |
+| C    | Fallback DOCX→PDF overlay при `applied === 0`            | **~85%**                                  |
+| C    | Confidence scoring Green/Yellow/Red                      | **0%**                                    |
+| E    | Координаты выделения → матчинг на странице               | **~40%** (x/y есть, матчинг в DOCX — нет) |
+| F    | Гранулярность правок text/structural/table               | **0%** (бэклог)                           |
 
 **Два режима в UI:**
 
-| Кнопка | Результат |
-|--------|-----------|
-| «Собрать PDF» | Согласование: реестр правок в приложении (✅ фаза 2) |
-| «Применить правки» | Финал: текст в теле документа изменён |
+| Кнопка             | Результат                             | %                                                       |
+| ------------------ | ------------------------------------- | ------------------------------------------------------- |
+| «Собрать PDF»      | Согласование: реестр в приложении     | **100%** ✅                                             |
+| «Применить правки» | Финал: текст в теле документа изменён | **~88%** _(PDF-only ✅, DOCX-пути — код есть, E2E нет)_ |
 
-- [ ] **D:** Prisma `sourceDocxKey`, UI поля при загрузке, source-first pipeline
-- [ ] **B:** Gotenberg / LibreOffice в `docker-compose`
-- [ ] **B:** PDF ↔ DOCX + pre-convert при upload + кэш промежуточного DOCX
-- [ ] **C:** `apply-edits-final`: автозамены, отчёт `applied` / `failed` / `ambiguous`
-- [ ] **C:** Confidence scoring: Green/Yellow/Red после round-trip; `confidenceScore` в `DocumentVersion`
-- [ ] API + UI «Применить правки»; два подрежима (source-first / PDF-only)
-- [ ] PDF ↔ Office (прочие форматы), формы AcroForm
-- [ ] Визуальная подпись → трек PAdES/PKCS#7
-- [ ] Экспорт буклетов: JPG, DPI-чеклист, PDF/A (опц.)
-- [ ] Публичный API, вебхуки
+- [x] **D:** Prisma `sourceDocxKey`, `sourceVersionId`, UI загрузки PDF+DOCX — **~93%**
+- [x] **B:** Gotenberg в `docker-compose` — **~95%**
+- [x] **B:** pdf2docx PDF → DOCX + pre-convert + кэш `preConvertedDocxKey` — **~88%**
+- [x] **C:** `apply-edits-final`: оркестрация, наследование правок по `sourceVersionId` — **~82%**
+- [x] **C:** PDF-only overlay (`apply-edits-pdf-overlay`) — **~80%** _(проверено)_
+- [x] **C:** fallback overlay при нуле замен в DOCX — **~85%**
+- [ ] **C:** DOCX-путь end-to-end (загрузка PDF+DOCX → «Применить правки») — **~72%** _(код есть, не проверено)_
+- [ ] **C:** Confidence scoring — **0%**
+- [x] API + UI «Применить правки» — **~90%**
+- [ ] PDF ↔ Office (прочие форматы), формы AcroForm — **0%**
+- [ ] Визуальная подпись → PAdES/PKCS#7 — **0%**
+- [ ] Экспорт буклетов: JPG, DPI-чеклист, PDF/A — **0%**
+- [ ] Публичный API, вебхуки — **0%**
 
 ---
 
-## Фаза 4 — PWA и Android (2–5 месяцев)
+## Фаза 4 — PWA и Android (2–5 месяцев) — **0%**
 
-- [ ] PWA manifest, safe-area, touch
-- [ ] Capacitor APK/AAB
-- [ ] Фото с объекта → медиатека; офлайн-просмотр буклета
+- [ ] PWA manifest, safe-area, touch — **0%**
+- [ ] Capacitor APK/AAB — **0%**
+- [ ] Фото с объекта → медиатека; офлайн-просмотр буклета — **0%**
 
 ---
 
 ## Приоритет worker-очередей
 
-Общий принцип для всех фаз (подробнее — §2.4.2 PROJECT_PLAN):
-
 ```
 preview > text-extraction > conversion (PDF↔DOCX) > ai-jobs > apply-edits-final
 ```
 
-Очереди физически раздельные. Concurrency и количество реплик настраивается под приоритет.
+Очереди физически раздельные (`preview`, `ai`, `optimize`). Concurrency настраивается отдельно.
 
 ## Текущий фокус команды
 
-1. ✅ Стабилизация **фазы 2**: smoke-тесты (`tools/smoke-phase2.mjs`), integrity на реальных PDF, координаты маркеров, integrity v2, эмбеддинги API.
-2. 🔜 **Фаза 3 / «Применить правки»**: реализация DOCX-пайплайн в порядке D → B → C (§2.4 PROJECT_PLAN): source-first (приоритет), инфраструктура конвертации, автозамены + confidence scoring.
-3. ⏳ **2b** (буклеты) — только после стабильного viewer и ACL, не смешивать с юр. v1.
+1. ✅ **Инфраструктура (2026-06):** рефакторинг крупных модулей, фоновая загрузка, smoke-phase2 15/15, `PREVIEW_MAX_PAGES=500`.
+2. ✅ **«Применить правки» (PDF-only)** — overlay, просмотр через presigned URL, стабильность S3, UI viewer.
+3. 🔜 **Следующий шаг — верификация DOCX-пути (этап D→C, §2.4b PROJECT_PLAN):**
+   - загрузить PDF **и** исходный DOCX на дашборде;
+   - принять правки → «Применить правки»;
+   - убедиться, что текст меняется в Word-слое (без ghosting overlay), PDF из Gotenberg корректен.
+4. 🔧 **После E2E DOCX:** улучшить `applyEditsToDocx` (поиск фрагментов в OOXML), отчёт applied/failed в UI, `tools/smoke-phase3.mjs`.
+5. ⏳ **Confidence scoring** (Green/Yellow/Red) — после стабильного DOCX-пайплайна (этап C, §2.4b).
+6. ⏳ **Фаза 2b** (буклеты) — после закрытия фазы 3C.
+
+**Dev-зависимости для «Применить правки»:** `docker compose up` → MinIO, Redis, Postgres, **Gotenberg** (`:3003`), **pdf2docx** (`:8080`).  
+Env: `GOTENBERG_URL`, `PDF_TO_DOCX_URL` в `apps/server/.env` и `apps/worker/.env`.
 
 См. также [VISION.md](./VISION.md), [ICP.md](./ICP.md).

@@ -2,7 +2,6 @@ import type { WorkerJobPayload } from '../config/job-types.js';
 import type { WorkerEnv } from '../config/env.js';
 import { getPrisma } from '../infra/prisma.js';
 import { createQueues, createRedisConnection } from '../../queue/queues.js';
-
 export async function finalizeOptimizeVersion(params: {
   env: WorkerEnv;
   data: WorkerJobPayload;
@@ -15,11 +14,19 @@ export async function finalizeOptimizeVersion(params: {
   operationMeta: Record<string, unknown>;
   requestId?: string;
 }): Promise<string> {
-  const { env, data, documentId, targetVersionId, targetS3Key, outputBuffer, pageCount, operation, operationMeta, requestId } =
-    params;
-
+  const {
+    env,
+    data,
+    documentId,
+    targetVersionId,
+    targetS3Key,
+    outputBuffer,
+    pageCount,
+    operation,
+    operationMeta,
+    requestId,
+  } = params;
   const prisma = getPrisma();
-  // PDF уже в S3 — версию можно открывать в viewer; превью догоняют асинхронно.
   await prisma.documentVersion.update({
     where: { id: targetVersionId },
     data: {
@@ -28,7 +35,6 @@ export async function finalizeOptimizeVersion(params: {
       pageCount,
     },
   });
-
   const previewJob = await prisma.job.create({
     data: {
       type: 'preview',
@@ -43,7 +49,6 @@ export async function finalizeOptimizeVersion(params: {
       },
     },
   });
-
   const connection = createRedisConnection(env.REDIS_URL);
   try {
     const queues = createQueues(connection);
@@ -62,10 +67,8 @@ export async function finalizeOptimizeVersion(params: {
   } finally {
     await connection.quit();
   }
-
   return previewJob.id;
 }
-
 export async function failOptimizeOperation(params: {
   operationJobId: string;
   targetVersionId: string;

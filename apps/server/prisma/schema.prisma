@@ -125,6 +125,10 @@ model DocumentVersion {
   mimeType   String   @default("application/pdf")
   status     String   @default("pending")
   pageCount  Int?
+  sourceDocxKey String?
+  sourceVersionId String?
+  sourceVersion   DocumentVersion? @relation("VersionAncestry", fields: [sourceVersionId], references: [id])
+  derivedVersions DocumentVersion[] @relation("VersionAncestry")
   integrityStatus     String?
   integrityScore      Int?
   integritySummary    String?

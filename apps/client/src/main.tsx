@@ -5,9 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { createAppStore } from '@folio-mind/store';
 import { App } from './app/App.js';
 import './index.css';
-
 const store = createAppStore();
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Provider store={store}>

@@ -12,7 +12,6 @@ import type {
   PhoneLoginBody,
 } from '@folio-mind/api-client';
 import { baseApi } from './baseApi.js';
-
 export const authApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     register: build.mutation<RegisterResponse, RegisterBody>({
@@ -21,16 +20,43 @@ export const authApi = baseApi.injectEndpoints({
     verifyEmail: build.mutation<VerifyEmailResponse, VerifyEmailBody>({
       query: (body) => ({ url: '/auth/verify-email', method: 'POST', body }),
     }),
-    resendVerification: build.mutation<{ ok: true }, { email: string }>({
+    resendVerification: build.mutation<
+      {
+        ok: true;
+      },
+      {
+        email: string;
+      }
+    >({
       query: (body) => ({ url: '/auth/resend-verification', method: 'POST', body }),
     }),
-    emailVerificationStatus: build.mutation<{ verified: boolean }, { email: string }>({
+    emailVerificationStatus: build.mutation<
+      {
+        verified: boolean;
+      },
+      {
+        email: string;
+      }
+    >({
       query: (body) => ({ url: '/auth/email-verification-status', method: 'POST', body }),
     }),
-    requestMagicLink: build.mutation<{ ok: true }, { email: string; captchaToken?: string }>({
+    requestMagicLink: build.mutation<
+      {
+        ok: true;
+      },
+      {
+        email: string;
+        captchaToken?: string;
+      }
+    >({
       query: (body) => ({ url: '/auth/magic-link', method: 'POST', body }),
     }),
-    verifyMagicLink: build.mutation<AuthResponse, { token: string }>({
+    verifyMagicLink: build.mutation<
+      AuthResponse,
+      {
+        token: string;
+      }
+    >({
       query: (body) => ({ url: '/auth/magic-link/verify', method: 'POST', body }),
     }),
     login: build.mutation<AuthResponse, LoginBody>({
@@ -40,13 +66,34 @@ export const authApi = baseApi.injectEndpoints({
       query: () => '/me',
       providesTags: ['Me'],
     }),
-    health: build.query<{ status: string; timestamp: string }, void>({
+    health: build.query<
+      {
+        status: string;
+        timestamp: string;
+      },
+      void
+    >({
       query: () => '/health',
     }),
-    forgotPassword: build.mutation<{ ok: true }, { email: string }>({
+    forgotPassword: build.mutation<
+      {
+        ok: true;
+      },
+      {
+        email: string;
+      }
+    >({
       query: (body) => ({ url: '/auth/forgot-password', method: 'POST', body }),
     }),
-    resetPassword: build.mutation<{ ok: true }, { token: string; newPassword: string }>({
+    resetPassword: build.mutation<
+      {
+        ok: true;
+      },
+      {
+        token: string;
+        newPassword: string;
+      }
+    >({
       query: (body) => ({ url: '/auth/reset-password', method: 'POST', body }),
     }),
     sendPhoneCode: build.mutation<SendCodeResponse, SendCodeBody>({
@@ -60,7 +107,6 @@ export const authApi = baseApi.injectEndpoints({
     }),
   }),
 });
-
 export const {
   useRegisterMutation,
   useVerifyEmailMutation,

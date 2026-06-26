@@ -3,23 +3,18 @@ import { Link } from 'react-router-dom';
 import { useForgotPasswordMutation } from '@folio-mind/store';
 import { Button } from '../../components/ui/Button.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
-
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [forgotPassword, { isLoading, error }] = useForgotPasswordMutation();
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSent(false);
     try {
       await forgotPassword({ email }).unwrap();
       setSent(true);
-    } catch {
-      // shown below
-    }
+    } catch {}
   }
-
   return (
     <AuthLayout title="Восстановление пароля" subtitle="Отправим ссылку для сброса">
       <form onSubmit={onSubmit} className="space-y-4">
@@ -42,8 +37,18 @@ export function ForgotPasswordPage() {
 
         {error && (
           <p className="text-sm text-red-600">
-            {'status' in error && error.status === 503 && error.data && typeof error.data === 'object' && 'error' in error.data
-              ? String((error.data as { error: string }).error)
+            {'status' in error &&
+            error.status === 503 &&
+            error.data &&
+            typeof error.data === 'object' &&
+            'error' in error.data
+              ? String(
+                  (
+                    error.data as {
+                      error: string;
+                    }
+                  ).error,
+                )
               : 'Не удалось отправить. Попробуйте еще раз позже.'}
           </p>
         )}
@@ -61,4 +66,3 @@ export function ForgotPasswordPage() {
     </AuthLayout>
   );
 }
-

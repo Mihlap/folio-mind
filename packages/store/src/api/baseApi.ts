@@ -1,12 +1,16 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '../store.js';
-
 export const apiBaseUrl =
   (typeof import.meta !== 'undefined' &&
-    (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL) ||
+    (
+      import.meta as {
+        env?: {
+          VITE_API_URL?: string;
+        };
+      }
+    ).env?.VITE_API_URL) ||
   (typeof process !== 'undefined' && process.env.VITE_API_URL) ||
   'http://localhost:3001';
-
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({

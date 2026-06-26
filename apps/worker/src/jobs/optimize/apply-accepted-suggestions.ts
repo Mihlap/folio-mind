@@ -11,10 +11,12 @@ import {
 import { embedCyrillicFont, registerPdfFontkit } from '../../lib/pdf/pdf-cyrillic-font.js';
 import { collectAcceptedEditsForPdf } from '../../lib/pdf/collect-accepted-edits.js';
 import { renderAcceptedEditsAppendix } from '../../lib/pdf/render-edits-appendix.js';
-import { failOptimizeOperation, finalizeOptimizeVersion } from '../../lib/pdf/finalize-optimize-version.js';
+import {
+  failOptimizeOperation,
+  finalizeOptimizeVersion,
+} from '../../lib/pdf/finalize-optimize-version.js';
 import { findAllTextPositions } from '../../lib/pdf/find-text-positions.js';
 import { renderAllHighlights } from '../../lib/pdf/render-edits-highlights.js';
-
 type ApplyAcceptedPayload = WorkerJobPayload & {
   operationJobId?: string;
   documentId?: string;
@@ -24,13 +26,11 @@ type ApplyAcceptedPayload = WorkerJobPayload & {
   targetS3Key?: string;
   requestId?: string;
 };
-
 type AcceptedEdit = {
   page: number;
   originalText: string;
   suggestion: string;
 };
-
 export async function processApplyAcceptedSuggestionsJob(
   env: WorkerEnv,
   data: ApplyAcceptedPayload,
@@ -44,7 +44,6 @@ export async function processApplyAcceptedSuggestionsJob(
     targetS3Key,
     requestId,
   } = data;
-
   if (
     !operationJobId ||
     !documentId ||
@@ -55,15 +54,12 @@ export async function processApplyAcceptedSuggestionsJob(
   ) {
     throw new Error('Apply accepted suggestions: missing required fields');
   }
-
   const prisma = getPrisma();
   await prisma.job.update({ where: { id: operationJobId }, data: { status: 'processing' } });
-
   try {
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
     }
-
     const exists = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },
       select: { id: true },
@@ -75,7 +71,6 @@ export async function processApplyAcceptedSuggestionsJob(
       });
       return;
     }
-
     const [aiAccepted, sourceAnnotations] = await Promise.all([
       prisma.aiSuggestion.findMany({
         where: { documentId, versionId: sourceVersionId, status: 'accepted' },
@@ -86,33 +81,25 @@ export async function processApplyAcceptedSuggestionsJob(
         orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
       }),
     ]);
-
     const collected = collectAcceptedEditsForPdf(aiAccepted, sourceAnnotations);
     if (collected.length === 0) {
       throw new Error('Нет принятых правок для сборки PDF');
     }
-
     const edits: AcceptedEdit[] = collected;
-
     const sourceBuffer = await getObjectBuffer(sourceS3Key);
     const pdfDoc = await PDFDocument.load(sourceBuffer);
     registerPdfFontkit(pdfDoc);
     const font = await embedCyrillicFont(pdfDoc);
-
-    const highlights = await findAllTextPositions(sourceBuffer, edits);
+    const { positions: highlights } = await findAllTextPositions(sourceBuffer, edits);
     renderAllHighlights(pdfDoc, highlights);
-
     renderAcceptedEditsAppendix(pdfDoc, font, edits);
-
     const outputBytes = await pdfDoc.save();
     const outputBuffer = Buffer.from(outputBytes);
-
     await putObjectBuffer({
       key: targetS3Key,
       body: outputBuffer,
       contentType: 'application/pdf',
     });
-
     const previewJobId = await finalizeOptimizeVersion({
       env,
       data,
@@ -125,7 +112,6 @@ export async function processApplyAcceptedSuggestionsJob(
       operationMeta: { sourceVersionId, acceptedCount: edits.length },
       requestId,
     });
-
     if (sourceAnnotations.length > 0) {
       await prisma.documentAnnotation.createMany({
         data: sourceAnnotations.map((row) => ({
@@ -140,7 +126,6 @@ export async function processApplyAcceptedSuggestionsJob(
         })),
       });
     }
-
     await prisma.job.update({
       where: { id: operationJobId },
       data: {
@@ -158,9 +143,7 @@ export async function processApplyAcceptedSuggestionsJob(
     const message = err instanceof Error ? err.message : 'Apply accepted suggestions failed';
     try {
       await deleteObjectByKey(targetS3Key);
-    } catch {
-    
-    }
+    } catch {}
     try {
       await failOptimizeOperation({
         operationJobId,
@@ -168,9 +151,7 @@ export async function processApplyAcceptedSuggestionsJob(
         error: message,
         payload: { documentId, sourceVersionId },
       });
-    } catch {
- 
-    }
+    } catch {}
     throw err;
   }
 }

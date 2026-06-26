@@ -3,13 +3,14 @@ export type CompletionRequest = {
   system?: string;
   maxTokens?: number;
 };
-
 export type CompletionResponse = {
   text: string;
   model: string;
-  usage?: { promptTokens: number; completionTokens: number };
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+  };
 };
-
 export interface LLMProvider {
   readonly id: string;
   complete(params: CompletionRequest): Promise<CompletionResponse>;

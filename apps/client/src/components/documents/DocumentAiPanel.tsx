@@ -6,18 +6,15 @@ import {
   type AiProviderId,
   type ChatMessage,
 } from '@folio-mind/store';
-
 type DocumentAiPanelProps = {
   documentId: string;
   versionId: string;
   versionReady: boolean;
   embedded?: boolean;
 };
-
 function isJobPending(status: string | undefined) {
   return status === 'queued' || status === 'processing';
 }
-
 export function DocumentAiPanel({
   documentId,
   versionId,
@@ -27,29 +24,23 @@ export function DocumentAiPanel({
   const { data: providersData } = useGetAiProvidersQuery();
   const [provider, setProvider] = useState<AiProviderId | undefined>();
   const [requestChat, { isLoading: chatSending }] = useRequestChatMutation();
-
   const [chatJobId, setChatJobId] = useState<string | null>(null);
   const [pollChat, setPollChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-
   const activeProvider = provider ?? providersData?.defaultProvider ?? 'gigachat';
-
   const { data: chatJob } = useGetJobQuery(chatJobId!, {
     skip: !chatJobId,
     pollingInterval: pollChat ? 2000 : 0,
   });
-
   const chatPending = isJobPending(chatJob?.status);
   const chatError = chatJob?.payload?.error;
-
   useEffect(() => {
     setChatJobId(null);
     setPollChat(false);
     setMessages([]);
     setChatInput('');
   }, [versionId]);
-
   useEffect(() => {
     if (chatJob?.status === 'completed' && chatJob.payload?.reply) {
       setPollChat(false);
@@ -59,14 +50,10 @@ export function DocumentAiPanel({
       setPollChat(false);
     }
   }, [chatJob?.status, chatJob?.payload?.reply]);
-
-  const configuredProviders =
-    providersData?.providers.filter((p) => p.configured) ?? [];
-
+  const configuredProviders = providersData?.providers.filter((p) => p.configured) ?? [];
   const messagesMaxHeight = embedded
     ? 'max-h-[min(42vh,360px)]'
     : 'max-h-[38vh] sm:max-h-[40vh] lg:max-h-[48vh]';
-
   return (
     <section className={embedded ? 'flex flex-col' : 'space-y-3 sm:space-y-4'}>
       <div
@@ -95,7 +82,13 @@ export function DocumentAiPanel({
         )}
       </div>
 
-      <div className={embedded ? 'flex min-h-0 flex-1 flex-col' : 'rounded-2xl border border-slate-200 bg-white shadow-sm'}>
+      <div
+        className={
+          embedded
+            ? 'flex min-h-0 flex-1 flex-col'
+            : 'rounded-2xl border border-slate-200 bg-white shadow-sm'
+        }
+      >
         {!embedded && (
           <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold text-slate-900">Чат по документу</h2>
@@ -103,7 +96,9 @@ export function DocumentAiPanel({
         )}
 
         {(messages.length > 0 || chatPending || chatError) && (
-          <div className={`space-y-3 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 ${messagesMaxHeight}`}>
+          <div
+            className={`space-y-3 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 ${messagesMaxHeight}`}
+          >
             {messages.map((msg, idx) => (
               <div
                 key={`${idx}-${msg.role}`}
@@ -130,11 +125,9 @@ export function DocumentAiPanel({
             e.preventDefault();
             const prompt = chatInput.trim();
             if (!prompt || !versionReady || chatSending || chatPending) return;
-
             const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: prompt }];
             setMessages(nextMessages);
             setChatInput('');
-
             const result = await requestChat({
               documentId,
               versionId,

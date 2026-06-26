@@ -62,6 +62,36 @@ services:
       exit 0;
       "
 
+  gotenberg:
+    container_name: folio-mind-gotenberg
+    image: gotenberg/gotenberg:8
+    ports:
+      - '3003:3000'
+    environment:
+      DISABLE_GOOGLE_CHROME: "1"
+      DISABLE_UNOCONV: "0"
+    volumes:
+      - ./tmp/libreoffice:/tmp/libreoffice
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:3000/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  pdf2docx:
+    container_name: folio-mind-pdf2docx
+    build: ./docker/pdf2docx
+    ports:
+      - '8080:8080'
+    mem_limit: 512m
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
 volumes:
   postgres_data:
   minio_data:

@@ -7,25 +7,19 @@ import type { Env } from '../lib/config/env.js';
 import { UPLOAD_RATE_LIMIT } from '../lib/auth/rate-limits.js';
 import { enqueueRagIndexJob } from '../lib/queue/queue.js';
 import { searchRagChunks } from '../lib/rag/rag-search.js';
-import {
-  deleteObjectByKey,
-  isS3Configured,
-  putObjectByKey,
-} from '../lib/storage/s3.js';
-
+import { deleteObjectByKey, isS3Configured, putObjectByKey } from '../lib/storage/s3.js';
 const errorBody = z.object({ error: z.string() });
 const uploadRateLimit = { rateLimit: UPLOAD_RATE_LIMIT };
 const MAX_RAG_BYTES = 20 * 1024 * 1024;
-
 function buildRagKey(tenantId: string, sourceId: string, fileName: string) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   return resolveS3Key('ragSources', `${tenantId}/${sourceId}/${safeName}`);
 }
-
-export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
+export const ragRoutes: FastifyPluginAsync<{
+  env: Env;
+}> = async (app, opts) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const env = opts.env;
-
   r.get(
     '/rag/sources',
     {
@@ -65,7 +59,6 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
       };
     },
   );
-
   r.post(
     '/rag/sources',
     {
@@ -93,7 +86,6 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
       if (!isS3Configured()) {
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
-
       const user = getAuthUser(request);
       const { title, fileName, mimeType, size } = request.body;
       const lower = fileName.toLowerCase();
@@ -105,7 +97,6 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
       if (!allowed) {
         return reply.code(400).send({ error: 'Поддерживаются PDF и TXT' });
       }
-
       const source = await app.prisma.ragSource.create({
         data: {
           tenantId: user.tenantId,
@@ -115,19 +106,16 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
           status: 'pending_upload',
         },
       });
-
       const s3Key = buildRagKey(user.tenantId, source.id, fileName);
       await app.prisma.ragSource.update({
         where: { id: source.id },
         data: { s3Key },
       });
-
       const { getPresignedPutUrl } = await import('../lib/storage/s3.js');
       const uploadUrl = await getPresignedPutUrl({
         key: s3Key,
         contentType: mimeType || 'application/octet-stream',
       });
-
       await app.prisma.auditLog.create({
         data: {
           action: 'rag.source_created',
@@ -136,7 +124,6 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
           meta: { sourceId: source.id, title, size },
         },
       });
-
       return reply.status(201).send({
         sourceId: source.id,
         uploadUrl,
@@ -144,7 +131,6 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
       });
     },
   );
-
   r.post(
     '/rag/sources/:sourceId/complete',
     {
@@ -161,14 +147,12 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
     async (request, reply) => {
       const user = getAuthUser(request);
       const { sourceId } = request.params;
-
       const source = await app.prisma.ragSource.findFirst({
         where: { id: sourceId, tenantId: user.tenantId },
       });
       if (!source || source.s3Key === 'pending') {
         return reply.code(404).send({ error: 'Source not found' });
       }
-
       const job = await app.prisma.job.create({
         data: {
           type: 'rag-index',
@@ -177,12 +161,10 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
           payload: { sourceId, s3Key: source.s3Key, fileName: source.fileName },
         },
       });
-
       await app.prisma.ragSource.update({
         where: { id: sourceId },
         data: { status: 'processing' },
       });
-
       await enqueueRagIndexJob(env, {
         jobId: job.id,
         sourceId,
@@ -191,11 +173,9 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
         fileName: source.fileName,
         requestId: request.requestId,
       });
-
       return { sourceId, status: 'processing', jobId: job.id };
     },
   );
-
   r.delete(
     '/rag/sources/:sourceId',
     {
@@ -213,20 +193,15 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
       if (!source) {
         return reply.code(404).send({ error: 'Source not found' });
       }
-
       if (source.s3Key && source.s3Key !== 'pending') {
         try {
           await deleteObjectByKey(source.s3Key);
-        } catch {
-          /* ignore missing object */
-        }
+        } catch {}
       }
-
       await app.prisma.ragSource.delete({ where: { id: source.id } });
       return reply.status(204).send(null);
     },
   );
-
   r.post(
     '/rag/query',
     {
@@ -270,7 +245,6 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
       };
     },
   );
-
   r.post(
     '/rag/sources/:sourceId/upload',
     {
@@ -294,23 +268,19 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
       if (!source) {
         return reply.code(404).send({ error: 'Source not found' });
       }
-
       const file = await request.file();
       if (!file) {
         return reply.code(400).send({ error: 'File is required' });
       }
-
       const buffer = await file.toBuffer();
       if (buffer.length > MAX_RAG_BYTES) {
         return reply.code(400).send({ error: 'File too large' });
       }
-
       await putObjectByKey({
         key: source.s3Key,
         body: buffer,
         contentType: file.mimetype || 'application/octet-stream',
       });
-
       const job = await app.prisma.job.create({
         data: {
           type: 'rag-index',
@@ -319,12 +289,10 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
           payload: { sourceId, s3Key: source.s3Key, fileName: source.fileName },
         },
       });
-
       await app.prisma.ragSource.update({
         where: { id: sourceId },
         data: { status: 'processing' },
       });
-
       await enqueueRagIndexJob(env, {
         jobId: job.id,
         sourceId,
@@ -333,7 +301,6 @@ export const ragRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => 
         fileName: source.fileName,
         requestId: request.requestId,
       });
-
       return { sourceId, status: 'processing', jobId: job.id };
     },
   );

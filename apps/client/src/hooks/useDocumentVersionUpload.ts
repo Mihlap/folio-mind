@@ -1,114 +1,66 @@
 import { useCallback, useRef, useState } from 'react';
-import {
-  uploadPdfVersion,
-  useCompleteUploadMutation,
-  useCreateDocumentVersionMutation,
-  useUploadVersionFileMutation,
-} from '@folio-mind/store';
+import { useAppSelector } from '../hooks/index.js';
+import { useBackgroundUpload } from '../context/background-upload-provider.js';
+import { getUploadStage } from '../lib/uploads/uploadStage.js';
 
-async function waitMs(ms: number) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getUploadStage(progress: number | null): string {
-  if (progress === null || progress <= 0) return 'Подготовка…';
-  if (progress < 100) return 'Загрузка файла…';
-  return 'Подтверждение…';
-}
-
-export function useDocumentVersionUpload(documentId: string, onVersionCreated: (versionId: string) => void) {
+export function useDocumentVersionUpload(
+  documentId: string,
+  onVersionCreated: (versionId: string) => void,
+) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [showUploadDone, setShowUploadDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [createVersion] = useCreateDocumentVersionMutation();
-  const [completeUpload] = useCompleteUploadMutation();
-  const [uploadVersionFile] = useUploadVersionFileMutation();
+  const docxInputRef = useRef<HTMLInputElement>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const uploadState = useAppSelector((s) => s.backgroundUpload);
+  const { uploadDocumentVersion } = useBackgroundUpload();
+  const uploading =
+    uploadState.active &&
+    uploadState.kind === 'version' &&
+    uploadState.documentId === documentId;
+  const progress = uploading ? uploadState.progress : 0;
+  const showDone = uploading && uploadState.showDone;
 
   const openFilePicker = useCallback(() => {
     inputRef.current?.click();
   }, []);
 
-  async function handleFile(file: File) {
-    let latestProgress = 0;
-    const handleProgress = (percent: number) => {
-      latestProgress = percent;
-      setUploadProgress(percent);
-    };
+  const openDocxFilePicker = useCallback(() => {
+    docxInputRef.current?.click();
+  }, []);
 
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Только PDF');
-      return;
-    }
-
-    setError(null);
-    setUploading(true);
-    setShowUploadDone(false);
-    setUploadProgress(0);
-
-    try {
-      const created = await createVersion({
-        documentId,
-        fileName: file.name,
-        mimeType: file.type || 'application/pdf',
-        size: file.size,
-      }).unwrap();
-
-      await uploadPdfVersion({
-        documentId,
-        versionId: created.versionId,
-        file,
-        uploadUrl: created.uploadUrl,
-        completeUpload: (args) => completeUpload(args).unwrap(),
-        fallbackProxyUpload: (args) => uploadVersionFile(args).unwrap(),
-        onProgress: handleProgress,
-      });
-
-      onVersionCreated(created.versionId);
-      setShowUploadDone(true);
-      await waitMs(350);
-    } catch (e) {
-      const msg =
-        e && typeof e === 'object' && 'data' in e && typeof (e as { data: unknown }).data === 'string'
-          ? (e as { data: string }).data
-          : e instanceof Error
-            ? e.message
-            : 'Не удалось загрузить версию';
-      setError(msg);
-    } finally {
-      if (latestProgress === 100) {
-        await waitMs(150);
+  const handleFile = useCallback(
+    (file: File, docxFile?: File) => {
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        setValidationError('Только PDF');
+        return;
       }
-      setUploading(false);
-      setShowUploadDone(false);
-      setUploadProgress(null);
+      setValidationError(null);
+      uploadDocumentVersion(documentId, file, docxFile, ({ versionId }) => {
+        onVersionCreated(versionId);
+      });
       if (inputRef.current) inputRef.current.value = '';
-    }
-  }
+    },
+    [documentId, uploadDocumentVersion, onVersionCreated],
+  );
 
-  const uploadLabel = uploading
-    ? uploadProgress !== null
-      ? `${uploadProgress}%`
-      : '…'
-    : null;
-
+  const uploadLabel = uploading ? (progress > 0 ? `${progress}%` : '…') : null;
   const uploadHint =
-    uploading && uploadProgress !== null
-      ? showUploadDone && uploadProgress === 100
+    uploading && progress > 0
+      ? showDone && progress === 100
         ? 'Готово'
-        : getUploadStage(uploadProgress)
+        : getUploadStage(progress)
       : null;
 
   return {
     inputRef,
+    docxInputRef,
     uploading,
-    uploadProgress,
+    uploadProgress: uploading ? progress : null,
     uploadLabel,
     uploadHint,
-    error,
-    setError,
+    error: validationError ?? (uploading ? uploadState.error : null),
+    setError: setValidationError,
     openFilePicker,
+    openDocxFilePicker,
     handleFile,
   };
 }

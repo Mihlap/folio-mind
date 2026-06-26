@@ -14,7 +14,6 @@ import {
 } from '../ui/FeatureHelp.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentRagComparePanel } from './DocumentRagComparePanel.js';
-
 function openDownloadUrl(url: string, target: '_self' | '_blank' = '_self') {
   if (target === '_blank') {
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -22,7 +21,6 @@ function openDownloadUrl(url: string, target: '_self' | '_blank' = '_self') {
   }
   window.location.assign(url);
 }
-
 type Props = {
   documentId: string;
   versionId: string;
@@ -30,7 +28,6 @@ type Props = {
   onGoToPage: (page: number) => void;
   onSelectVersion: (versionId: string) => void;
 };
-
 export function DocumentReportPanel({
   documentId,
   versionId,
@@ -41,7 +38,6 @@ export function DocumentReportPanel({
   const { data: providersData } = useGetAiProvidersQuery();
   const [requestSummary, { isLoading: summaryRequestLoading }] = useRequestSummaryMutation();
   const [exportReport, { isLoading: exportLoading }] = useExportReportMutation();
-
   const [summaryJobId, setSummaryJobId] = useState<string | null>(null);
   const [pollSummary, setPollSummary] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -50,12 +46,10 @@ export function DocumentReportPanel({
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
   const [storedSummary, setStoredSummary] = useState<string | null>(null);
   const [summaryDismissed, setSummaryDismissed] = useState(false);
-
   const { data: summaryJob } = useGetJobQuery(summaryJobId!, {
     skip: !summaryJobId,
     pollingInterval: pollSummary ? 2000 : 0,
   });
-
   const summaryFromJob =
     summaryJobId && summaryJob?.status === 'completed'
       ? (summaryJob.payload?.summary ?? null)
@@ -66,7 +60,6 @@ export function DocumentReportPanel({
     summaryJob?.status === 'processing' ||
     (summaryRequestLoading && !summaryText);
   const canExportReport = versionReady && Boolean(summaryText);
-
   useEffect(() => {
     setSummaryJobId(null);
     setPollSummary(false);
@@ -77,7 +70,6 @@ export function DocumentReportPanel({
     setStoredSummary(null);
     setSummaryDismissed(false);
   }, [versionId]);
-
   useEffect(() => {
     if (summaryJob?.status === 'completed' || summaryJob?.status === 'failed') {
       setPollSummary(false);
@@ -90,13 +82,18 @@ export function DocumentReportPanel({
           typeof summaryJob.payload === 'object' &&
           summaryJob.payload &&
           'error' in summaryJob.payload
-            ? String((summaryJob.payload as { error?: string }).error ?? 'Не удалось получить пересказ')
+            ? String(
+                (
+                  summaryJob.payload as {
+                    error?: string;
+                  }
+                ).error ?? 'Не удалось получить пересказ',
+              )
             : 'Не удалось получить пересказ';
         setSummaryError(msg);
       }
     }
   }, [summaryJob?.payload, summaryJob?.status]);
-
   return (
     <div className="space-y-3 p-3 sm:p-4">
       <p className="text-[11px] leading-snug text-slate-500">
@@ -230,12 +227,14 @@ export function DocumentReportPanel({
                 }}
                 className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-lg text-slate-400 hover:bg-folio-100 hover:text-slate-600"
               >
-✕
+                ✕
               </button>
             </div>
           </div>
           {isSummaryExpanded && (
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{summaryText}</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+              {summaryText}
+            </p>
           )}
         </div>
       )}

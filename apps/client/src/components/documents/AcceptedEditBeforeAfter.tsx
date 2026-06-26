@@ -4,10 +4,8 @@ type Props = {
   compact?: boolean;
   className?: string;
 };
-
 export function AcceptedEditBeforeAfter({ before, after, compact = false, className = '' }: Props) {
   const textClass = compact ? 'text-[11px] leading-snug' : 'text-xs leading-relaxed';
-
   return (
     <div
       className={[

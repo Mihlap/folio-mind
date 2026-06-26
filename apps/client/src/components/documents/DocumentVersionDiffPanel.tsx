@@ -3,9 +3,10 @@ import { useLazyCompareVersionsQuery, useCompareVersionIntegrityQuery } from '@f
 import { IntegrityCompareBadge } from './DocumentVersionIntegrityBadge.js';
 import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
-
-type DiffLine = { type: 'equal' | 'insert' | 'delete'; text: string };
-
+type DiffLine = {
+  type: 'equal' | 'insert' | 'delete';
+  text: string;
+};
 type PageDiff = {
   page: number;
   status: 'unchanged' | 'modified' | 'added' | 'removed';
@@ -13,43 +14,45 @@ type PageDiff = {
   compareText?: string;
   lines?: DiffLine[];
 };
-
 function getQueryError(err: unknown): string {
   if (typeof err === 'object' && err && 'data' in err) {
-    const data = (err as { data?: unknown }).data;
+    const data = (
+      err as {
+        data?: unknown;
+      }
+    ).data;
     if (typeof data === 'string') return data;
     if (typeof data === 'object' && data && 'error' in data) {
-      return String((data as { error: string }).error);
+      return String(
+        (
+          data as {
+            error: string;
+          }
+        ).error,
+      );
     }
   }
   return 'Не удалось сравнить версии';
 }
-
 const STATUS_LABEL: Record<string, string> = {
   unchanged: 'без изменений',
   modified: 'изменена',
   added: 'добавлена',
   removed: 'удалена',
 };
-
 type Props = {
   documentId: string;
   versions: DocumentVersionItem[];
   activeVersion: DocumentVersionItem | undefined;
   onGoToPage: (page: number) => void;
 };
-
 export function DocumentVersionDiffPanel({
   documentId,
   versions,
   activeVersion,
   onGoToPage,
 }: Props) {
-  const readyVersions = useMemo(
-    () => versions.filter((v) => v.status === 'ready'),
-    [versions],
-  );
-
+  const readyVersions = useMemo(() => versions.filter((v) => v.status === 'ready'), [versions]);
   const defaultBaseId = useMemo(() => {
     if (!activeVersion) return '';
     const index = readyVersions.findIndex((v) => v.id === activeVersion.id);
@@ -59,39 +62,33 @@ export function DocumentVersionDiffPanel({
     }
     return readyVersions.find((v) => v.id !== activeVersion.id)?.id ?? '';
   }, [activeVersion, readyVersions]);
-
   const [baseVersionId, setBaseVersionId] = useState(defaultBaseId);
   const [expandedPage, setExpandedPage] = useState<number | null>(null);
   const [compare, { data, isFetching, error, reset }] = useLazyCompareVersionsQuery();
-
   useEffect(() => {
     setBaseVersionId(defaultBaseId);
     reset();
     setExpandedPage(null);
   }, [activeVersion?.id, defaultBaseId, reset]);
-
   const compareVersionId = activeVersion?.id ?? '';
   const canCompare =
     Boolean(baseVersionId && compareVersionId && baseVersionId !== compareVersionId) &&
     activeVersion?.status === 'ready';
-
   const changedPages = useMemo(
     () => (data?.pages.filter((p: PageDiff) => p.status !== 'unchanged') ?? []) as PageDiff[],
     [data?.pages],
   );
-
   const editDiff = data?.acceptedEdits;
   const hasEditListChanges = Boolean(
     editDiff &&
-      (editDiff.onlyInCompare.length > 0 ||
-        editDiff.onlyInBase.length > 0 ||
-        editDiff.modified.length > 0),
+    (editDiff.onlyInCompare.length > 0 ||
+      editDiff.onlyInBase.length > 0 ||
+      editDiff.modified.length > 0),
   );
   const hasPageCountDelta =
     data?.pageCount?.base != null &&
     data?.pageCount?.compare != null &&
     data.pageCount.base !== data.pageCount.compare;
-
   async function handleCompare() {
     if (!canCompare) return;
     setExpandedPage(null);
@@ -101,7 +98,6 @@ export function DocumentVersionDiffPanel({
       compareVersionId,
     });
   }
-
   if (readyVersions.length < 2) {
     return (
       <p className="text-xs text-slate-500">
@@ -109,14 +105,14 @@ export function DocumentVersionDiffPanel({
       </p>
     );
   }
-
   return (
     <div className="space-y-3">
       <div>
         <h3 className="text-sm font-medium text-slate-800">Сравнение версий</h3>
         <p className="mt-1 text-xs text-slate-500">
-          Текст страниц договора и список правок «было / стало» (база → текущая версия). После
-          «Собрать PDF» тело договора обычно не меняется — в приложении компактный реестр правок.
+          Текст страниц договора и список правок «было / стало» (база → текущая версия). В
+          списке ниже — только страницы с заметными отличиями в тексте, а не артефакты
+          пересохранения PDF.
         </p>
       </div>
 
@@ -143,9 +139,7 @@ export function DocumentVersionDiffPanel({
               ))}
           </select>
         </label>
-        <div className="text-xs text-slate-500">
-          → v{activeVersion?.version ?? '—'}
-        </div>
+        <div className="text-xs text-slate-500">→ v{activeVersion?.version ?? '—'}</div>
         <button
           type="button"
           disabled={!canCompare || isFetching}
@@ -162,9 +156,7 @@ export function DocumentVersionDiffPanel({
         <>
           <p className="text-xs text-slate-600">
             v{data.baseVersion} → v{data.compareVersion}:{' '}
-            {data.summary.modifiedPages > 0 && (
-              <span>{data.summary.modifiedPages} изменённых</span>
-            )}
+            {data.summary.modifiedPages > 0 && <span>{data.summary.modifiedPages} изменённых</span>}
             {data.summary.addedPages > 0 && (
               <span>
                 {data.summary.modifiedPages > 0 ? ', ' : ''}
@@ -209,11 +201,7 @@ export function DocumentVersionDiffPanel({
                       <p className="mb-1 text-[10px] font-medium text-emerald-800">
                         Только в v{data.compareVersion} · стр. {item.page}
                       </p>
-                      <AcceptedEditBeforeAfter
-                        before={item.quote}
-                        after={item.content}
-                        compact
-                      />
+                      <AcceptedEditBeforeAfter before={item.quote} after={item.content} compact />
                     </li>
                   ))}
                   {editDiff.onlyInBase.map((item, i) => (
@@ -224,11 +212,7 @@ export function DocumentVersionDiffPanel({
                       <p className="mb-1 text-[10px] font-medium text-red-800">
                         Только в v{data.baseVersion} · стр. {item.page}
                       </p>
-                      <AcceptedEditBeforeAfter
-                        before={item.quote}
-                        after={item.content}
-                        compact
-                      />
+                      <AcceptedEditBeforeAfter before={item.quote} after={item.content} compact />
                     </li>
                   ))}
                   {editDiff.modified.map((item, i) => (
@@ -276,9 +260,7 @@ export function DocumentVersionDiffPanel({
                     <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
                       <button
                         type="button"
-                        onClick={() =>
-                          setExpandedPage(expanded ? null : pageDiff.page)
-                        }
+                        onClick={() => setExpandedPage(expanded ? null : pageDiff.page)}
                         className="cursor-pointer text-left text-xs font-medium text-slate-800 hover:text-folio-700"
                       >
                         Стр. {pageDiff.page} · {STATUS_LABEL[pageDiff.status] ?? pageDiff.status}

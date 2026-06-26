@@ -15,7 +15,6 @@ const TYPO_TO_CORRECT: Record<string, string> = {
   'mai.ru': 'mail.ru',
   'yndex.ru': 'yandex.ru',
 };
-
 export function suggestEmailDomainFix(domain: string): string | null {
   const d = domain.toLowerCase();
   return TYPO_TO_CORRECT[d] ?? null;

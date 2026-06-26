@@ -1,13 +1,11 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import type { Env } from '../config/env.js';
-
 const QUEUE_NAMES = {
   preview: 'preview',
   ai: 'ai',
   optimize: 'optimize',
 } as const;
-
 export type QueueCounts = {
   waiting: number;
   active: number;
@@ -15,19 +13,16 @@ export type QueueCounts = {
   failed: number;
   completed: number;
 };
-
 let connection: IORedis | null = null;
 let previewQueue: Queue | null = null;
 let aiQueue: Queue | null = null;
 let optimizeQueue: Queue | null = null;
-
 function getConnection(redisUrl: string): IORedis {
   if (!connection) {
     connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
   }
   return connection;
 }
-
 function getQueues(env: Env) {
   const conn = getConnection(env.REDIS_URL);
   if (!previewQueue) {
@@ -65,15 +60,8 @@ function getQueues(env: Env) {
   }
   return { previewQueue, aiQueue, optimizeQueue };
 }
-
 async function readCounts(queue: Queue): Promise<QueueCounts> {
-  const counts = await queue.getJobCounts(
-    'waiting',
-    'active',
-    'delayed',
-    'failed',
-    'completed',
-  );
+  const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed', 'completed');
   return {
     waiting: counts.waiting ?? 0,
     active: counts.active ?? 0,
@@ -82,7 +70,6 @@ async function readCounts(queue: Queue): Promise<QueueCounts> {
     completed: counts.completed ?? 0,
   };
 }
-
 export async function getQueueMetrics(env: Env): Promise<{
   preview: QueueCounts;
   ai: QueueCounts;
@@ -91,7 +78,6 @@ export async function getQueueMetrics(env: Env): Promise<{
   const [preview, ai] = await Promise.all([readCounts(previewQueue), readCounts(aiQueue)]);
   return { preview, ai };
 }
-
 export async function enqueuePreviewJob(
   env: Env,
   payload: {
@@ -106,7 +92,6 @@ export async function enqueuePreviewJob(
   const { previewQueue } = getQueues(env);
   await previewQueue.add('generate-previews', payload, { jobId: payload.jobId });
 }
-
 export async function enqueuePreviewPagesJob(
   env: Env,
   payload: {
@@ -129,13 +114,11 @@ export async function enqueuePreviewPagesJob(
       return false;
     }
   }
-
   await previewQueue.add('preview-pages', payload, {
     jobId: dedupeId,
   });
   return true;
 }
-
 export async function enqueueAiJob(
   env: Env,
   payload: {
@@ -151,7 +134,6 @@ export async function enqueueAiJob(
   const { aiQueue } = getQueues(env);
   await aiQueue.add(payload.type, payload, { jobId: payload.jobId });
 }
-
 export async function enqueueRagIndexJob(
   env: Env,
   payload: {
@@ -166,7 +148,6 @@ export async function enqueueRagIndexJob(
   const { previewQueue } = getQueues(env);
   await previewQueue.add('rag-index', payload, { jobId: payload.jobId });
 }
-
 export async function enqueueSplitPagesJob(
   env: Env,
   payload: {
@@ -185,7 +166,6 @@ export async function enqueueSplitPagesJob(
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('split-pages', payload, { jobId: payload.jobId });
 }
-
 export async function enqueueApplyAcceptedSuggestionsJob(
   env: Env,
   payload: {
@@ -203,7 +183,40 @@ export async function enqueueApplyAcceptedSuggestionsJob(
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('apply-accepted-suggestions', payload, { jobId: payload.jobId });
 }
-
+export async function enqueueApplyEditsFinalJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    editSourceVersionId: string;
+    rootVersionId: string;
+    sourceVersionId: string;
+    targetVersionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    targetS3Key: string;
+    userSourceDocxKey: string | null;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('apply-edits-final', payload, { jobId: payload.jobId });
+}
+export async function enqueuePreConvertJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    s3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('pre-convert-pdf', payload, { jobId: payload.jobId });
+}
 export async function enqueueMergeVersionsJob(
   env: Env,
   payload: {

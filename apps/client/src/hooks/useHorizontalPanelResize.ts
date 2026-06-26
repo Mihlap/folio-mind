@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
 type Config = {
   side: 'left' | 'right';
   defaultWidth: number;
-  /** Минимальная ширина в развёрнутом режиме. */
   minExpandedWidth: number;
-  /** Ниже — автосворачивание в иконки. */
   collapseBelow: number;
   maxWidth: number;
   collapsedWidth?: number;
 };
-
 export function useHorizontalPanelResize({
   side,
   defaultWidth,
@@ -23,7 +19,6 @@ export function useHorizontalPanelResize({
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(defaultWidth);
   const [isResizing, setIsResizing] = useState(false);
-
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
       if (prev) {
@@ -34,20 +29,16 @@ export function useHorizontalPanelResize({
       return true;
     });
   }, [width]);
-
   const expand = useCallback(() => {
     setWidth(lastExpandedRef.current);
     setCollapsed(false);
   }, []);
-
   const beginResize = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     setIsResizing(true);
   }, []);
-
   useEffect(() => {
     if (!isResizing) return;
-
     const onMove = (event: MouseEvent) => {
       const raw = side === 'left' ? event.clientX : window.innerWidth - event.clientX;
       if (raw < collapseBelow) {
@@ -59,14 +50,11 @@ export function useHorizontalPanelResize({
       lastExpandedRef.current = clamped;
       setWidth(clamped);
     };
-
     const onUp = () => setIsResizing(false);
-
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-
     return () => {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
@@ -74,9 +62,7 @@ export function useHorizontalPanelResize({
       window.removeEventListener('mouseup', onUp);
     };
   }, [collapseBelow, isResizing, maxWidth, minExpandedWidth, side]);
-
   const panelWidth = collapsed ? collapsedWidth : width;
-
   return {
     panelWidth,
     collapsed,

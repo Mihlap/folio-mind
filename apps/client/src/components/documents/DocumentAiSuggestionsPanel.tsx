@@ -15,7 +15,6 @@ import {
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
 import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
-
 type Props = {
   documentId: string;
   versionId: string;
@@ -23,15 +22,17 @@ type Props = {
   onGoToPage: (page: number) => void;
   onSelectVersion: (versionId: string) => void;
 };
-
 function getMutationError(err: unknown): string {
   if (typeof err === 'object' && err && 'data' in err) {
-    const data = (err as { data?: unknown }).data;
+    const data = (
+      err as {
+        data?: unknown;
+      }
+    ).data;
     if (typeof data === 'string') return data;
   }
   return 'Не удалось выполнить операцию';
 }
-
 export function DocumentAiSuggestionsPanel({
   documentId,
   versionId,
@@ -43,7 +44,6 @@ export function DocumentAiSuggestionsPanel({
   const [requestSuggestions, { isLoading: requesting }] = useRequestAiSuggestionsMutation();
   const [updateSuggestion, { isLoading: updating }] = useUpdateAiSuggestionMutation();
   const [applyAccepted, { isLoading: applying }] = useApplyAcceptedSuggestionsMutation();
-
   const [jobId, setJobId] = useState<string | null>(null);
   const [pollJob, setPollJob] = useState(false);
   const [operationJobId, setOperationJobId] = useState<string | null>(null);
@@ -51,13 +51,14 @@ export function DocumentAiSuggestionsPanel({
   const [error, setError] = useState<string | null>(null);
   const [applyHint, setApplyHint] = useState<string | null>(null);
   const [emptyAfterRun, setEmptyAfterRun] = useState(false);
-
-  const { data: job } = useGetJobQuery(jobId!, { skip: !jobId, pollingInterval: pollJob ? 2000 : 0 });
+  const { data: job } = useGetJobQuery(jobId!, {
+    skip: !jobId,
+    pollingInterval: pollJob ? 2000 : 0,
+  });
   const { data: operationJob } = useGetJobQuery(operationJobId!, {
     skip: !operationJobId,
     pollingInterval: pollOperation ? 2000 : 0,
   });
-
   useEffect(() => {
     setJobId(null);
     setPollJob(false);
@@ -67,7 +68,6 @@ export function DocumentAiSuggestionsPanel({
     setApplyHint(null);
     setEmptyAfterRun(false);
   }, [versionId]);
-
   useEffect(() => {
     if (!job) return;
     if (job.status === 'completed' || job.status === 'failed') {
@@ -79,18 +79,35 @@ export function DocumentAiSuggestionsPanel({
       } else {
         setError(
           typeof job.payload === 'object' && job.payload && 'error' in job.payload
-            ? String((job.payload as { error?: string }).error)
+            ? String(
+                (
+                  job.payload as {
+                    error?: string;
+                  }
+                ).error,
+              )
             : 'ИИ не смог сформировать предложения',
         );
       }
     }
   }, [job, refetch]);
-
   useEffect(() => {
     if (!operationJob) return;
     if (operationJob.status === 'completed') {
       setPollOperation(false);
-      setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
+      const p = operationJob.payload as Record<string, unknown> | null;
+      if (p?.method === 'docx-fallback-overlay') {
+        setApplyHint(
+          String(
+            p.message ??
+              'Текст из PDF не совпал с Word — правки наложены на PDF. Для идеального качества сверьте «было» с DOCX.',
+          ),
+        );
+      } else if (p?.status === 'partial') {
+        setApplyHint(String(p.message ?? 'Правки применены частично.'));
+      } else {
+        setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
+      }
     }
     if (operationJob.status === 'failed') {
       setPollOperation(false);
@@ -98,19 +115,23 @@ export function DocumentAiSuggestionsPanel({
         typeof operationJob.payload === 'object' &&
           operationJob.payload &&
           'error' in operationJob.payload
-          ? String((operationJob.payload as { error?: string }).error)
+          ? String(
+              (
+                operationJob.payload as {
+                  error?: string;
+                }
+              ).error,
+            )
           : 'Не удалось собрать PDF с правками',
       );
     }
   }, [operationJob]);
-
   const pending = data?.items.filter((s) => s.status === 'pending') ?? [];
   const accepted = data?.items.filter((s) => s.status === 'accepted') ?? [];
   const rejected = data?.items.filter((s) => s.status === 'rejected') ?? [];
   const loading = requesting || pollJob;
   const applyPending = applying || pollOperation;
   const hasSuggestions = pending.length > 0 || accepted.length > 0 || rejected.length > 0;
-
   async function handleRequest() {
     setError(null);
     setEmptyAfterRun(false);
@@ -122,7 +143,6 @@ export function DocumentAiSuggestionsPanel({
       setError(getMutationError(err));
     }
   }
-
   async function handleDecision(suggestionId: string, status: 'accepted' | 'rejected') {
     setError(null);
     try {
@@ -132,7 +152,6 @@ export function DocumentAiSuggestionsPanel({
       setError(getMutationError(err));
     }
   }
-
   async function handleApplyPdf() {
     setError(null);
     setApplyHint(null);
@@ -146,7 +165,6 @@ export function DocumentAiSuggestionsPanel({
       setError(getMutationError(err));
     }
   }
-
   return (
     <div className="space-y-2.5 border-t border-slate-100 pt-3">
       <PanelSectionHeader
@@ -154,10 +172,13 @@ export function DocumentAiSuggestionsPanel({
         helpTitle="Предложения правок"
         helpContent={
           <>
-            <p>ИИ предлагает замены формулировок. «Принять» фиксирует решение и добавляет запись в аннотации.</p>
             <p>
-              «Собрать PDF» — файл для пересылки: договор без изменений + компактный реестр
-              правок в приложении. Полные «было / стало» — в окне «Правки» и при сравнении версий.
+              ИИ предлагает замены формулировок. «Принять» фиксирует решение и добавляет запись в
+              аннотации.
+            </p>
+            <p>
+              «Собрать PDF» — файл для пересылки: договор без изменений + компактный реестр правок в
+              приложении. Полные «было / стало» — в окне «Правки» и при сравнении версий.
             </p>
           </>
         }
@@ -172,8 +193,8 @@ export function DocumentAiSuggestionsPanel({
           helpContent={
             <>
               <p>
-                Система извлекает текст из PDF и отправляет его в ИИ. Ниже появятся карточки с кнопками
-                «Принять» и «Отклонить».
+                Система извлекает текст из PDF и отправляет его в ИИ. Ниже появятся карточки с
+                кнопками «Принять» и «Отклонить».
               </p>
               <p>Нужна версия с текстовым слоем (не скан без OCR).</p>
             </>
@@ -228,9 +249,7 @@ export function DocumentAiSuggestionsPanel({
 
       {pending.length > 0 && (
         <ul className="space-y-3">
-          <p className="text-xs font-medium text-slate-600">
-            Новые предложения ({pending.length})
-          </p>
+          <p className="text-xs font-medium text-slate-600">Новые предложения ({pending.length})</p>
           {pending.map((item) => (
             <li key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
               {item.page != null && (
@@ -260,9 +279,9 @@ export function DocumentAiSuggestionsPanel({
                 </button>
                 <FeatureHelpButton title="Принять правку">
                   <p>
-                    Фиксирует согласие с предложенной формулировкой и сохраняет её в аннотациях (вкладка
-                    «Инструменты»). PDF этой версии не меняется — для файла с пометками нажмите «Собрать
-                    PDF с правками».
+                    Фиксирует согласие с предложенной формулировкой и сохраняет её в аннотациях
+                    (вкладка «Инструменты»). PDF этой версии не меняется — для файла с пометками
+                    нажмите «Собрать PDF с правками».
                   </p>
                 </FeatureHelpButton>
                 <button
@@ -287,7 +306,10 @@ export function DocumentAiSuggestionsPanel({
           <p className="text-xs font-medium text-slate-600">Принято ({accepted.length})</p>
           <ul className="space-y-3">
             {accepted.map((item) => (
-              <li key={item.id} className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2">
+              <li
+                key={item.id}
+                className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2"
+              >
                 {item.page != null && (
                   <button
                     type="button"

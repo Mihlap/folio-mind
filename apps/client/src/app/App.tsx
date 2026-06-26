@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAppSelector } from '../hooks/index.js';
 import { AppShell } from '../components/layout/AppShell.js';
 import { DocumentWorkspaceProvider } from '../context/document-workspace-context.js';
+import { BackgroundUploadProvider } from '../context/background-upload-provider.js';
 import { DashboardPage } from '../pages/app/DashboardPage.js';
 import { DocumentPage } from '../pages/app/DocumentPage.js';
 import { RegulationsPage } from '../pages/app/RegulationsPage.js';
@@ -16,13 +17,11 @@ import { MagicLinkPage } from '../pages/auth/MagicLinkPage.js';
 import { MagicLinkVerifyPage } from '../pages/auth/MagicLinkVerifyPage.js';
 import { OAuthCallbackPage } from '../pages/auth/OAuthCallbackPage.js';
 import { PhoneAuthPage } from '../pages/auth/PhoneAuthPage.js';
-
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAppSelector((s) => s.auth.token);
   if (!token) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
-
 export function App() {
   return (
     <Routes>
@@ -42,7 +41,9 @@ export function App() {
         element={
           <PrivateRoute>
             <DocumentWorkspaceProvider>
-              <AppShell />
+              <BackgroundUploadProvider>
+                <AppShell />
+              </BackgroundUploadProvider>
             </DocumentWorkspaceProvider>
           </PrivateRoute>
         }

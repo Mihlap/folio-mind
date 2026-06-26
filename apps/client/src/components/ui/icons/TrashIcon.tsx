@@ -1,14 +1,6 @@
 import { useId } from 'react';
-
-export function TrashIcon({
-  size = 18,
-  className,
-}: {
-  size?: number;
-  className?: string;
-}) {
+export function TrashIcon({ size = 18, className }: { size?: number; className?: string }) {
   const clipId = useId();
-
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

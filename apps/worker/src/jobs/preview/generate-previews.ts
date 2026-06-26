@@ -15,19 +15,16 @@ import {
   objectExists,
   putObjectBuffer,
 } from '../../lib/storage/s3.js';
-
 type PreviewJobPayload = WorkerJobPayload & {
   jobId?: string;
   documentId?: string;
   versionId?: string;
   s3Key?: string;
 };
-
 type PreviewPagesJobPayload = PreviewJobPayload & {
   fromPage?: number;
   toPage?: number;
 };
-
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms);
@@ -42,11 +39,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       });
   });
 }
-
 function previewJobTimeoutMs(env: WorkerEnv): number {
   return env.PREVIEW_JOB_TIMEOUT_MS;
 }
-
 export async function processGeneratePreviewsJob(
   env: WorkerEnv,
   data: PreviewJobPayload,
@@ -54,16 +49,13 @@ export async function processGeneratePreviewsJob(
   const run = async () => {
     const prisma = getPrisma();
     const { jobId, documentId, versionId, s3Key } = data;
-
     if (!jobId || !documentId || !versionId || !s3Key) {
       throw new Error('Preview job: missing jobId, documentId, versionId or s3Key');
     }
-
     await prisma.job.update({
       where: { id: jobId },
       data: { status: 'processing' },
     });
-
     const versionExists = await prisma.documentVersion.findUnique({
       where: { id: versionId },
       select: { id: true },
@@ -75,15 +67,12 @@ export async function processGeneratePreviewsJob(
       });
       return;
     }
-
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
     }
-
     const pdfBuffer = await getObjectBuffer(s3Key);
     const integrity = await analyzePdfIntegrityFromBuffer(pdfBuffer);
     const { pageCount, previews, initialPages } = await renderPdfPreviews(pdfBuffer);
-
     const versionExistsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: versionId },
       select: { id: true },
@@ -95,7 +84,6 @@ export async function processGeneratePreviewsJob(
       });
       return;
     }
-
     for (const preview of previews) {
       await putObjectBuffer({
         key: previewPageKey(documentId, versionId, preview.page),
@@ -103,7 +91,6 @@ export async function processGeneratePreviewsJob(
         contentType: 'image/png',
       });
     }
-
     try {
       await prisma.documentVersion.update({
         where: { id: versionId },
@@ -124,9 +111,7 @@ export async function processGeneratePreviewsJob(
         data: { status: 'ready', pageCount },
       });
     }
-
     const textKey = extractedTextKey(documentId, versionId);
-
     await prisma.job.update({
       where: { id: jobId },
       data: {
@@ -146,10 +131,9 @@ export async function processGeneratePreviewsJob(
         },
       },
     });
-
     void (async () => {
       try {
-        const extracted = await withTimeout(extractTextFromPdf(pdfBuffer), 20_000, 'Extract text');
+        const extracted = await withTimeout(extractTextFromPdf(pdfBuffer), 20000, 'Extract text');
         await putObjectBuffer({
           key: textKey,
           body: Buffer.from(
@@ -199,7 +183,6 @@ export async function processGeneratePreviewsJob(
       }
     })();
   };
-
   try {
     await withTimeout(run(), previewJobTimeoutMs(env), 'Preview job');
   } catch (err) {
@@ -222,7 +205,6 @@ export async function processGeneratePreviewsJob(
     throw err;
   }
 }
-
 export async function processPreviewPagesJob(
   env: WorkerEnv,
   data: PreviewPagesJobPayload,
@@ -230,20 +212,16 @@ export async function processPreviewPagesJob(
   const run = async () => {
     const prisma = getPrisma();
     const { jobId, documentId, versionId, s3Key, fromPage, toPage } = data;
-
     if (!jobId || !documentId || !versionId || !s3Key || !fromPage || !toPage) {
       throw new Error('Preview pages job: missing required fields');
     }
-
     const { maxPages } = getPreviewLimits();
     const cappedTo = Math.min(toPage, maxPages);
     if (fromPage > cappedTo) return;
-
     await prisma.job.update({
       where: { id: jobId },
       data: { status: 'processing' },
     });
-
     const versionExists = await prisma.documentVersion.findUnique({
       where: { id: versionId },
       select: { id: true },
@@ -255,14 +233,11 @@ export async function processPreviewPagesJob(
       });
       return;
     }
-
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
     }
-
     const pdfBuffer = await getObjectBuffer(s3Key);
     const previews = await renderPdfPageRange(pdfBuffer, fromPage, cappedTo);
-
     const versionExistsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: versionId },
       select: { id: true },
@@ -274,7 +249,6 @@ export async function processPreviewPagesJob(
       });
       return;
     }
-
     let uploaded = 0;
     for (const preview of previews) {
       const key = previewPageKey(documentId, versionId, preview.page);
@@ -287,7 +261,6 @@ export async function processPreviewPagesJob(
       });
       uploaded += 1;
     }
-
     await prisma.job.update({
       where: { id: jobId },
       data: {
@@ -303,7 +276,6 @@ export async function processPreviewPagesJob(
       },
     });
   };
-
   try {
     await withTimeout(run(), previewJobTimeoutMs(env), 'Preview pages job');
   } catch (err) {

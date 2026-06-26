@@ -7,31 +7,26 @@ import {
   useListRagSourcesQuery,
   useUploadRagSourceFileMutation,
 } from '@folio-mind/store';
-
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'ожидает файл',
   processing: 'обрабатывается',
   ready: 'готов к проверке',
   failed: 'ошибка обработки',
 };
-
 export function RegulationsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const { data, refetch } = useListRagSourcesQuery(undefined, { pollingInterval: 5000 });
   const [createSource] = useCreateRagSourceMutation();
   const [uploadFile] = useUploadRagSourceFileMutation();
   const [deleteSource] = useDeleteRagSourceMutation();
-
   async function handleFile(file: File) {
     const lower = file.name.toLowerCase();
     if (!lower.endsWith('.pdf') && !lower.endsWith('.txt')) {
       setError('Поддерживаются PDF и TXT');
       return;
     }
-
     setError(null);
     setUploading(true);
     try {
@@ -42,7 +37,6 @@ export function RegulationsPage() {
         mimeType: file.type || (lower.endsWith('.pdf') ? 'application/pdf' : 'text/plain'),
         size: file.size,
       }).unwrap();
-
       await uploadFile({ sourceId: created.sourceId, file }).unwrap();
       await refetch();
     } catch (e) {
@@ -52,7 +46,6 @@ export function RegulationsPage() {
       if (inputRef.current) inputRef.current.value = '';
     }
   }
-
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -64,9 +57,9 @@ export function RegulationsPage() {
               компании.
             </p>
             <p>
-              После загрузки система читает файл и сохраняет его по частям. Эти части используются на
-              странице документа в блоке «Сверка с регламентом»: там договор сравнивается с вашими
-              стандартами, и вы видите, где текст расходится с принятыми у вас правилами.
+              После загрузки система читает файл и сохраняет его по частям. Эти части используются
+              на странице документа в блоке «Сверка с регламентом»: там договор сравнивается с
+              вашими стандартами, и вы видите, где текст расходится с принятыми у вас правилами.
             </p>
             <p>Файлы видят только пользователи вашей организации.</p>
           </FeatureHelpButton>

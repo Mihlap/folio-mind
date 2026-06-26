@@ -1,11 +1,9 @@
 import type { PDFDocument } from 'pdf-lib';
 import { rgb } from 'pdf-lib';
-import type { TextBoxPosition } from './find-text-positions.js';
-
+import type { TextBoxPosition, TextMatch } from './find-text-positions.js';
 const HIGHLIGHT_COLOR = rgb(1, 0, 0);
 const HIGHLIGHT_OPACITY = 0.2;
 const PADDING = 0.5;
-
 export function renderHighlightsOnPage(
   pdfDoc: PDFDocument,
   pageIndex: number,
@@ -13,7 +11,6 @@ export function renderHighlightsOnPage(
 ): void {
   const page = pdfDoc.getPage(pageIndex);
   if (!page) return;
-
   for (const pos of positions) {
     page.drawRectangle({
       x: pos.x - PADDING,
@@ -25,20 +22,19 @@ export function renderHighlightsOnPage(
     });
   }
 }
-
 export function renderAllHighlights(
   pdfDoc: PDFDocument,
-  highlights: Map<number, Map<string, TextBoxPosition[]>>,
+  highlights: Map<number, Map<string, TextBoxPosition[] | TextMatch[]>>,
 ): void {
   for (const [pageNumber, editMap] of highlights) {
     const pageIndex = pageNumber - 1;
     if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) continue;
-
     const allPositions: TextBoxPosition[] = [];
-    for (const positions of editMap.values()) {
-      allPositions.push(...positions);
+    for (const matches of editMap.values()) {
+      for (const entry of matches) {
+        allPositions.push('box' in entry ? entry.box : entry);
+      }
     }
-
     if (allPositions.length > 0) {
       renderHighlightsOnPage(pdfDoc, pageIndex, allPositions);
     }

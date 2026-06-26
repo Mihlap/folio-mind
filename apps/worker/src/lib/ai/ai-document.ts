@@ -1,6 +1,5 @@
 import { GigaChatProvider, type AIProviderName } from '@folio-mind/ai-providers';
 import { createLLMFromWorkerEnv } from './llm.js';
-
 export async function summarizePdfWithoutTextLayer(
   llm: ReturnType<typeof createLLMFromWorkerEnv>,
   provider: AIProviderName,
@@ -18,7 +17,6 @@ export async function summarizePdfWithoutTextLayer(
       maxTokens: 1500,
     });
   }
-
   throw new Error(
     'В PDF нет текстового слоя (скан). Для таких файлов используйте GigaChat — он читает PDF напрямую.',
   );

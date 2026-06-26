@@ -6,11 +6,9 @@ import {
   type LLMProvider,
 } from '@folio-mind/ai-providers';
 import type { Env } from '../config/env.js';
-
 export function getConfiguredProviderName(env: Env): AIProviderName {
   return resolveDefaultProvider(env.AI_PROVIDER);
 }
-
 export function createLLMFromEnv(env: Env, override?: AIProviderName): LLMProvider {
   const name = override ?? getConfiguredProviderName(env);
   return createLLMProvider(name, {
@@ -27,7 +25,6 @@ export function createLLMFromEnv(env: Env, override?: AIProviderName): LLMProvid
     },
   });
 }
-
 export function getAiProviderCatalog(env: Env) {
   return getProviderCatalog({
     active: getConfiguredProviderName(env),

@@ -1,6 +1,6 @@
 import type { RootState } from '../store.js';
 import { apiBaseUrl, baseApi } from './baseApi.js';
-
+import { UPLOAD_NETWORK_ERROR_MESSAGE } from '../lib/formatUploadError.js';
 export type DocumentListItem = {
   id: string;
   title: string;
@@ -12,28 +12,35 @@ export type DocumentListItem = {
     status: string;
     size: string;
     mimeType: string;
+    sourceDocxKey: string | null;
   } | null;
 };
-
 export type CreateDocumentBody = {
   title: string;
   fileName: string;
   mimeType: string;
   size: number;
+  docxFileName?: string;
 };
-
 export type CreateDocumentResponse = {
   document: DocumentListItem;
   versionId: string;
   uploadUrl: string;
   s3Key: string;
+  docxUploadUrl?: string;
+  docxS3Key?: string;
 };
-
 export const documentsApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     listDocuments: build.query<
-      { items: DocumentListItem[]; nextCursor: string | null },
-      { limit?: number; cursor?: string }
+      {
+        items: DocumentListItem[];
+        nextCursor: string | null;
+      },
+      {
+        limit?: number;
+        cursor?: string;
+      }
     >({
       query: ({ limit = 20, cursor }) => ({
         url: '/documents',
@@ -55,6 +62,7 @@ export const documentsApi = baseApi.injectEndpoints({
           createdAt: string;
           integrityStatus: string | null;
           integritySummary: string | null;
+          sourceDocxKey: string | null;
         }>;
       },
       string
@@ -66,13 +74,37 @@ export const documentsApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/documents', method: 'POST', body }),
       invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
     }),
+    completeDocxUpload: build.mutation<
+      {
+        sourceDocxKey: string;
+      },
+      {
+        documentId: string;
+        versionId: string;
+        docxS3Key: string;
+      }
+    >({
+      query: ({ documentId, versionId, docxS3Key }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/source-docx-complete`,
+        method: 'POST',
+        body: { docxS3Key },
+      }),
+    }),
     createDocumentVersion: build.mutation<
-      { versionId: string; version: number; s3Key: string; uploadUrl: string },
+      {
+        versionId: string;
+        version: number;
+        s3Key: string;
+        uploadUrl: string;
+        docxUploadUrl?: string;
+        docxS3Key?: string;
+      },
       {
         documentId: string;
         fileName: string;
         mimeType: string;
         size: number;
+        docxFileName?: string;
       }
     >({
       query: ({ documentId, ...body }) => ({
@@ -86,8 +118,16 @@ export const documentsApi = baseApi.injectEndpoints({
       ],
     }),
     completeUpload: build.mutation<
-      { versionId: string; status: string; jobId: string },
-      { documentId: string; versionId: string; sha256?: string }
+      {
+        versionId: string;
+        status: string;
+        jobId: string;
+      },
+      {
+        documentId: string;
+        versionId: string;
+        sha256?: string;
+      }
     >({
       query: ({ documentId, versionId, sha256 }) => ({
         url: `/documents/${documentId}/versions/${versionId}/complete`,
@@ -99,10 +139,17 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: documentId },
       ],
     }),
-    /** Загрузка PDF через API (обход CORS при прямом PUT в S3 из браузера). */
     uploadVersionFile: build.mutation<
-      { versionId: string; status: string; jobId: string },
-      { documentId: string; versionId: string; file: File }
+      {
+        versionId: string;
+        status: string;
+        jobId: string;
+      },
+      {
+        documentId: string;
+        versionId: string;
+        file: File;
+      }
     >({
       async queryFn({ documentId, versionId, file }, { getState }) {
         const token = (getState() as RootState).auth.token;
@@ -121,17 +168,30 @@ export const documentsApi = baseApi.injectEndpoints({
           if (!res.ok) {
             const err =
               typeof data === 'object' && data && 'error' in data
-                ? String((data as { error: string }).error)
-                : `Ошибка загрузки (${res.status})`;
+                ? String(
+                    (
+                      data as {
+                        error: string;
+                      }
+                    ).error,
+                  )
+                : res.status === 503 || res.status >= 500
+                  ? UPLOAD_NETWORK_ERROR_MESSAGE
+                  : `Ошибка загрузки (${res.status})`;
             return { error: { status: res.status, data: err } };
           }
-          return { data: data as { versionId: string; status: string; jobId: string } };
+          return {
+            data: data as {
+              versionId: string;
+              status: string;
+              jobId: string;
+            },
+          };
         } catch {
           return {
             error: {
               status: 'FETCH_ERROR',
-              error:
-                'Не удалось отправить файл на сервер. Проверьте, что API запущен (порт 3001).',
+              error: UPLOAD_NETWORK_ERROR_MESSAGE,
             },
           };
         }
@@ -148,7 +208,13 @@ export const documentsApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
     }),
-    deleteDocumentVersion: build.mutation<void, { documentId: string; versionId: string }>({
+    deleteDocumentVersion: build.mutation<
+      void,
+      {
+        documentId: string;
+        versionId: string;
+      }
+    >({
       query: ({ documentId, versionId }) => ({
         url: `/documents/${documentId}/versions/${versionId}`,
         method: 'DELETE',
@@ -161,11 +227,19 @@ export const documentsApi = baseApi.injectEndpoints({
     getVersionPreviews: build.query<
       {
         pageCount: number;
-        pages: Array<{ page: number; url: string }>;
+        pages: Array<{
+          page: number;
+          url: string;
+        }>;
         status: 'processing' | 'ready' | 'partial' | 'unavailable';
         pendingPages?: number[];
       },
-      { documentId: string; versionId: string; from?: number; to?: number }
+      {
+        documentId: string;
+        versionId: string;
+        from?: number;
+        to?: number;
+      }
     >({
       query: ({ documentId, versionId, from, to }) => ({
         url: `/documents/${documentId}/versions/${versionId}/previews`,
@@ -176,11 +250,30 @@ export const documentsApi = baseApi.injectEndpoints({
       }),
     }),
     getDownloadUrl: build.query<
-      { url: string; expiresInSeconds: number },
-      { documentId: string; versionId: string }
+      {
+        url: string;
+        expiresInSeconds: number;
+      },
+      {
+        documentId: string;
+        versionId: string;
+      }
     >({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/download-url`,
+    }),
+    getSourceDocxUrl: build.query<
+      {
+        url: string;
+        expiresInSeconds: number;
+      },
+      {
+        documentId: string;
+        versionId: string;
+      }
+    >({
+      query: ({ documentId, versionId }) =>
+        `/documents/${documentId}/versions/${versionId}/source-docx-url`,
     }),
     compareVersionIntegrity: build.query<
       {
@@ -198,7 +291,11 @@ export const documentsApi = baseApi.injectEndpoints({
             creationDate: string | null;
             modDate: string | null;
             hasDigitalSignature: boolean;
-            signals: Array<{ id: string; weight: string; message: string }>;
+            signals: Array<{
+              id: string;
+              weight: string;
+              message: string;
+            }>;
             analyzedWith: 'qpdf' | 'builtin';
           } | null;
         };
@@ -216,7 +313,11 @@ export const documentsApi = baseApi.injectEndpoints({
             creationDate: string | null;
             modDate: string | null;
             hasDigitalSignature: boolean;
-            signals: Array<{ id: string; weight: string; message: string }>;
+            signals: Array<{
+              id: string;
+              weight: string;
+              message: string;
+            }>;
             analyzedWith: 'qpdf' | 'builtin';
           } | null;
         };
@@ -224,7 +325,11 @@ export const documentsApi = baseApi.injectEndpoints({
         statusDelta: string | null;
         scoreDelta: number | null;
       },
-      { documentId: string; versionId: string; otherVersionId: string }
+      {
+        documentId: string;
+        versionId: string;
+        otherVersionId: string;
+      }
     >({
       query: ({ documentId, versionId, otherVersionId }) =>
         `/documents/${documentId}/versions/${versionId}/integrity/compare/${otherVersionId}`,
@@ -244,11 +349,18 @@ export const documentsApi = baseApi.injectEndpoints({
           creationDate: string | null;
           modDate: string | null;
           hasDigitalSignature: boolean;
-          signals: Array<{ id: string; weight: string; message: string }>;
+          signals: Array<{
+            id: string;
+            weight: string;
+            message: string;
+          }>;
           analyzedWith: 'qpdf' | 'builtin';
         } | null;
       },
-      { documentId: string; versionId: string }
+      {
+        documentId: string;
+        versionId: string;
+      }
     >({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/integrity`,
@@ -260,7 +372,11 @@ export const documentsApi = baseApi.injectEndpoints({
         version: number;
         status: 'processing';
       },
-      { documentId: string; versionId: string; pages: number[] }
+      {
+        documentId: string;
+        versionId: string;
+        pages: number[];
+      }
     >({
       query: ({ documentId, versionId, pages }) => ({
         url: `/documents/${documentId}/versions/${versionId}/operations/split`,
@@ -279,7 +395,10 @@ export const documentsApi = baseApi.injectEndpoints({
         version: number;
         status: 'processing';
       },
-      { documentId: string; versionIds: string[] }
+      {
+        documentId: string;
+        versionIds: string[];
+      }
     >({
       query: ({ documentId, versionIds }) => ({
         url: `/documents/${documentId}/operations/merge`,
@@ -287,6 +406,27 @@ export const documentsApi = baseApi.injectEndpoints({
         body: { versionIds },
       }),
       invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
+    applyEditsFinal: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        version: number;
+        status: 'processing';
+      },
+      {
+        documentId: string;
+        versionId: string;
+      }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/apply-edits-final`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, { documentId, versionId }) => [
         { type: 'Documents', id: 'LIST' },
         { type: 'Documents', id: documentId },
       ],
@@ -308,13 +448,24 @@ export const documentsApi = baseApi.injectEndpoints({
           status: 'unchanged' | 'modified' | 'added' | 'removed';
           baseText?: string;
           compareText?: string;
-          lines?: Array<{ type: 'equal' | 'insert' | 'delete'; text: string }>;
+          lines?: Array<{
+            type: 'equal' | 'insert' | 'delete';
+            text: string;
+          }>;
         }>;
         acceptedEdits: {
           baseCount: number;
           compareCount: number;
-          onlyInCompare: Array<{ page: number; quote: string; content: string }>;
-          onlyInBase: Array<{ page: number; quote: string; content: string }>;
+          onlyInCompare: Array<{
+            page: number;
+            quote: string;
+            content: string;
+          }>;
+          onlyInBase: Array<{
+            page: number;
+            quote: string;
+            content: string;
+          }>;
           modified: Array<{
             page: number;
             baseQuote: string;
@@ -323,9 +474,16 @@ export const documentsApi = baseApi.injectEndpoints({
             compareContent: string;
           }>;
         };
-        pageCount: { base: number | null; compare: number | null };
+        pageCount: {
+          base: number | null;
+          compare: number | null;
+        };
       },
-      { documentId: string; baseVersionId: string; compareVersionId: string }
+      {
+        documentId: string;
+        baseVersionId: string;
+        compareVersionId: string;
+      }
     >({
       query: ({ documentId, baseVersionId, compareVersionId }) => ({
         url: `/documents/${documentId}/versions/compare`,
@@ -334,21 +492,23 @@ export const documentsApi = baseApi.injectEndpoints({
     }),
   }),
 });
-
 export const {
   useListDocumentsQuery,
   useGetDocumentQuery,
   useCreateDocumentMutation,
   useCreateDocumentVersionMutation,
   useCompleteUploadMutation,
+  useCompleteDocxUploadMutation,
   useUploadVersionFileMutation,
   useDeleteDocumentMutation,
   useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
+  useLazyGetSourceDocxUrlQuery,
   useGetVersionIntegrityQuery,
   useCompareVersionIntegrityQuery,
   useGetVersionPreviewsQuery,
   useSplitPagesMutation,
   useMergeVersionsMutation,
+  useApplyEditsFinalMutation,
   useLazyCompareVersionsQuery,
 } = documentsApi;

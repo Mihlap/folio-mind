@@ -6,19 +6,15 @@ import {
   fetchEsiaProfile,
   isEsiaConfigured,
 } from './esia.js';
-
 export type OAuthProviderId = 'google' | 'yandex' | 'esia';
-
 export type OAuthProfile = {
   providerUserId: string;
   email: string;
   name: string | null;
 };
-
 export function getOAuthRedirectUri(env: Env, provider: OAuthProviderId): string {
   return `${getApiPublicOrigin(env)}/auth/oauth/${provider}/callback`;
 }
-
 export function isOAuthConfigured(env: Env, provider: OAuthProviderId): boolean {
   if (provider === 'google') {
     return Boolean(env.GOOGLE_OAUTH_CLIENT_ID?.trim() && env.GOOGLE_OAUTH_CLIENT_SECRET?.trim());
@@ -28,15 +24,9 @@ export function isOAuthConfigured(env: Env, provider: OAuthProviderId): boolean 
   }
   return Boolean(env.YANDEX_OAUTH_CLIENT_ID?.trim() && env.YANDEX_OAUTH_CLIENT_SECRET?.trim());
 }
-
-export function buildOAuthAuthorizeUrl(
-  env: Env,
-  provider: OAuthProviderId,
-  state: string,
-): string {
+export function buildOAuthAuthorizeUrl(env: Env, provider: OAuthProviderId, state: string): string {
   const redirectUri = encodeURIComponent(getOAuthRedirectUri(env, provider));
   const encodedState = encodeURIComponent(state);
-
   if (provider === 'google') {
     const scope = encodeURIComponent('openid email profile');
     return (
@@ -49,11 +39,9 @@ export function buildOAuthAuthorizeUrl(
       `&prompt=select_account`
     );
   }
-
   if (provider === 'esia') {
     return buildEsiaAuthorizeUrl(env, state);
   }
-
   return (
     `https://oauth.yandex.ru/authorize?` +
     `response_type=code` +
@@ -62,19 +50,13 @@ export function buildOAuthAuthorizeUrl(
     `&state=${encodedState}`
   );
 }
-
-async function exchangeCode(
-  env: Env,
-  provider: OAuthProviderId,
-  code: string,
-): Promise<string> {
+async function exchangeCode(env: Env, provider: OAuthProviderId, code: string): Promise<string> {
   const redirectUri = getOAuthRedirectUri(env, provider);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
     redirect_uri: redirectUri,
   });
-
   if (provider === 'google') {
     body.set('client_id', env.GOOGLE_OAUTH_CLIENT_ID!);
     body.set('client_secret', env.GOOGLE_OAUTH_CLIENT_SECRET!);
@@ -84,11 +66,12 @@ async function exchangeCode(
       body,
     });
     if (!res.ok) throw new Error(`Google token exchange failed: ${res.status}`);
-    const data = (await res.json()) as { access_token?: string };
+    const data = (await res.json()) as {
+      access_token?: string;
+    };
     if (!data.access_token) throw new Error('Google token missing');
     return data.access_token;
   }
-
   body.set('client_id', env.YANDEX_OAUTH_CLIENT_ID!);
   body.set('client_secret', env.YANDEX_OAUTH_CLIENT_SECRET!);
   const res = await fetch('https://oauth.yandex.ru/token', {
@@ -97,21 +80,23 @@ async function exchangeCode(
     body,
   });
   if (!res.ok) throw new Error(`Yandex token exchange failed: ${res.status}`);
-  const data = (await res.json()) as { access_token?: string };
+  const data = (await res.json()) as {
+    access_token?: string;
+  };
   if (!data.access_token) throw new Error('Yandex token missing');
   return data.access_token;
 }
-
-async function fetchProfile(
-  provider: OAuthProviderId,
-  accessToken: string,
-): Promise<OAuthProfile> {
+async function fetchProfile(provider: OAuthProviderId, accessToken: string): Promise<OAuthProfile> {
   if (provider === 'google') {
     const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) throw new Error(`Google userinfo failed: ${res.status}`);
-    const data = (await res.json()) as { id?: string; email?: string; name?: string };
+    const data = (await res.json()) as {
+      id?: string;
+      email?: string;
+      name?: string;
+    };
     if (!data.id || !data.email) throw new Error('Google profile incomplete');
     return {
       providerUserId: data.id,
@@ -119,7 +104,6 @@ async function fetchProfile(
       name: data.name ?? null,
     };
   }
-
   const res = await fetch('https://login.yandex.ru/info?format=json', {
     headers: { Authorization: `OAuth ${accessToken}` },
   });
@@ -139,7 +123,6 @@ async function fetchProfile(
     name: data.display_name ?? data.real_name ?? null,
   };
 }
-
 export async function fetchOAuthProfile(
   env: Env,
   provider: OAuthProviderId,

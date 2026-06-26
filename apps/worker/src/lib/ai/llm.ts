@@ -5,7 +5,6 @@ import {
   type LLMProvider,
 } from '@folio-mind/ai-providers';
 import type { WorkerEnv } from '../config/env.js';
-
 export function createLLMFromWorkerEnv(env: WorkerEnv, override?: AIProviderName): LLMProvider {
   const name = override ?? resolveDefaultProvider(env.AI_PROVIDER);
   return createLLMProvider(name, {

@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { PdfViewerDisplayMode, PdfViewerZoomMode } from './PdfViewer.js';
-
 type PdfViewerToolbarProps = {
   displayMode: PdfViewerDisplayMode;
   zoomMode: PdfViewerZoomMode;
@@ -17,7 +16,6 @@ type PdfViewerToolbarProps = {
   onNextMatch: () => void;
   onClearSearch: () => void;
 };
-
 export function PdfViewerToolbar({
   displayMode,
   zoomMode,
@@ -75,14 +73,20 @@ export function PdfViewerToolbar({
         {searchQuery && (
           <>
             <span className="shrink-0 text-xs text-slate-500">
-              {matchCount > 0
-                ? `${activeMatchIndex + 1}/${matchCount}`
-                : 'нет'}
+              {matchCount > 0 ? `${activeMatchIndex + 1}/${matchCount}` : 'нет'}
             </span>
-            <IconButton label="Предыдущее совпадение" onClick={onPrevMatch} disabled={matchCount === 0}>
+            <IconButton
+              label="Предыдущее совпадение"
+              onClick={onPrevMatch}
+              disabled={matchCount === 0}
+            >
               ↑
             </IconButton>
-            <IconButton label="Следующее совпадение" onClick={onNextMatch} disabled={matchCount === 0}>
+            <IconButton
+              label="Следующее совпадение"
+              onClick={onNextMatch}
+              disabled={matchCount === 0}
+            >
               ↓
             </IconButton>
             <IconButton label="Очистить поиск" onClick={onClearSearch}>
@@ -94,7 +98,6 @@ export function PdfViewerToolbar({
     </div>
   );
 }
-
 function ToolbarButton({
   active,
   onClick,
@@ -108,15 +111,12 @@ function ToolbarButton({
     <button
       type="button"
       onClick={onClick}
-      className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition ${
-        active ? 'bg-folio-600 text-white' : 'text-slate-600 hover:bg-slate-50'
-      }`}
+      className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition ${active ? 'bg-folio-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
     >
       {label}
     </button>
   );
 }
-
 function IconButton({
   label,
   onClick,

@@ -1,18 +1,14 @@
 import { baseApi } from './baseApi.js';
-
 export type AiProviderId = 'gigachat' | 'yandex';
-
 export type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
-
 export type SummaryJobResponse = {
   jobId: string;
   status: string;
   cached?: boolean;
 };
-
 export type AiJobPayload = {
   summary?: string;
   reply?: string;
@@ -25,7 +21,6 @@ export type AiJobPayload = {
   suggestionCount?: number;
   ragChunkCount?: number;
 };
-
 export const aiApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getAiProviders: build.query<
@@ -46,7 +41,11 @@ export const aiApi = baseApi.injectEndpoints({
     }),
     requestSummary: build.mutation<
       SummaryJobResponse,
-      { documentId: string; versionId: string; provider?: AiProviderId }
+      {
+        documentId: string;
+        versionId: string;
+        provider?: AiProviderId;
+      }
     >({
       query: ({ documentId, versionId, provider }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/summary`,
@@ -71,7 +70,10 @@ export const aiApi = baseApi.injectEndpoints({
       }),
     }),
     exportReport: build.mutation<
-      { url: string; key: string },
+      {
+        url: string;
+        key: string;
+      },
       {
         documentId: string;
         versionId: string;
@@ -111,7 +113,10 @@ export const aiApi = baseApi.injectEndpoints({
           createdAt: string;
         }>;
       },
-      { documentId: string; versionId: string }
+      {
+        documentId: string;
+        versionId: string;
+      }
     >({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/ai/suggestions`,
@@ -119,7 +124,11 @@ export const aiApi = baseApi.injectEndpoints({
     }),
     requestAiSuggestions: build.mutation<
       SummaryJobResponse,
-      { documentId: string; versionId: string; provider?: AiProviderId }
+      {
+        documentId: string;
+        versionId: string;
+        provider?: AiProviderId;
+      }
     >({
       query: ({ documentId, versionId, provider }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/suggestions`,
@@ -135,7 +144,10 @@ export const aiApi = baseApi.injectEndpoints({
         version: number;
         status: 'processing';
       },
-      { documentId: string; versionId: string }
+      {
+        documentId: string;
+        versionId: string;
+      }
     >({
       query: ({ documentId, versionId }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/apply-accepted`,
@@ -193,7 +205,6 @@ export const aiApi = baseApi.injectEndpoints({
     }),
   }),
 });
-
 export const {
   useGetAiProvidersQuery,
   useRequestSummaryMutation,

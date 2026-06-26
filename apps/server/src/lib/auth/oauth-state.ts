@@ -1,7 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-
 const MAX_AGE_MS = 10 * 60 * 1000;
-
 export function createOAuthState(provider: string, secret: string): string {
   const nonce = randomBytes(16).toString('base64url');
   const issuedAt = Date.now().toString(36);
@@ -9,7 +7,6 @@ export function createOAuthState(provider: string, secret: string): string {
   const sig = createHmac('sha256', secret).update(payload).digest('base64url');
   return `${payload}.${sig}`;
 }
-
 export function verifyOAuthState(state: string, provider: string, secret: string): boolean {
   const dot = state.lastIndexOf('.');
   if (dot < 0) return false;

@@ -12,7 +12,6 @@ import {
   isWorkerS3Configured,
   putObjectBuffer,
 } from '../../lib/storage/s3.js';
-
 type MergeVersionsPayload = WorkerJobPayload & {
   operationJobId?: string;
   documentId?: string;
@@ -21,7 +20,6 @@ type MergeVersionsPayload = WorkerJobPayload & {
   sourceS3Keys?: string[];
   sourceVersionIds?: string[];
 };
-
 export async function processMergeVersionsJob(
   env: WorkerEnv,
   data: MergeVersionsPayload,
@@ -35,7 +33,6 @@ export async function processMergeVersionsJob(
     sourceVersionIds,
     requestId,
   } = data;
-
   if (
     !operationJobId ||
     !documentId ||
@@ -48,15 +45,12 @@ export async function processMergeVersionsJob(
   ) {
     throw new Error('Merge versions job: missing required payload fields');
   }
-
   const prisma = getPrisma();
   await prisma.job.update({ where: { id: operationJobId }, data: { status: 'processing' } });
-
   try {
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
     }
-
     const exists = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },
       select: { id: true },
@@ -68,10 +62,8 @@ export async function processMergeVersionsJob(
       });
       return;
     }
-
     const mergedPdf = await PDFDocument.create();
     let totalPages = 0;
-
     for (const sourceS3Key of sourceS3Keys) {
       const sourceBuffer = await getObjectBuffer(sourceS3Key);
       const sourcePdf = await PDFDocument.load(sourceBuffer);
@@ -80,10 +72,8 @@ export async function processMergeVersionsJob(
       copiedPages.forEach((page) => mergedPdf.addPage(page));
       totalPages += pageIndices.length;
     }
-
     const outputBytes = await mergedPdf.save();
     const outputBuffer = Buffer.from(outputBytes);
-
     const existsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },
       select: { id: true },
@@ -95,13 +85,11 @@ export async function processMergeVersionsJob(
       });
       return;
     }
-
     await putObjectBuffer({
       key: targetS3Key,
       body: outputBuffer,
       contentType: 'application/pdf',
     });
-
     const previewJobId = await finalizeOptimizeVersion({
       env,
       data,
@@ -114,7 +102,6 @@ export async function processMergeVersionsJob(
       operationMeta: { sourceVersionIds },
       requestId,
     });
-
     await prisma.job.update({
       where: { id: operationJobId },
       data: {
@@ -134,9 +121,7 @@ export async function processMergeVersionsJob(
     const message = err instanceof Error ? err.message : 'Merge versions failed';
     try {
       await deleteObjectByKey(targetS3Key);
-    } catch {
-      // часть S3 объектов могла уже быть удалена/не создана
-    }
+    } catch {}
     try {
       await failOptimizeOperation({
         operationJobId,
@@ -144,9 +129,7 @@ export async function processMergeVersionsJob(
         error: message,
         payload: { documentId, sourceVersionIds, sourceS3Keys },
       });
-    } catch {
-      // версия могла быть удалена в момент выполнения
-    }
+    } catch {}
     throw err;
   }
 }

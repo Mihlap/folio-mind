@@ -1,12 +1,10 @@
 import { TrashIcon } from '../ui/icons/TrashIcon.js';
-
 type DeleteDocumentButtonProps = {
   title: string;
   disabled?: boolean;
-  onClick: () => void; 
+  onClick: () => void;
   variant?: 'list' | 'page';
 };
-
 export function DeleteDocumentButton({
   title,
   disabled,
@@ -14,7 +12,6 @@ export function DeleteDocumentButton({
   variant = 'list',
 }: DeleteDocumentButtonProps) {
   const isList = variant === 'list';
-
   return (
     <button
       type="button"
