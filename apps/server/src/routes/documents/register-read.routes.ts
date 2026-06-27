@@ -12,7 +12,8 @@ import {
   getPresignedGetUrl,
   isS3Configured,
   isS3NetworkError,
-  listExistingPreviewPageNumbers,
+  checkAppliedDocxVersionIds,
+  listPreviewPagesInRange,
   s3ObjectExists,
 } from '../../lib/storage/s3.js';
 import { decodeCursor, encodeCursor } from './helpers.js';
@@ -124,6 +125,22 @@ export const registerReadRoutes: FastifyPluginAsync<{
           documentId: document.id,
         },
       });
+      const appliedDocxVersionIds = isS3Configured()
+        ? await Promise.race([
+            checkAppliedDocxVersionIds(
+              document.id,
+              document.versions
+                .filter(
+                  (v: { version: number; status: string }) =>
+                    v.version > 1 && v.status !== 'pending_upload',
+                )
+                .map((v: { id: string }) => v.id),
+            ),
+            new Promise<Set<string>>((resolve) => {
+              setTimeout(() => resolve(new Set()), 4_000);
+            }),
+          ])
+        : new Set<string>();
       return {
         id: document.id,
         title: document.title,
@@ -138,6 +155,9 @@ export const registerReadRoutes: FastifyPluginAsync<{
             createdAt: Date;
             integrityStatus: string | null;
             integritySummary: string | null;
+            confidenceLevel: string | null;
+            confidenceScore: number | null;
+            confidenceSummary: string | null;
             sourceDocxKey: string | null;
           }) => ({
             id: v.id,
@@ -149,7 +169,11 @@ export const registerReadRoutes: FastifyPluginAsync<{
             createdAt: v.createdAt.toISOString(),
             integrityStatus: v.integrityStatus,
             integritySummary: v.integritySummary,
+            confidenceLevel: v.confidenceLevel ?? null,
+            confidenceScore: v.confidenceScore ?? null,
+            confidenceSummary: v.confidenceSummary ?? null,
             sourceDocxKey: v.sourceDocxKey ?? null,
+            hasAppliedDocx: appliedDocxVersionIds.has(v.id),
           }),
         ),
       };
@@ -357,7 +381,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
         url: string;
       }> = [];
       const missing: number[] = [];
-      const existingPreviewPages = await listExistingPreviewPageNumbers(documentId, versionId);
+      const existingPreviewPages = await listPreviewPagesInRange(documentId, versionId, from, to);
       for (let page = from; page <= to; page++) {
         if (existingPreviewPages.has(page)) {
           const key = previewPageKey(documentId, versionId, page);

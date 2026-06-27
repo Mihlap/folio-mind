@@ -29,10 +29,11 @@ import {
   type DocumentRightTab,
 } from '../../components/documents/DocumentRightPanel.js';
 import { DocumentVersionsSidebar } from '../../components/documents/DocumentVersionsSidebar.js';
+import { DocumentConfidenceNotice } from '../../components/documents/DocumentConfidenceNotice.js';
 import { useDocumentWorkspace } from '../../context/document-workspace-context.js';
 import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js';
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
-import { useDocumentPdfLoader } from '../../hooks/useDocumentPdfLoader.js';
+import { useDocumentPdfLoader, pdfLoadStageLabel } from '../../hooks/useDocumentPdfLoader.js';
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { usePanelToggleCenterY } from '../../hooks/usePanelToggleCenterY.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
@@ -91,13 +92,19 @@ export function DocumentPage() {
   const latest = versions[0];
   const activeVersion = versions.find((v) => v.id === selectedVersionId) ?? latest;
   const {
+    pdfViewMode,
     pdfUrl,
-    pdfHttpHeaders,
+    pdfData,
+    pdfSourceKey,
     pdfError,
     pdfLoading,
+    pdfLoadStage,
+    pdfReady,
+    pdfProcessing,
     pdfViewerKey,
     onPdfDocumentLoad,
     onPdfDocumentLoadError,
+    reloadPdf,
   } = useDocumentPdfLoader({
     documentId: doc?.id,
     versionId: activeVersion?.id,
@@ -120,6 +127,12 @@ export function DocumentPage() {
     if (latest) setSelectedVersionId(latest.id);
   }, [doc?.id, latest?.id, selectedVersionId]);
   useEffect(() => {
+    if (!selectedVersionId || versions.length === 0) return;
+    if (!versions.some((v) => v.id === selectedVersionId) && latest) {
+      setSelectedVersionId(latest.id);
+    }
+  }, [versions, selectedVersionId, latest?.id]);
+  useEffect(() => {
     if (!doc) {
       setWorkspace(null);
       return;
@@ -131,6 +144,7 @@ export function DocumentPage() {
       selectedVersionId: activeVersion?.id,
       onSelectVersion: setSelectedVersionId,
       onRequestNewVersion: upload.openFilePicker,
+      onRequestNewDocxVersion: upload.openDocxFilePicker,
       uploadingNewVersion: upload.uploading,
       uploadError: upload.error,
       uploadStatusHint: upload.uploadHint,
@@ -145,6 +159,7 @@ export function DocumentPage() {
     upload.error,
     upload.uploadHint,
     upload.openFilePicker,
+    upload.openDocxFilePicker,
     setWorkspace,
   ]);
   useEffect(() => {
@@ -276,6 +291,11 @@ export function DocumentPage() {
     setRightTab(tab);
     setMobileSheet('panel');
   }
+  const openCompareTools = useCallback(() => {
+    setRightTab('tools');
+    rightPanel.expand();
+    setMobileSheet('panel');
+  }, [rightPanel]);
   usePanelToggleCenterY(
     workspaceRowRef,
     rightPanelRef,
@@ -286,12 +306,15 @@ export function DocumentPage() {
   if (isLoading || !doc) {
     return <p className="p-8 text-slate-500">Загрузка…</p>;
   }
+  const pdfReadyForUi = pdfReady;
   const statusLabel = formatVersionStatusLabel(
     activeVersion?.status,
-    Boolean(pdfUrl),
+    pdfReadyForUi,
     previews?.pages?.length ?? 0,
   );
   const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
+  const confidenceLevel = activeVersion?.confidenceLevel;
+  const showConfidenceNotice = confidenceLevel === 'red';
   const sizeLabel = activeVersion?.size
     ? `${(Number(activeVersion.size) / (1024 * 1024)).toFixed(1)} МБ`
     : null;
@@ -305,6 +328,16 @@ export function DocumentPage() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) void upload.handleFile(file);
+        }}
+      />
+      <input
+        ref={upload.docxInputRef}
+        type="file"
+        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void upload.handleDocxFile(file);
         }}
       />
       <input
@@ -336,12 +369,27 @@ export function DocumentPage() {
       <div ref={workspaceRowRef} className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col min-h-0">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
-            {activeVersion?.status === 'processing' && !pdfUrl && (
-              <p className="mb-2 shrink-0 text-center text-xs text-slate-500">
-                Применяем правки — ждём worker…
-              </p>
+            {pdfProcessing && (
+              <div className="mb-2 shrink-0 rounded-lg border border-folio-200 bg-folio-50/80 px-3 py-2 text-center">
+                <p className="text-xs font-medium text-folio-800">
+                  Собираем новую версию с правками…
+                </p>
+                <p className="mt-0.5 text-[11px] text-folio-700/80">
+                  Обычно 10–30 секунд. PDF откроется автоматически.
+                </p>
+              </div>
             )}
-            {pdfUrl &&
+            {showConfidenceNotice && (
+              <div className="mb-2 shrink-0">
+                <DocumentConfidenceNotice
+                  level={confidenceLevel}
+                  summary={activeVersion?.confidenceSummary}
+                  score={activeVersion?.confidenceScore}
+                  onOpenCompare={openCompareTools}
+                />
+              </div>
+            )}
+            {pdfReadyForUi &&
               activeVersion?.status === 'ready' &&
               (previews?.status === 'partial' ||
                 previews?.status === 'processing' ||
@@ -374,7 +422,7 @@ export function DocumentPage() {
                 />
 
                 <div className="shrink-0 border-b border-slate-100 bg-white px-2 py-2">
-                  {pdfUrl && (
+                  {pdfReadyForUi && (
                     <PdfViewerToolbar
                       displayMode={viewer.displayMode}
                       zoomMode={viewer.zoomMode}
@@ -397,23 +445,55 @@ export function DocumentPage() {
                 </div>
 
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
-                  {pdfError && (
-                    <p className="rounded-lg bg-red-50 p-4 text-center text-sm text-red-700">
-                      {pdfError}
-                    </p>
+                  {pdfError && !pdfProcessing && (
+                    <div className="rounded-lg bg-red-50 p-4 text-center text-sm text-red-700">
+                      <p>{pdfError}</p>
+                      <button
+                        type="button"
+                        className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                        onClick={() => reloadPdf()}
+                      >
+                        Повторить
+                      </button>
+                    </div>
                   )}
-                  {pdfUrl && !pdfError && (
+                  {(pdfLoading || pdfProcessing) && !pdfReadyForUi && !pdfError && (
+                    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-sm text-slate-600">
+                      {pdfProcessing ? (
+                        <>
+                          <span
+                            className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-folio-200 border-t-folio-600"
+                            aria-hidden
+                          />
+                          <p className="font-medium text-folio-800">
+                            {pdfLoadStageLabel(pdfLoadStage === 'processing' ? 'processing' : pdfLoadStage)}
+                          </p>
+                          <p className="max-w-xs text-center text-xs text-slate-500">
+                            Это не ошибка — файл ещё собирается. Можно пока смотреть правки в панели
+                            справа.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p>Загрузка PDF…</p>
+                          <p className="text-xs text-slate-400">{pdfLoadStageLabel(pdfLoadStage)}</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {pdfReadyForUi && !pdfError && (
                     <div className="relative flex min-h-0 flex-1 flex-col">
                       {pdfLoading && (
-                        <p className="absolute inset-0 z-10 flex items-center justify-center bg-white/85 text-sm text-slate-500">
-                          Загрузка PDF…
+                        <p className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-white/85 text-sm text-slate-500">
+                          <span>{pdfLoadStageLabel(pdfLoadStage === 'ready' ? 'opening' : pdfLoadStage)}</span>
                         </p>
                       )}
                       <PdfViewer
                         key={pdfViewerKey}
                         className="min-h-0 flex-1"
-                        url={pdfUrl}
-                        httpHeaders={pdfHttpHeaders}
+                        url={pdfViewMode === 'presigned-url' ? (pdfUrl ?? undefined) : undefined}
+                        pdfData={pdfViewMode === 'bytes' ? (pdfData ?? undefined) : undefined}
+                        sourceKey={pdfSourceKey ?? undefined}
                         onDocumentLoad={onPdfDocumentLoad}
                         onDocumentLoadError={onPdfDocumentLoadError}
                         page={viewerPage}
@@ -434,14 +514,14 @@ export function DocumentPage() {
                           handleGoToPage(page);
                         }}
                         pageNavTick={pageNavTick}
-                        enableTextSelection={versionReady && Boolean(pdfUrl)}
+                        enableTextSelection={versionReady && pdfReadyForUi}
                         onTextQuoteForEdit={handleTextQuoteForEdit}
                       />
                     </div>
                   )}
                   {!pdfLoading &&
                     !pdfError &&
-                    !pdfUrl &&
+                    !pdfReadyForUi &&
                     activeVersion?.status !== 'pending_upload' && (
                       <p className="text-center text-sm text-slate-500">Нет данных для просмотра</p>
                     )}

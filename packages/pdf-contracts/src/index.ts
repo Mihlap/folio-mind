@@ -44,6 +44,20 @@ export {
   type PdfIntegritySignal,
   type PdfIntegrityVerdict,
 } from './pdf-integrity.js';
+export {
+  buildPageLayoutSignature,
+  comparePageLayoutSignatures,
+  type LayoutPoint,
+  type PageLayoutSignature,
+} from './layout-confidence.js';
+export {
+  scoreApplyEditsConfidence,
+  scoreDocxReflowConfidence,
+  type ApplyEditsMethod,
+  type ConfidenceDetails,
+  type ConfidenceLevel,
+  type ConfidenceResult,
+} from './confidence-scoring.js';
 export { UPLOAD_NETWORK_ERROR_MESSAGE } from './user-messages.js';
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';

@@ -400,6 +400,10 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       );
       const rootVersion = resolveRootVersion(versionRows, versionId);
       const resolvedSourceS3Key = rootVersion.s3Key;
+      const editSourceVersion = document.versions.find(
+        (v: { id: string }) => v.id === editSourceVersionId,
+      );
+      const editSourceS3Key = editSourceVersion?.s3Key ?? resolvedSourceS3Key;
       const userSourceDocxKey = isUserUploadedSourceDocxKey(rootVersion.sourceDocxKey)
         ? rootVersion.sourceDocxKey
         : null;
@@ -466,6 +470,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         targetVersionId: targetVersion.id,
         tenantId: user.tenantId,
         sourceS3Key: resolvedSourceS3Key,
+        editSourceS3Key,
         targetS3Key,
         userSourceDocxKey,
         requestId: request.requestId,

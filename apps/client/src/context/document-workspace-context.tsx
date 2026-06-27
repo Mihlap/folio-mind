@@ -7,6 +7,7 @@ export type DocumentWorkspaceData = {
   selectedVersionId: string | undefined;
   onSelectVersion: (versionId: string) => void;
   onRequestNewVersion: () => void;
+  onRequestNewDocxVersion: () => void;
   uploadingNewVersion: boolean;
   uploadError?: string | null;
   uploadStatusHint?: string | null;

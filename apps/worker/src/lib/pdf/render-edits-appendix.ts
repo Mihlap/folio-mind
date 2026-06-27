@@ -14,11 +14,9 @@ export type AppendixEdit = {
 const BODY_SIZE = 8;
 const TITLE_SIZE = 11;
 const LINE_HEIGHT = 11;
-const EXCERPT_MAX = 110;
-function compactExcerpt(text: string): string {
-  const oneLine = text.replace(/\s+/g, ' ').trim();
-  if (oneLine.length <= EXCERPT_MAX) return oneLine;
-  return `${oneLine.slice(0, EXCERPT_MAX - 1)}…`;
+
+function normalizeRegistryText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }
 function startLayout(pdfDoc: PDFDocument, font: PDFFont): PdfTextLayout {
   const page = pdfDoc.addPage();
@@ -52,12 +50,12 @@ export function renderAcceptedEditsAppendix(
       fontSize: BODY_SIZE,
       color: rgb(0.2, 0.2, 0.2),
     });
-    drawLabelAndExcerpt(layout, 'Было:', compactExcerpt(edit.originalText), {
+    drawLabelAndExcerpt(layout, 'Было:', normalizeRegistryText(edit.originalText), {
       fontSize: BODY_SIZE,
       labelColor: rgb(0.55, 0.2, 0.2),
       textColor: rgb(0.35, 0.15, 0.15),
     });
-    drawLabelAndExcerpt(layout, 'Стало:', compactExcerpt(edit.suggestion), {
+    drawLabelAndExcerpt(layout, 'Стало:', normalizeRegistryText(edit.suggestion), {
       fontSize: BODY_SIZE,
       labelColor: rgb(0.15, 0.45, 0.3),
       textColor: rgb(0.15, 0.3, 0.22),

@@ -21,7 +21,9 @@ export type { PdfSearchMatch };
 export type PdfViewerDisplayMode = 'single' | 'continuous';
 export type PdfViewerZoomMode = 'fit-width' | 'custom';
 type PdfViewerProps = {
-  url: string;
+  url?: string;
+  pdfData?: Uint8Array;
+  sourceKey?: string;
   httpHeaders?: Record<string, string>;
   onDocumentLoad?: () => void;
   onDocumentLoadError?: (message: string) => void;
@@ -46,6 +48,8 @@ type PdfViewerProps = {
 };
 export function PdfViewer({
   url,
+  pdfData,
+  sourceKey,
   httpHeaders,
   onDocumentLoad,
   onDocumentLoadError,
@@ -114,7 +118,7 @@ export function PdfViewer({
     enableTextSelection,
     pdfReady,
     displayMode,
-    url,
+    url: sourceKey ?? url ?? '',
     onPromptChange: handlePromptChange,
     onLiveSelectionChange: handleLiveSelectionChange,
     selectionQuoteRef,
@@ -131,12 +135,17 @@ export function PdfViewer({
     return () => ro.disconnect();
   }, []);
   useEffect(() => {
+    if (!pdfData && !url) return;
     let cancelled = false;
-    const loadingTask = pdfjs.getDocument({
-      url,
-      httpHeaders,
-      withCredentials: false,
-    });
+    const loadingTask = pdfjs.getDocument(
+      pdfData
+        ? { data: pdfData.slice() }
+        : {
+            url: url!,
+            httpHeaders,
+            withCredentials: false,
+          },
+    );
     setError(null);
     setPdfReady(false);
     setInternalPage(1);
@@ -176,7 +185,7 @@ export function PdfViewer({
         pdfRef.current = null;
       }
     };
-  }, [url, httpHeaders, onPageChange, onSearchMatches, onDocumentLoad, onDocumentLoadError]);
+  }, [url, pdfData, httpHeaders, onPageChange, onSearchMatches, onDocumentLoad, onDocumentLoadError]);
   useEffect(() => {
     const pdf = pdfRef.current;
     if (!pdf || !pdfReady) return;

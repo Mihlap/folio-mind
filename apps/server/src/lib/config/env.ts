@@ -31,6 +31,8 @@ const envSchema = z.object({
   PREVIEW_THUMB_BATCH: z.coerce.number().int().min(1).default(20),
   PREVIEW_JOB_TIMEOUT_MS: z.coerce.number().int().min(10000).default(300000),
   AI_JOB_TIMEOUT_MS: z.coerce.number().int().min(10000).default(180000),
+  GOTENBERG_URL: z.string().url().optional(),
+  PDF_TO_DOCX_URL: z.string().url().optional(),
   QUEUE_WARN_WAITING: z.coerce.number().int().min(1).default(50),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   API_PUBLIC_URL: z.string().url().optional(),

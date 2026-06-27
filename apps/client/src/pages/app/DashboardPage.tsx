@@ -26,7 +26,7 @@ export function DashboardPage() {
   const [pendingDocx, setPendingDocx] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const uploadState = useAppSelector((s) => s.backgroundUpload);
-  const { uploadFromDashboard } = useBackgroundUpload();
+  const { uploadFromDashboard, uploadFromDocxOnly } = useBackgroundUpload();
   const active = uploadState.active && uploadState.kind === 'dashboard';
   const progress = active ? uploadState.progress : 0;
   const showDone = active && uploadState.showDone;
@@ -101,11 +101,53 @@ export function DashboardPage() {
         }}
       >
         <div className="mx-auto max-w-lg text-center">
-          <p className="text-base font-medium text-slate-700 sm:text-lg">Перетащите PDF сюда</p>
+          <p className="text-base font-medium text-slate-700 sm:text-lg">
+            {pendingDocx && !pendingPdf
+              ? 'DOCX выбран — создадим PDF для просмотра'
+              : 'Перетащите PDF или DOCX сюда'}
+          </p>
           <p className="mt-1.5 text-xs leading-relaxed text-slate-400 sm:text-sm">
-            Загрузка в S3. Исходный DOCX — опционально, для качественных правок в Word.
+            {pendingDocx && !pendingPdf
+              ? 'PDF для просмотра создастся из Word автоматически (Gotenberg).'
+              : pendingPdf && !pendingDocx
+                ? 'Файл загружается. DOCX улучшит качество «Применить правки».'
+                : 'Файл загружается. Исходный DOCX — опционально, для качественных правок в Word.'}
           </p>
         </div>
+
+        {pendingPdf && !pendingDocx && !active && (
+          <div className="mx-auto mt-5 max-w-lg rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-left">
+            <p className="text-sm font-medium text-amber-950">Добавьте исходный DOCX?</p>
+            <p className="mt-1 text-xs leading-relaxed text-amber-900/90">
+              Для «Применить правки» Word-слой даёт лучшее качество: таблицы, формулы и стили не
+              ломаются. PDF можно загрузить и без DOCX — тогда сработает PDF→DOCX или overlay.
+            </p>
+            <button
+              type="button"
+              onClick={() => docxInputRef.current?.click()}
+              className="mt-2 cursor-pointer rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+            >
+              Добавить DOCX
+            </button>
+          </div>
+        )}
+
+        {pendingDocx && !pendingPdf && !active && (
+          <div className="mx-auto mt-5 max-w-lg rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-left">
+            <p className="text-sm font-medium text-emerald-950">Добавить PDF?</p>
+            <p className="mt-1 text-xs leading-relaxed text-emerald-900/90">
+              Если у вас уже есть PDF этой версии, загрузите оба файла: просмотр — с PDF, правки —
+              из DOCX. Или нажмите «Создать из DOCX» — PDF сгенерируется автоматически.
+            </p>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="mt-2 cursor-pointer rounded-lg bg-folio-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-folio-700"
+            >
+              Добавить PDF
+            </button>
+          </div>
+        )}
 
         {pendingPdf && (
           <div className="mx-auto mt-5 flex max-w-lg items-center gap-3 rounded-xl border border-folio-200 bg-folio-50/80 px-3 py-2.5 sm:px-4">
@@ -147,23 +189,33 @@ export function DashboardPage() {
             </span>
             <div className="min-w-0 flex-1 text-left">
               <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700">
-                Исходный DOCX
+                {pendingPdf ? 'Исходный DOCX' : 'Word-документ'}
               </p>
               <p className="truncate text-sm font-medium text-emerald-950" title={pendingDocx.name}>
                 {pendingDocx.name}
               </p>
             </div>
-            <button
-              type="button"
-              disabled={active}
-              onClick={() => {
-                setPendingDocx(null);
-                if (docxInputRef.current) docxInputRef.current.value = '';
-              }}
-              className="shrink-0 cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
-            >
-              Убрать
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                disabled={active}
+                onClick={() => docxInputRef.current?.click()}
+                className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                Заменить
+              </button>
+              <button
+                type="button"
+                disabled={active}
+                onClick={() => {
+                  setPendingDocx(null);
+                  if (docxInputRef.current) docxInputRef.current.value = '';
+                }}
+                className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                Убрать
+              </button>
+            </div>
           </div>
         )}
 
@@ -201,6 +253,11 @@ export function DashboardPage() {
             type="button"
             disabled={active}
             onClick={() => {
+              if (pendingDocx && !pendingPdf) {
+                uploadFromDocxOnly(pendingDocx);
+                clearPending();
+                return;
+              }
               if (pendingPdf) {
                 startUpload(pendingPdf, pendingDocx ?? undefined);
               } else {
@@ -211,24 +268,28 @@ export function DashboardPage() {
           >
             {active
               ? `Загрузка ${progress}%…`
-              : pendingPdf
-                ? pendingDocx
-                  ? 'Загрузить PDF + DOCX'
-                  : 'Загрузить PDF'
-                : 'Выбрать PDF'}
+              : pendingDocx && !pendingPdf
+                ? 'Создать из DOCX'
+                : pendingPdf
+                  ? pendingDocx
+                    ? 'Загрузить PDF + DOCX'
+                    : 'Загрузить PDF'
+                  : 'Выбрать PDF'}
           </button>
-          <button
-            type="button"
-            disabled={active}
-            onClick={() => docxInputRef.current?.click()}
-            className={`w-full rounded-lg border px-5 py-2.5 text-sm font-medium disabled:opacity-50 sm:min-w-[10.5rem] ${
-              pendingDocx
-                ? 'border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50'
-                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {pendingDocx ? 'Заменить DOCX' : 'Добавить DOCX'}
-          </button>
+          {!(pendingPdf && !pendingDocx) && !(pendingDocx && !pendingPdf) && (
+            <button
+              type="button"
+              disabled={active}
+              onClick={() => docxInputRef.current?.click()}
+              className={`w-full rounded-lg border px-5 py-2.5 text-sm font-medium disabled:opacity-50 sm:min-w-[10.5rem] ${
+                pendingDocx
+                  ? 'border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {pendingDocx ? 'Заменить DOCX' : 'Добавить DOCX'}
+            </button>
+          )}
         </div>
 
         <p className="mx-auto mt-4 max-w-md text-center text-xs leading-relaxed text-slate-400">
@@ -241,7 +302,7 @@ export function DashboardPage() {
               : pendingPdf
                 ? 'PDF выбран — добавьте DOCX или нажмите «Загрузить PDF» без Word.'
                 : pendingDocx
-                  ? 'DOCX выбран — теперь выберите PDF; файлы загрузятся вместе.'
+                  ? 'Нажмите «Создать из DOCX» или добавьте PDF в подсказке выше.'
                   : 'DOCX сохраняет таблицы, формулы и стили при «Применить правки». Порядок выбора не важен.'}
         </p>
 

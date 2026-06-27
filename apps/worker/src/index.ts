@@ -8,6 +8,7 @@ import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accept
 import { processApplyEditsFinalJob } from './jobs/optimize/apply-edits-final.js';
 import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
 import { processPreConvertPdfJob } from './jobs/optimize/pre-convert-pdf.js';
+import { processImportFromDocxJob } from './jobs/optimize/import-from-docx.js';
 import { processSplitPagesJob } from './jobs/optimize/split-pages.js';
 import {
   processGeneratePreviewsJob,
@@ -115,6 +116,8 @@ function createOptimizeWorker() {
             await processApplyAcceptedSuggestionsJob(env, data);
           } else if (job.name === 'apply-edits-final') {
             await processApplyEditsFinalJob(env, data);
+          } else if (job.name === 'import-from-docx') {
+            await processImportFromDocxJob(env, data);
           }
           return { ok: true };
         },

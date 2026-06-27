@@ -134,6 +134,11 @@ model DocumentVersion {
   integritySummary    String?
   integrityDetails    Json?
   integrityAnalyzedAt DateTime?
+  confidenceLevel     String?
+  confidenceScore     Int?
+  confidenceSummary   String?
+  confidenceDetails   Json?
+  confidenceAnalyzedAt DateTime?
   createdAt  DateTime @default(now())
 
   @@unique([documentId, version])

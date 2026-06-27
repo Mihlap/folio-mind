@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { shellTopHeaderClass } from '../layout/shell-chrome.js';
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'не загружен',
-  processing: 'обработка',
+  processing: 'сборка',
   ready: 'готов',
   failed: 'ошибка',
 };
@@ -110,8 +110,9 @@ export function formatVersionStatusLabel(
   previewPageCount: number,
 ): string {
   if (!status) return '';
-  if (status === 'processing' && (hasPdfUrl || previewPageCount > 0)) {
-    return 'готов к просмотру';
+  if (status === 'processing') {
+    if (hasPdfUrl || previewPageCount > 0) return 'открывается';
+    return 'сборка PDF';
   }
   return STATUS_LABEL[status] ?? status;
 }

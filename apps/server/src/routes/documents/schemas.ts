@@ -119,5 +119,9 @@ export const versionListItemSchema = z.object({
   createdAt: z.string(),
   integrityStatus: z.string().nullable(),
   integritySummary: z.string().nullable(),
+  confidenceLevel: z.enum(['green', 'yellow', 'red']).nullable(),
+  confidenceScore: z.number().int().nullable(),
+  confidenceSummary: z.string().nullable(),
   sourceDocxKey: z.string().nullable(),
+  hasAppliedDocx: z.boolean(),
 });

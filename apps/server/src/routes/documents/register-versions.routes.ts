@@ -15,6 +15,7 @@ import {
   s3ObjectExists,
 } from '../../lib/storage/s3.js';
 import { buildOriginalKey, finalizeDocumentUpload, hashBuffer } from './helpers.js';
+import { enqueueImportFromDocxJob } from '../../lib/queue/queue.js';
 import { errorBody, MAX_UPLOAD_BYTES, uploadRateLimit } from './schemas.js';
 export const registerVersionsRoutes: FastifyPluginAsync<{
   env: Env;
@@ -123,6 +124,95 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
         uploadUrl,
         docxUploadUrl,
         docxS3Key,
+      });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/from-docx',
+    {
+      preHandler: [app.authenticate],
+      config: uploadRateLimit,
+      schema: {
+        params: z.object({ documentId: z.string() }),
+        body: z.object({
+          fileName: z.string().min(1).max(255),
+          size: z.number().int().positive().max(MAX_UPLOAD_BYTES),
+        }),
+        response: {
+          201: z.object({
+            versionId: z.string(),
+            version: z.number(),
+            docxUploadUrl: z.string(),
+            docxS3Key: z.string(),
+            pdfS3Key: z.string(),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      if (!env.GOTENBERG_URL) {
+        return reply.code(503).send({
+          error: 'Конвертация DOCX→PDF недоступна. Запустите Gotenberg (docker compose, :3003).',
+        });
+      }
+      const user = getAuthUser(request);
+      const { documentId } = request.params;
+      const { fileName, size } = request.body;
+      if (!fileName.toLowerCase().endsWith('.docx')) {
+        return reply.code(400).send({ error: 'Only DOCX files are supported' });
+      }
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const latestVersionNumber = document.versions[0]?.version ?? 0;
+      const nextVersionNumber = latestVersionNumber + 1;
+      const pdfFileName = fileName.replace(/\.docx$/i, '.pdf');
+      const version = await app.prisma.documentVersion.create({
+        data: {
+          documentId: document.id,
+          version: nextVersionNumber,
+          s3Key: 'pending',
+          size: BigInt(size),
+          mimeType: 'application/pdf',
+          status: 'pending_upload',
+        },
+      });
+      const docxS3Key = buildOriginalKey(document.id, version.version, fileName);
+      const pdfS3Key = buildOriginalKey(document.id, version.version, pdfFileName);
+      await app.prisma.documentVersion.update({
+        where: { id: version.id },
+        data: { s3Key: pdfS3Key, sourceDocxKey: docxS3Key },
+      });
+      const docxUploadUrl = await getPresignedPutUrl({
+        key: docxS3Key,
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      await app.prisma.document.update({
+        where: { id: document.id },
+        data: { updatedAt: new Date() },
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_create_from_docx',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId: document.id,
+          meta: { versionId: version.id, version: nextVersionNumber, fileName, size },
+        },
+      });
+      return reply.status(201).send({
+        versionId: version.id,
+        version: nextVersionNumber,
+        docxUploadUrl,
+        docxS3Key,
+        pdfS3Key,
       });
     },
   );
@@ -369,6 +459,108 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
         }
         throw err;
       }
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/import-from-docx',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      if (!env.GOTENBERG_URL) {
+        return reply.code(503).send({
+          error: 'Конвертация DOCX→PDF недоступна. Запустите Gotenberg (docker compose, :3003).',
+        });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+      const sourceDocxKey = version.sourceDocxKey;
+      if (!sourceDocxKey || !isUserUploadedSourceDocxKey(sourceDocxKey)) {
+        return reply.code(400).send({ error: 'Исходный DOCX не загружен' });
+      }
+      if (!(await s3ObjectExists(sourceDocxKey))) {
+        return reply.code(400).send({ error: 'DOCX не найден в хранилище — повторите загрузку' });
+      }
+      if (version.status !== 'pending_upload' && version.status !== 'processing') {
+        return reply.code(400).send({ error: 'Импорт из DOCX недоступен для этой версии' });
+      }
+      const operationJob = await app.prisma.job.create({
+        data: {
+          type: 'import-from-docx',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: { documentId, versionId, sourceDocxKey, targetS3Key: version.s3Key },
+        },
+      });
+      const workerJob = await app.prisma.job.create({
+        data: {
+          type: 'import-from-docx',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: {
+            operationJobId: operationJob.id,
+            documentId,
+            versionId,
+            sourceDocxKey,
+            targetS3Key: version.s3Key,
+          },
+        },
+      });
+      await app.prisma.documentVersion.update({
+        where: { id: versionId },
+        data: { status: 'processing' },
+      });
+      await enqueueImportFromDocxJob(env, {
+        jobId: workerJob.id,
+        operationJobId: operationJob.id,
+        documentId,
+        versionId,
+        tenantId: user.tenantId,
+        sourceDocxKey,
+        targetS3Key: version.s3Key,
+        requestId: request.requestId,
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.import_from_docx',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: { versionId, sourceDocxKey },
+        },
+      });
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId,
+        status: 'processing',
+      });
     },
   );
 };

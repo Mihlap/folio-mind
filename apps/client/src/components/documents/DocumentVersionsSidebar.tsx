@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useDeleteDocumentVersionMutation, useLazyGetSourceDocxUrlQuery } from '@folio-mind/store';
 import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
 import { useAppSelector } from '../../hooks/index.js';
+import { ConfirmDangerDialog } from '../ui/ConfirmDangerDialog.js';
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { DeleteDocumentButton } from './DeleteDocumentButton.js';
 import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.js';
-import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
+import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
+import { docxBadgeLabel, docxBadgeTitle, docxDownloadLabel, docxDownloadTitle, versionHasDocxDownload } from '../../lib/documents/sourceDocx.js';
 import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
 const STATUS_SHORT: Record<string, string> = {
   pending_upload: 'не загружен',
@@ -36,6 +38,11 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
   const [deleteVersion, { isLoading: deletingVersion }] = useDeleteDocumentVersionMutation();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [localError, setLocalError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    versionId: string;
+    versionNumber: number;
+  } | null>(null);
+  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
   if (!workspace) return null;
   const {
     documentId,
@@ -43,6 +50,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
     selectedVersionId,
     onSelectVersion,
     onRequestNewVersion,
+    onRequestNewDocxVersion,
     uploadingNewVersion,
     uploadError,
     uploadStatusHint,
@@ -68,19 +76,22 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
       setLocalError('Не удалось скачать DOCX');
     }
   }
-  async function handleDelete(versionId: string, versionNumber: number) {
-    const ok = window.confirm(
-      `Удалить версию ${versionNumber}?\n\nФайл, превью и пересказ этой версии будут удалены.`,
-    );
-    if (!ok) return;
+  async function confirmDeleteVersion() {
+    if (!pendingDelete) return;
+    const { versionId, versionNumber } = pendingDelete;
     try {
       setLocalError(null);
+      setDeletingVersionId(versionId);
       await deleteVersion({ documentId, versionId }).unwrap();
+      setPendingDelete(null);
       onVersionAction?.();
     } catch {
-      setLocalError('Не удалось удалить версию');
+      setLocalError(`Не удалось удалить версию ${versionNumber}`);
+    } finally {
+      setDeletingVersionId(null);
     }
   }
+  const deleteBlocked = versions.length <= 1;
   const isDrawer = variant === 'drawer';
   const displayError = localError ?? uploadError;
   return (
@@ -96,14 +107,25 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Версии
           </span>
-          <button
-            type="button"
-            disabled={uploadingNewVersion}
-            onClick={onRequestNewVersion}
-            className="cursor-pointer rounded-md bg-folio-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-folio-700 disabled:opacity-50"
-          >
-            {uploadingNewVersion ? '+ …' : '+ PDF'}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={uploadingNewVersion}
+              onClick={onRequestNewDocxVersion}
+              className="cursor-pointer rounded-md border border-emerald-200 bg-emerald-50/60 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
+              title="Новая версия из DOCX (PDF создастся автоматически)"
+            >
+              {uploadingNewVersion ? '+ …' : '+ DOCX'}
+            </button>
+            <button
+              type="button"
+              disabled={uploadingNewVersion}
+              onClick={onRequestNewVersion}
+              className="cursor-pointer rounded-md bg-folio-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-folio-700 disabled:opacity-50"
+            >
+              {uploadingNewVersion ? '+ …' : '+ PDF'}
+            </button>
+          </div>
         </div>
         {(displayError || uploadStatusHint) && (
           <p className={`mt-2 text-[11px] ${displayError ? 'text-red-600' : 'text-slate-500'}`}>
@@ -113,7 +135,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
       </div>
 
       <ul
-        className={`min-h-0 space-y-0.5 overflow-y-auto overscroll-y-contain ${isDrawer ? 'max-h-[50vh] pt-1' : 'flex-1 px-1.5 pb-2 pt-1.5 md:px-2'}`}
+        className={`min-h-0 space-y-0.5 overflow-y-auto overscroll-y-contain pr-3 ${isDrawer ? 'max-h-[50vh] pt-1' : 'flex-1 px-1.5 pb-2 pt-1.5 md:px-2'}`}
       >
         {versions.map((v, index) => {
           const isSelected = v.id === selectedVersionId;
@@ -136,12 +158,12 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                         нов.
                       </span>
                     )}
-                    {hasUserSourceDocx(v.sourceDocxKey) && (
+                    {docxBadgeLabel(v) && (
                       <span
                         className="rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200/80"
-                        title="Исходный DOCX прикреплён"
+                        title={docxBadgeTitle(v)}
                       >
-                        DOCX
+                        {docxBadgeLabel(v)}
                       </span>
                     )}
                     {isSelected && (
@@ -173,6 +195,16 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                     />
                   </div>
                 )}
+                {v.confidenceLevel && (
+                  <div className="mt-1">
+                    <DocumentVersionConfidenceBadge
+                      level={v.confidenceLevel as 'green' | 'yellow' | 'red'}
+                      summary={v.confidenceSummary}
+                      score={v.confidenceScore}
+                      compact
+                    />
+                  </div>
+                )}
                 {v.status !== 'pending_upload' && (
                   <div
                     className="mt-1.5 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-1.5"
@@ -190,22 +222,27 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                         <span>PDF</span>
                       </button>
                     )}
-                    {hasUserSourceDocx(v.sourceDocxKey) && (
+                    {versionHasDocxDownload(v) && (
                       <button
                         type="button"
-                        title="Скачать исходный DOCX"
+                        title={docxDownloadTitle(v)}
                         onClick={() => void handleDocxDownload(v.id)}
                         className={versionActionBtnEmerald}
                       >
                         <DownloadIcon className="h-3 w-3 shrink-0" />
-                        <span>DOCX</span>
+                        <span>{docxDownloadLabel(v)}</span>
                       </button>
                     )}
-                    <span className="ml-auto">
+                    <span className="relative z-[1] ml-auto">
                       <DeleteDocumentButton
-                        title={`Удалить v${v.version}`}
-                        disabled={deletingVersion || versions.length <= 1}
-                        onClick={() => void handleDelete(v.id, v.version)}
+                        title={
+                          deleteBlocked
+                            ? 'Нельзя удалить единственную версию'
+                            : `Удалить v${v.version}`
+                        }
+                        disabled={deleteBlocked}
+                        busy={deletingVersionId === v.id}
+                        onClick={() => setPendingDelete({ versionId: v.id, versionNumber: v.version })}
                         variant="list"
                       />
                     </span>
@@ -216,6 +253,17 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
           );
         })}
       </ul>
+
+      <ConfirmDangerDialog
+        open={pendingDelete != null}
+        title={pendingDelete ? `Удалить версию ${pendingDelete.versionNumber}?` : ''}
+        description="Файл, превью, правки и пересказ этой версии будут удалены. Восстановить нельзя."
+        busy={deletingVersion}
+        onCancel={() => {
+          if (!deletingVersion) setPendingDelete(null);
+        }}
+        onConfirm={() => void confirmDeleteVersion()}
+      />
     </div>
   );
 }

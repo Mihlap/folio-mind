@@ -19,6 +19,7 @@ import {
 } from '../ui/FeatureHelp.js';
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { ExpandableEditField } from './ExpandableEditField.js';
+import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 type Props = {
   documentId: string;
@@ -57,7 +58,9 @@ export function DocumentAnnotationsPanel({
   const [deleteAnnotation] = useDeleteAnnotationMutation();
   const [applyAccepted, { isLoading: applying }] = useApplyAcceptedSuggestionsMutation();
   const [applyEditsFinal, { isLoading: applyingFinal }] = useApplyEditsFinalMutation();
-  const { data: docData } = useGetDocumentQuery(documentId, { skip: !documentId });
+  const { data: docData, refetch: refetchDocument } = useGetDocumentQuery(documentId, {
+    skip: !documentId,
+  });
   const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [content, setContent] = useState('');
@@ -67,6 +70,9 @@ export function DocumentAnnotationsPanel({
   const [applyJobId, setApplyJobId] = useState<string | null>(null);
   const [pollApply, setPollApply] = useState(false);
   const [applyHint, setApplyHint] = useState<string | null>(null);
+  const [applyEditResults, setApplyEditResults] = useState<
+    Array<{ page: number; originalText: string; suggestion: string; status: string }>
+  >([]);
   const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
   const pendingCoordsRef = useRef<{
     x?: number;
@@ -84,20 +90,43 @@ export function DocumentAnnotationsPanel({
     setApplyJobId(null);
     setPollApply(false);
     setApplyHint(null);
+    setApplyEditResults([]);
   }, [versionId]);
   useEffect(() => {
     if (!applyJob) return;
     if (applyJob.status === 'completed') {
       setPollApply(false);
       const p = applyJob.payload as Record<string, unknown> | null;
+      const editResults = Array.isArray(p?.editResults)
+        ? (p!.editResults as Array<{
+            page: number;
+            originalText: string;
+            suggestion: string;
+            status: string;
+          }>)
+        : [];
+      setApplyEditResults(editResults);
+      const applied = typeof p?.applied === 'number' ? p.applied : null;
+      const failed = typeof p?.failed === 'number' ? p.failed : null;
+      const method = typeof p?.method === 'string' ? p.method : null;
       if (p?.status === 'success') {
+        const methodNote =
+          method === 'docx-converted'
+            ? ' (PDF пересобран из Word)'
+            : method === 'docx'
+              ? ' (PDF пересобран из исходного DOCX)'
+              : method === 'pdf-overlay'
+                ? ' (наложение на PDF)'
+                : '';
         setApplyHint(
-          p?.method === 'docx-fallback-overlay'
-            ? String(
-                p.message ??
-                  'Текст из PDF не совпал с Word — правки наложены на PDF. Для идеального качества сверьте «было» с DOCX.',
-              )
-            : 'Новая версия с правками готова!',
+          applied != null
+            ? `Применено ${applied} правок${methodNote}. Новая версия готова.`
+            : p?.method === 'docx-fallback-overlay'
+              ? String(
+                  p.message ??
+                    'Текст из PDF не совпал с Word — правки наложены на PDF. Для идеального качества сверьте «было» с DOCX.',
+                )
+              : 'Новая версия с правками готова!',
         );
       } else if (p?.status === 'docx_only') {
         setApplyHint(String(p.message ?? 'Правки применены — DOCX готов, PDF не создан.'));
@@ -105,14 +134,15 @@ export function DocumentAnnotationsPanel({
         setApplyHint(
           String(
             p.message ??
-              ((p.applied as number) === 0
+              (applied === 0
                 ? 'Правки не применились — проверьте поле «было» или загрузите DOCX.'
-                : 'Правки применены частично.'),
+                : `Применено ${applied ?? '?'} из ${(applied ?? 0) + (failed ?? 0)} правок.`),
           ),
         );
       } else {
         setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
       }
+      void refetchDocument();
     }
     if (applyJob.status === 'failed') {
       setPollApply(false);
@@ -128,7 +158,7 @@ export function DocumentAnnotationsPanel({
           : 'Не удалось собрать PDF с правками',
       );
     }
-  }, [applyJob]);
+  }, [applyJob, refetchDocument]);
   useEffect(() => {
     if (!focusedAnnotationId) return;
     const el = itemRefs.current.get(focusedAnnotationId);
@@ -199,6 +229,17 @@ export function DocumentAnnotationsPanel({
   }
   const sourceVersion = docData?.versions.find((v) => v.id === versionId);
   const hasSourceDocx = hasUserSourceDocx(sourceVersion?.sourceDocxKey);
+  const applyPayload = applyJob?.payload as Record<string, unknown> | null;
+  const applyConfidenceLevel =
+    applyPayload?.confidenceLevel === 'green' ||
+    applyPayload?.confidenceLevel === 'yellow' ||
+    applyPayload?.confidenceLevel === 'red'
+      ? applyPayload.confidenceLevel
+      : null;
+  const applyConfidenceScore =
+    typeof applyPayload?.confidenceScore === 'number' ? applyPayload.confidenceScore : null;
+  const applyConfidenceSummary =
+    typeof applyPayload?.confidenceSummary === 'string' ? applyPayload.confidenceSummary : null;
   async function handleApplyFinal() {
     setError(null);
     setApplyHint(null);
@@ -207,7 +248,9 @@ export function DocumentAnnotationsPanel({
       setApplyJobId(result.operationJobId);
       setPollApply(true);
       onSelectVersion(result.versionId);
-      setApplyHint(`Создана версия ${result.version}. Применяем правки в исходном DOCX…`);
+      setApplyHint(
+        `Версия ${result.version} создаётся — PDF появится через несколько секунд.`,
+      );
     } catch (err) {
       const msg =
         typeof err === 'object' && err && 'data' in err
@@ -411,7 +454,7 @@ export function DocumentAnnotationsPanel({
         <div className="space-y-2 border-t border-slate-100 pt-3">
           <p className="text-[11px] text-slate-500">
             Полный текст — «Правки» над PDF или «Открыть все» здесь. После «Собрать PDF» в
-            приложении в конце файла — компактный реестр (краткие фрагменты), без блоков на
+            приложении в конце файла — реестр с полным текстом «было / стало», без блоков на
             страницах.
           </p>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -437,7 +480,7 @@ export function DocumentAnnotationsPanel({
                 <>
                   <p>
                     Создаёт новую версию: текст страниц договора не меняется; в приложении —
-                    компактный реестр (страница + краткие фрагменты) по всем принятым правкам ИИ и
+                    реестр с полным текстом «было / стало» по всем принятым правкам ИИ и
                     ручным из «Аннотации».
                   </p>
                   <p>
@@ -458,19 +501,19 @@ export function DocumentAnnotationsPanel({
               helpContent={
                 <>
                   <p>
-                    Создаёт новую версию: текст изменяется прямо в теле документа через исходный
-                    DOCX. Таблицы, формулы и стили сохраняются.
+                    Создаёт новую версию с изменённым текстом. Если есть Word (исходный DOCX или
+                    конвертированный) — правки вносятся в документ и PDF пересобирается из Word.
+                    Без Word или при сбое — наложение текста на текущий PDF (те же страницы).
                   </p>
                   {hasSourceDocx ? (
                     <p>
-                      Исходный DOCX найден — правки будут внесены в Word-документ и сконвертированы
-                      обратно в PDF.
+                      При загруженном DOCX PDF и Word будут совпадать по тексту правок. Номера
+                      страниц могут немного сместиться относительно исходного PDF.
                     </p>
                   ) : (
                     <p>
-                      Исходный DOCX не загружен. Правки будут внесены напрямую в PDF (белая подложка
-                      + новый текст на месте «было»). Для договоров с таблицами лучше загрузить PDF
-                      вместе с DOCX.
+                      Без исходного DOCX: сначала PDF→Word, затем новый PDF; иначе — наложение на
+                      PDF.
                     </p>
                   )}
                 </>
@@ -483,6 +526,32 @@ export function DocumentAnnotationsPanel({
           {applyHint && (
             <div className="space-y-1">
               <p className="text-xs text-folio-700">{applyHint}</p>
+              {applyConfidenceLevel && applyJob?.status === 'completed' && (
+                <DocumentVersionConfidenceBadge
+                  level={applyConfidenceLevel}
+                  summary={applyConfidenceSummary}
+                  score={applyConfidenceScore}
+                />
+              )}
+              {applyEditResults.length > 0 && (
+                <ul className="max-h-28 space-y-0.5 overflow-y-auto rounded border border-slate-200 bg-slate-50/80 p-1.5 text-[10px]">
+                  {applyEditResults.map((item, index) => (
+                    <li
+                      key={`${item.page}-${index}`}
+                      className={
+                        item.status === 'applied' ? 'text-emerald-700' : 'text-amber-700'
+                      }
+                    >
+                      стр. {item.page}:{' '}
+                      {item.status === 'applied' ? '✓' : '✗'}{' '}
+                      <span className="text-slate-600">
+                        {item.originalText.slice(0, 48)}
+                        {item.originalText.length > 48 ? '…' : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {applyJob?.status === 'completed' && (
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -525,8 +594,8 @@ export function DocumentAnnotationsPanel({
                   }`}
                 >
                   <span className="font-medium text-folio-700">стр. {item.page}</span>
-                  <span className="mt-0.5 block truncate text-slate-600">
-                    {item.quote ? item.quote : item.content}
+                  <span className="mt-0.5 block line-clamp-3 text-slate-600">
+                    {item.content || item.quote || '—'}
                   </span>
                 </button>
               </li>

@@ -3,6 +3,7 @@ import { rgb } from 'pdf-lib';
 import { expandEraseRegion, type TextItem, type TextMatch } from './find-text-positions.js';
 import { calibrateFontSize, PdfEditFontCache } from './pdf-edit-fonts.js';
 import { splitSuggestionByOriginalLines } from './pdf-text-lines.js';
+import { expandBoxDownward, fitReplacementOnPage } from './pdf-fit-replacement-text.js';
 
 const HORIZONTAL_PAD = 8;
 const VERTICAL_PAD = 4;
@@ -96,23 +97,36 @@ async function buildLineDraws(
   pageItems: TextItem[],
   originalText: string,
   fontBytesByName: Map<string, Uint8Array>,
+  pageWidth: number,
+  pageHeight: number,
 ): Promise<LineDraw[]> {
   const layoutLines = match.lines;
   if (layoutLines.length === 0) {
     const font = await fontCache.resolve(pdfDoc, match.style, fontBytesByName);
     const text = suggestion.trim();
     if (!text) return [];
-    const fontSize = match.style.fontSize;
-    return [
-      {
-        x: match.box.x,
-        y: match.box.y + match.box.height / 1.3,
-        text,
-        fontSize,
-        font,
-        eraseBox: eraseMatchRegion(pageItems, match, originalText, suggestion),
-      },
-    ];
+    const eraseBox = eraseMatchRegion(pageItems, match, originalText, suggestion);
+    const fitted = fitReplacementOnPage({
+      font,
+      text,
+      baseFontSize: match.style.fontSize,
+      startX: match.box.x,
+      startY: match.box.y + match.box.height / 1.3,
+      pageWidth,
+      pageHeight,
+    });
+    const expandedErase =
+      fitted.lines.length > 1
+        ? expandBoxDownward(eraseBox, fitted.lines.length - 1, fitted.lineHeight)
+        : eraseBox;
+    return fitted.lines.map((line) => ({
+      x: line.x,
+      y: line.y,
+      text: line.text,
+      fontSize: line.fontSize,
+      font,
+      eraseBox: expandedErase,
+    }));
   }
 
   const originalTexts = layoutLines.map((line) => line.originalText);
@@ -139,14 +153,29 @@ async function buildLineDraws(
       sizes.length > 0
         ? sizes.reduce((sum, size) => sum + size, 0) / sizes.length
         : line.style.fontSize;
-    draws.push({
-      x: line.x,
-      y: line.y,
-      text,
-      fontSize,
+    const fitted = fitReplacementOnPage({
       font,
-      eraseBox,
+      text,
+      baseFontSize: fontSize,
+      startX: line.x,
+      startY: line.y,
+      pageWidth,
+      pageHeight,
     });
+    const expandedErase =
+      fitted.lines.length > 1
+        ? expandBoxDownward(eraseBox, fitted.lines.length - 1, fitted.lineHeight)
+        : eraseBox;
+    for (const fittedLine of fitted.lines) {
+      draws.push({
+        x: fittedLine.x,
+        y: fittedLine.y,
+        text: fittedLine.text,
+        fontSize: fittedLine.fontSize,
+        font,
+        eraseBox: expandedErase,
+      });
+    }
   }
   return draws;
 }
@@ -186,6 +215,8 @@ export async function renderTextReplacements(
     const pageIndex = edit.page - 1;
     if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) continue;
     const match = matches[0]!;
+    const page = pdfDoc.getPage(pageIndex);
+    const { width: pageWidth, height: pageHeight } = page.getSize();
     const pageItems = itemsByPage.get(edit.page) ?? [];
     const draws = await buildLineDraws(
       fontCache,
@@ -195,10 +226,11 @@ export async function renderTextReplacements(
       pageItems,
       edit.originalText,
       fontBytesByName,
+      pageWidth,
+      pageHeight,
     );
     if (draws.length === 0) continue;
 
-    const page = pdfDoc.getPage(pageIndex);
     const eraseBoxes = new Map<string, Box>();
     const matchErase = eraseMatchRegion(pageItems, match, edit.originalText, edit.suggestion);
     eraseBoxes.set(

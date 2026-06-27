@@ -19,7 +19,10 @@ import {
   useCompleteDocxUploadMutation,
   useCompleteUploadMutation,
   useCreateDocumentMutation,
+  useCreateDocumentFromDocxMutation,
+  useImportFromDocxMutation,
   useCreateDocumentVersionMutation,
+  useCreateDocumentVersionFromDocxMutation,
   useUploadVersionFileMutation,
 } from '@folio-mind/store';
 import { useAppDispatch, useAppSelector } from '../hooks/index.js';
@@ -42,11 +45,17 @@ type BackgroundUploadContextValue = {
   error: string | null;
   clearError: () => void;
   uploadFromDashboard: (pdfFile: File, docxFile?: File) => void;
+  uploadFromDocxOnly: (docxFile: File) => void;
   uploadNewDocument: (pdfFile: File, onCreated?: (documentId: string) => void) => void;
   uploadDocumentVersion: (
     documentId: string,
     pdfFile: File,
     docxFile?: File,
+    onSuccess?: (result: VersionUploadSuccess) => void,
+  ) => void;
+  uploadDocumentVersionFromDocx: (
+    documentId: string,
+    docxFile: File,
     onSuccess?: (result: VersionUploadSuccess) => void,
   ) => void;
 };
@@ -60,6 +69,9 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   const inFlightRef = useRef(false);
 
   const [createDocument] = useCreateDocumentMutation();
+  const [createDocumentFromDocx] = useCreateDocumentFromDocxMutation();
+  const [importFromDocx] = useImportFromDocxMutation();
+  const [createVersionFromDocx] = useCreateDocumentVersionFromDocxMutation();
   const [createVersion] = useCreateDocumentVersionMutation();
   const [completeUpload] = useCompleteUploadMutation();
   const [completeDocxUpload] = useCompleteDocxUploadMutation();
@@ -172,6 +184,40 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
     [runUpload, createDocument, uploadPdfWithDocx],
   );
 
+  const uploadFromDocxOnly = useCallback(
+    (docxFile: File) => {
+      void runUpload({
+        kind: 'dashboard',
+        fileLabel: docxFile.name,
+        execute: async (onProgress) => {
+          const title = docxFile.name.replace(/\.docx$/i, '');
+          const created = await createDocumentFromDocx({
+            title,
+            fileName: docxFile.name,
+            size: docxFile.size,
+          }).unwrap();
+          onProgress(15);
+          await uploadSourceDocx({
+            documentId: created.document.id,
+            versionId: created.versionId,
+            file: docxFile,
+            uploadUrl: created.docxUploadUrl,
+            docxS3Key: created.docxS3Key,
+            token,
+            completeDocxUpload: (args) => completeDocxUpload(args).unwrap(),
+          });
+          onProgress(55);
+          await importFromDocx({
+            documentId: created.document.id,
+            versionId: created.versionId,
+          }).unwrap();
+          onProgress(100);
+        },
+      });
+    },
+    [runUpload, createDocumentFromDocx, importFromDocx, completeDocxUpload, token],
+  );
+
   const uploadNewDocument = useCallback(
     (pdfFile: File, onCreated?: (documentId: string) => void) => {
       void runUpload({
@@ -235,6 +281,45 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
     [runUpload, createVersion, uploadPdfWithDocx],
   );
 
+  const uploadDocumentVersionFromDocx = useCallback(
+    (
+      documentId: string,
+      docxFile: File,
+      onSuccess?: (result: VersionUploadSuccess) => void,
+    ) => {
+      void runUpload({
+        kind: 'version',
+        fileLabel: docxFile.name,
+        documentId,
+        execute: async (onProgress) => {
+          const created = await createVersionFromDocx({
+            documentId,
+            fileName: docxFile.name,
+            size: docxFile.size,
+          }).unwrap();
+          onProgress(20);
+          await uploadSourceDocx({
+            documentId,
+            versionId: created.versionId,
+            file: docxFile,
+            uploadUrl: created.docxUploadUrl,
+            docxS3Key: created.docxS3Key,
+            token,
+            completeDocxUpload: (args) => completeDocxUpload(args).unwrap(),
+          });
+          onProgress(60);
+          await importFromDocx({
+            documentId,
+            versionId: created.versionId,
+          }).unwrap();
+          onProgress(100);
+          onSuccess?.({ documentId, versionId: created.versionId });
+        },
+      });
+    },
+    [runUpload, createVersionFromDocx, importFromDocx, completeDocxUpload, token],
+  );
+
   const value = useMemo(
     () => ({
       active: uploadState.active,
@@ -244,8 +329,10 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
       error: uploadState.error,
       clearError: () => dispatch(clearUploadError()),
       uploadFromDashboard,
+      uploadFromDocxOnly,
       uploadNewDocument,
       uploadDocumentVersion,
+      uploadDocumentVersionFromDocx,
     }),
     [
       uploadState.active,
@@ -255,8 +342,10 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
       uploadState.error,
       dispatch,
       uploadFromDashboard,
+      uploadFromDocxOnly,
       uploadNewDocument,
       uploadDocumentVersion,
+      uploadDocumentVersionFromDocx,
     ],
   );
 

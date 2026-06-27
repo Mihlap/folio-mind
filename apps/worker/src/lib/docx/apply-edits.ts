@@ -4,6 +4,9 @@ export type DocxEdit = {
   suggestion: string;
   page: number;
 };
+export type DocxEditResult = DocxEdit & {
+  status: 'applied' | 'failed';
+};
 type WtSegment = {
   index: number;
   length: number;
@@ -231,6 +234,7 @@ export async function applyEditsToDocx(
   modifiedDocx: Buffer;
   applied: number;
   failed: number;
+  results: DocxEditResult[];
 }> {
   const sortedEdits = [...edits].sort((a, b) => b.originalText.length - a.originalText.length);
   const zip = await JSZip.loadAsync(docxBuffer);
@@ -243,6 +247,7 @@ export async function applyEditsToDocx(
   );
   let applied = 0;
   let failed = 0;
+  const results: DocxEditResult[] = [];
   for (const edit of sortedEdits) {
     let found = false;
     for (const path of partPaths) {
@@ -260,8 +265,13 @@ export async function applyEditsToDocx(
         break;
       }
     }
-    if (found) applied++;
-    else failed++;
+    if (found) {
+      applied++;
+      results.push({ ...edit, status: 'applied' });
+    } else {
+      failed++;
+      results.push({ ...edit, status: 'failed' });
+    }
   }
   const modifiedDocx = Buffer.from(
     await zip.generateAsync({
@@ -269,5 +279,5 @@ export async function applyEditsToDocx(
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     }),
   );
-  return { modifiedDocx, applied, failed };
+  return { modifiedDocx, applied, failed, results };
 }

@@ -62,7 +62,11 @@ export const documentsApi = baseApi.injectEndpoints({
           createdAt: string;
           integrityStatus: string | null;
           integritySummary: string | null;
+          confidenceLevel: 'green' | 'yellow' | 'red' | null;
+          confidenceScore: number | null;
+          confidenceSummary: string | null;
           sourceDocxKey: string | null;
+          hasAppliedDocx: boolean;
         }>;
       },
       string
@@ -73,6 +77,68 @@ export const documentsApi = baseApi.injectEndpoints({
     createDocument: build.mutation<CreateDocumentResponse, CreateDocumentBody>({
       query: (body) => ({ url: '/documents', method: 'POST', body }),
       invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
+    }),
+    createDocumentFromDocx: build.mutation<
+      {
+        document: DocumentListItem;
+        versionId: string;
+        docxUploadUrl: string;
+        docxS3Key: string;
+        pdfS3Key: string;
+      },
+      {
+        title: string;
+        fileName: string;
+        size: number;
+      }
+    >({
+      query: (body) => ({ url: '/documents/from-docx', method: 'POST', body }),
+      invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
+    }),
+    importFromDocx: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        status: 'processing';
+      },
+      {
+        documentId: string;
+        versionId: string;
+      }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/import-from-docx`,
+        method: 'POST',
+        body: {},
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
+    createDocumentVersionFromDocx: build.mutation<
+      {
+        versionId: string;
+        version: number;
+        docxUploadUrl: string;
+        docxS3Key: string;
+        pdfS3Key: string;
+      },
+      {
+        documentId: string;
+        fileName: string;
+        size: number;
+      }
+    >({
+      query: ({ documentId, ...body }) => ({
+        url: `/documents/${documentId}/versions/from-docx`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
     }),
     completeDocxUpload: build.mutation<
       {
@@ -496,7 +562,10 @@ export const {
   useListDocumentsQuery,
   useGetDocumentQuery,
   useCreateDocumentMutation,
+  useCreateDocumentFromDocxMutation,
+  useImportFromDocxMutation,
   useCreateDocumentVersionMutation,
+  useCreateDocumentVersionFromDocxMutation,
   useCompleteUploadMutation,
   useCompleteDocxUploadMutation,
   useUploadVersionFileMutation,

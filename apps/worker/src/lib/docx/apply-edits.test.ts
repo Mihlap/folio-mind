@@ -41,4 +41,26 @@ describe('applyEditsToDocx', () => {
     expect(xml).not.toMatch(/ПрПри/);
     expect(xml).not.toContain('Поддерживается ввод файлов формата DOCX');
   });
+
+  it('возвращает per-edit results и считает failed', async () => {
+    const docx = await buildDocx(paragraphXml);
+    const { applied, failed, results } = await applyEditsToDocx(docx, [
+      {
+        originalText: 'несуществующий текст',
+        suggestion: 'замена',
+        page: 1,
+      },
+      {
+        originalText:
+          'При подготовке текста статьи в статье не должно быть заголовка статьи, аннотации, ключевых слов на русском и английском языке. Поддерживается ввод файлов формата DOCX.',
+        suggestion: 'Короткая замена.',
+        page: 1,
+      },
+    ]);
+    expect(applied).toBe(1);
+    expect(failed).toBe(1);
+    expect(results).toHaveLength(2);
+    expect(results.find((r) => r.status === 'failed')?.originalText).toBe('несуществующий текст');
+    expect(results.find((r) => r.status === 'applied')?.suggestion).toBe('Короткая замена.');
+  });
 });

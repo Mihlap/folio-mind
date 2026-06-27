@@ -12,7 +12,7 @@
 | **1** Web MVP      | 2–4 мес.        | S3, viewer, превью, ИИ v0           | ✅ **100%**                                                 |
 | **2** Правки и RAG | 3–6 мес.        | Операции PDF, правки ИИ, регламенты | **~97%**                                                    |
 | **2b** Буклеты     | 3–6 мес.        | Макет, медиатека, согласование      | **0%**                                                      |
-| **3** Конвертация  | 4–8 мес.        | Office ↔ PDF, формы, подпись        | **~58%** _(PDF-only ✅; DOCX E2E — нет)_                    |
+| **3** Конвертация  | 4–8 мес.        | Office ↔ PDF, формы, подпись        | **~72%** _(apply-edits + confidence v1)_                   |
 | **4** Mobile       | 2–5 мес.        | PWA, APK, офлайн буклет             | **0%**                                                      |
 
 _Вне плана v1–v4 (бэклог): Enterprise SSO, on-prem, real-time co-editing._
@@ -88,24 +88,24 @@ _Параллельно с фазой 2 после стабильного viewer
 
 ---
 
-## Фаза 3 — Конвертация, формы, подпись (4–8 месяцев) — **~58%**
+## Фаза 3 — Конвертация, формы, подпись (4–8 месяцев) — **~72%**
 
 ### Инфраструктура и качество кода (2026-06)
 
 | Задача | % |
 | ------ | --- |
 | Рефакторинг: `documents` routes → модули, `PdfViewer` / `DocumentPage` → подкомпоненты | **100%** |
-| Smoke: `pnpm smoke:phase2` (15/15), актуальные URL API | **100%** |
-| Стабильность dev: health timeout Redis, удаление документов (S3 lineage) | **~90%** |
+| Smoke: `pnpm smoke:phase2` (15/15), `smoke:phase3*` (overlay + docx + pdf2docx) | **100%** |
+| Стабильность dev: health timeout Redis, удаление документов (S3 lineage), S3 read queue + presigned fetch, этапы загрузки PDF в UI | **~95%** |
 | `PREVIEW_MAX_PAGES` до 500 (крупные PDF, миниатюры) | **100%** _(настройка `.env`)_ |
 
 ### Статус верификации «Применить правки» (2026-06)
 
 | Сценарий                                                           | Код           | Ручная проверка     |
 | ------------------------------------------------------------------ | ------------- | ------------------- |
-| Только PDF (overlay: белая подложка + новый текст)                 | ✅ реализован | ✅ **проверено**    |
-| PDF + исходный DOCX при загрузке (правки в Word → Gotenberg → PDF) | ✅ реализован | ⏳ **не проверено** |
-| Только PDF через pdf2docx → правки в DOCX → Gotenberg              | ✅ реализован | ⏳ **не проверено** |
+| Только PDF (overlay: белая подложка + новый текст)                 | ✅ реализован | ✅ **`pnpm smoke:phase3`** |
+| PDF + исходный DOCX при загрузке (правки в Word → Gotenberg → PDF) | ✅ реализован | ✅ **`pnpm smoke:phase3:docx` 7/7** |
+| Только PDF через pdf2docx → правки в DOCX → Gotenberg              | ✅ реализован | ✅ **`pnpm smoke:phase3:pdf2docx` 7/7** |
 
 _Ограничение PDF-only:_ качество зависит от позиций текста в PDF-слое; для договоров рекомендуется загрузка PDF вместе с исходным DOCX.
 
@@ -123,13 +123,13 @@ PDF + принятые правки
 
 | Этап | Задача                                                   | %                                         |
 | ---- | -------------------------------------------------------- | ----------------------------------------- |
-| D    | `sourceDocxKey`, UI загрузки DOCX, source-first pipeline | **~93%**                                  |
+| D    | `sourceDocxKey`, UI загрузки DOCX, source-first pipeline | **~96%**                                  |
 | B    | Gotenberg в compose (DOCX → PDF)                         | **~95%**                                  |
-| B    | pdf2docx в compose (PDF → DOCX), pre-convert, кэш        | **~88%**                                  |
-| C    | `apply-edits-final`: автозамены, отчёт applied/failed    | **~82%**                                  |
-| C    | PDF-only fallback (overlay через pdf-lib)                | **~80%** _(проверено вручную)_            |
+| B    | pdf2docx в compose (PDF → DOCX), pre-convert, кэш        | **~92%**                                  |
+| C    | `apply-edits-final`: автозамены, отчёт applied/failed    | **~92%**                                  |
+| C    | PDF-only: сначала PDF→DOCX, fallback overlay              | **~95%**                                  |
 | C    | Fallback DOCX→PDF overlay при `applied === 0`            | **~85%**                                  |
-| C    | Confidence scoring Green/Yellow/Red                      | **0%**                                    |
+| C    | Confidence scoring Green/Yellow/Red                      | **~62%** _(текст + pageCount + bbox-сигнатура; pixel-diff — бэклог)_ |
 | E    | Координаты выделения → матчинг на странице               | **~40%** (x/y есть, матчинг в DOCX — нет) |
 | F    | Гранулярность правок text/structural/table               | **0%** (бэклог)                           |
 
@@ -138,16 +138,16 @@ PDF + принятые правки
 | Кнопка             | Результат                             | %                                                       |
 | ------------------ | ------------------------------------- | ------------------------------------------------------- |
 | «Собрать PDF»      | Согласование: реестр в приложении     | **100%** ✅                                             |
-| «Применить правки» | Финал: текст в теле документа изменён | **~88%** _(PDF-only ✅, DOCX-пути — код есть, E2E нет)_ |
+| «Применить правки» | Финал: текст в теле документа изменён | **~95%** _(3 smoke-пути ✅)_ |
 
-- [x] **D:** Prisma `sourceDocxKey`, `sourceVersionId`, UI загрузки PDF+DOCX — **~93%**
+- [x] **D:** Prisma `sourceDocxKey`, `sourceVersionId`, UI загрузки PDF+DOCX, sidebar DOCX (бейджи + скачивание), **DOCX-only → Gotenberg PDF**, баннер «добавьте DOCX», кнопки «+ DOCX» / «Создать из DOCX» — **~100%**
 - [x] **B:** Gotenberg в `docker-compose` — **~95%**
 - [x] **B:** pdf2docx PDF → DOCX + pre-convert + кэш `preConvertedDocxKey` — **~88%**
 - [x] **C:** `apply-edits-final`: оркестрация, наследование правок по `sourceVersionId` — **~82%**
 - [x] **C:** PDF-only overlay (`apply-edits-pdf-overlay`) — **~80%** _(проверено)_
 - [x] **C:** fallback overlay при нуле замен в DOCX — **~85%**
-- [ ] **C:** DOCX-путь end-to-end (загрузка PDF+DOCX → «Применить правки») — **~72%** _(код есть, не проверено)_
-- [ ] **C:** Confidence scoring — **0%**
+- [x] **C:** DOCX-путь end-to-end (PDF+DOCX → «Применить правки») — **~90%** _(smoke `pnpm smoke:phase3:docx` 7/7)_
+- [x] **C:** Confidence scoring — `confidenceScore`/`confidenceLevel`, bbox-сигнатура pdf.js, бейджи в sidebar/панели/аннотациях — **~62%**
 - [x] API + UI «Применить правки» — **~90%**
 - [ ] PDF ↔ Office (прочие форматы), формы AcroForm — **0%**
 - [ ] Визуальная подпись → PAdES/PKCS#7 — **0%**
@@ -175,16 +175,14 @@ preview > text-extraction > conversion (PDF↔DOCX) > ai-jobs > apply-edits-fina
 ## Текущий фокус команды
 
 1. ✅ **Инфраструктура (2026-06):** рефакторинг крупных модулей, фоновая загрузка, smoke-phase2 15/15, `PREVIEW_MAX_PAGES=500`.
-2. ✅ **«Применить правки» (PDF-only)** — overlay, просмотр через presigned URL, стабильность S3, UI viewer.
-3. 🔜 **Следующий шаг — верификация DOCX-пути (этап D→C, §2.4b PROJECT_PLAN):**
-   - загрузить PDF **и** исходный DOCX на дашборде;
-   - принять правки → «Применить правки»;
-   - убедиться, что текст меняется в Word-слое (без ghosting overlay), PDF из Gotenberg корректен.
-4. 🔧 **После E2E DOCX:** улучшить `applyEditsToDocx` (поиск фрагментов в OOXML), отчёт applied/failed в UI, `tools/smoke-phase3.mjs`.
-5. ⏳ **Confidence scoring** (Green/Yellow/Red) — после стабильного DOCX-пайплайна (этап C, §2.4b).
-6. ⏳ **Фаза 2b** (буклеты) — после закрытия фазы 3C.
+2. ✅ **«Применить правки» (PDF-only)** — overlay, просмотр через presigned URL, стабильность S3, UI viewer (этапы загрузки + «Повторить»).
+3. ✅ **DOCX source-first E2E:** `pnpm smoke:phase3:docx` (7/7).
+4. ✅ **pdf2docx-путь E2E:** `pnpm smoke:phase3:pdf2docx` (7/7).
+5. ✅ **Confidence scoring v1:** pageCount + текст + bbox-сигнатура; UI-бейджи; smoke с proxy-upload.
+6. 🔜 **Confidence v2:** pixel-diff (Ghostscript), side-by-side для yellow — **v1 UX-баннер на DocumentPage ✅**
+7. ⏳ **Фаза 2b** (буклеты) — после закрытия фазы 3C.
 
-**Dev-зависимости для «Применить правки»:** `docker compose up` → MinIO, Redis, Postgres, **Gotenberg** (`:3003`), **pdf2docx** (`:8080`).  
+**Dev-зависимости для «Применить правки»:** `docker compose up` → Redis, Postgres, **Gotenberg** (`:3003`), **pdf2docx** (`:8080`); S3 — Timeweb (dev = prod-паритет).  
 Env: `GOTENBERG_URL`, `PDF_TO_DOCX_URL` в `apps/server/.env` и `apps/worker/.env`.
 
 См. также [VISION.md](./VISION.md), [ICP.md](./ICP.md).

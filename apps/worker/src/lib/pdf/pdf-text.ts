@@ -14,6 +14,7 @@ const MAX_CHARS = 12000;
 export type ExtractTextResult = {
   text: string;
   pages: PageText[];
+  pageCount: number;
 };
 export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractTextResult> {
   const task = getDocument({
@@ -24,9 +25,10 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractTextRes
     verbosity: VerbosityLevel.ERRORS,
   });
   const pdf = await task.promise;
-  const pageCount = Math.min(pdf.numPages, MAX_PAGES);
+  const pageCount = pdf.numPages;
+  const limit = Math.min(pageCount, MAX_PAGES);
   const pages: PageText[] = [];
-  for (let i = 1; i <= pageCount; i++) {
+  for (let i = 1; i <= limit; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     const pageText = content.items.map(textItemToString).join(' ').replace(/\s+/g, ' ').trim();
@@ -47,9 +49,9 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractTextRes
       trimmedPages.push(page);
       total += page.text.length + 2;
     }
-    return { text: full, pages: trimmedPages };
+    return { text: full, pages: trimmedPages, pageCount };
   }
-  return { text: full, pages };
+  return { text: full, pages, pageCount };
 }
 function textItemToString(item: unknown): string {
   if (typeof item !== 'object' || item === null) return '';

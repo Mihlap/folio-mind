@@ -195,6 +195,7 @@ export async function enqueueApplyEditsFinalJob(
     targetVersionId: string;
     tenantId: string;
     sourceS3Key: string;
+    editSourceS3Key?: string;
     targetS3Key: string;
     userSourceDocxKey: string | null;
     requestId?: string;
@@ -216,6 +217,22 @@ export async function enqueuePreConvertJob(
 ): Promise<void> {
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('pre-convert-pdf', payload, { jobId: payload.jobId });
+}
+export async function enqueueImportFromDocxJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    sourceDocxKey: string;
+    targetS3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('import-from-docx', payload, { jobId: payload.jobId });
 }
 export async function enqueueMergeVersionsJob(
   env: Env,

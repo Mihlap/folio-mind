@@ -7,10 +7,12 @@ import { useAppSelector } from '../../hooks/index.js';
 import { useBackgroundUpload } from '../../context/background-upload-provider.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
-import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
+import { ConfirmDangerDialog } from '../ui/ConfirmDangerDialog.js';
+import { docxDownloadLabel, docxDownloadTitle, versionHasDocxDownload } from '../../lib/documents/sourceDocx.js';
 import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
 import { DeleteDocumentButton } from './DeleteDocumentButton.js';
 import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.js';
+import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
 
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'не загружен',
@@ -38,7 +40,11 @@ export type DocumentVersionItem = {
   integrityStatus?: string | null;
   integritySummary?: string | null;
   integrityScore?: number | null;
+  confidenceLevel?: 'green' | 'yellow' | 'red' | null;
+  confidenceScore?: number | null;
+  confidenceSummary?: string | null;
   sourceDocxKey?: string | null;
+  hasAppliedDocx?: boolean;
 };
 type Props = {
   documentId: string;
@@ -65,6 +71,12 @@ export function DocumentVersionsPanel({
   const [error, setError] = useState<string | null>(null);
   const [deleteVersion, { isLoading: deletingVersion }] = useDeleteDocumentVersionMutation();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
+  const [pendingDelete, setPendingDelete] = useState<{
+    versionId: string;
+    versionNumber: number;
+  } | null>(null);
+  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
+  const deleteBlocked = versions.length <= 1;
 
   function handleNewVersion(file: File) {
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
@@ -96,16 +108,18 @@ export function DocumentVersionsPanel({
       setError('Не удалось получить ссылку на DOCX');
     }
   }
-  async function handleDeleteVersion(versionId: string, versionNumber: number) {
-    const ok = window.confirm(
-      `Удалить версию ${versionNumber}?\n\nБудут удалены файл, превью и пересказ этой версии. Восстановить нельзя.`,
-    );
-    if (!ok) return;
+  async function confirmDeleteVersion() {
+    if (!pendingDelete) return;
+    const { versionId, versionNumber } = pendingDelete;
     try {
       setError(null);
+      setDeletingVersionId(versionId);
       await deleteVersion({ documentId, versionId }).unwrap();
+      setPendingDelete(null);
     } catch {
-      setError('Не удалось удалить версию');
+      setError(`Не удалось удалить версию ${versionNumber}`);
+    } finally {
+      setDeletingVersionId(null);
     }
   }
   return (
@@ -199,6 +213,15 @@ export function DocumentVersionsPanel({
                   />
                 </div>
               )}
+              {v.confidenceLevel && (
+                <div className="mt-1">
+                  <DocumentVersionConfidenceBadge
+                    level={v.confidenceLevel}
+                    summary={v.confidenceSummary}
+                    score={v.confidenceScore}
+                  />
+                </div>
+              )}
               {v.status !== 'pending_upload' && (
                 <div
                   className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2"
@@ -216,22 +239,27 @@ export function DocumentVersionsPanel({
                       <span>PDF</span>
                     </button>
                   )}
-                  {hasUserSourceDocx(v.sourceDocxKey) && (
+                  {versionHasDocxDownload(v) && (
                     <button
                       type="button"
-                      title="Скачать исходный DOCX"
+                      title={docxDownloadTitle(v)}
                       onClick={() => void handleDocxDownload(v.id)}
                       className={versionActionBtnEmerald}
                     >
                       <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span>DOCX</span>
+                      <span>{docxDownloadLabel(v)}</span>
                     </button>
                   )}
                   <span className="ml-auto">
                     <DeleteDocumentButton
-                      title={`Удалить версию ${v.version}`}
-                      disabled={deletingVersion || versions.length <= 1}
-                      onClick={() => void handleDeleteVersion(v.id, v.version)}
+                      title={
+                        deleteBlocked
+                          ? 'Нельзя удалить единственную версию'
+                          : `Удалить версию ${v.version}`
+                      }
+                      disabled={deleteBlocked}
+                      busy={deletingVersionId === v.id}
+                      onClick={() => setPendingDelete({ versionId: v.id, versionNumber: v.version })}
                       variant="list"
                     />
                   </span>
@@ -241,6 +269,17 @@ export function DocumentVersionsPanel({
           );
         })}
       </ul>
+
+      <ConfirmDangerDialog
+        open={pendingDelete != null}
+        title={pendingDelete ? `Удалить версию ${pendingDelete.versionNumber}?` : ''}
+        description="Файл, превью, правки и пересказ этой версии будут удалены. Восстановить нельзя."
+        busy={deletingVersion}
+        onCancel={() => {
+          if (!deletingVersion) setPendingDelete(null);
+        }}
+        onConfirm={() => void confirmDeleteVersion()}
+      />
     </section>
   );
 }

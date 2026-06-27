@@ -1,4 +1,5 @@
 import { getDocument, GlobalWorkerOptions, VerbosityLevel } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { buildPageLayoutSignature, type PageLayoutSignature } from '@folio-mind/pdf-contracts';
 import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -516,4 +517,31 @@ export async function findAllTextPositions(
     await pdf.destroy();
   }
   return { positions, itemsByPage, fontBytesByName };
+}
+
+export async function extractPageLayoutSignatures(buffer: Buffer): Promise<PageLayoutSignature[]> {
+  const task = getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    disableFontFace: true,
+    standardFontDataUrl,
+    verbosity: VerbosityLevel.ERRORS,
+  });
+  const pdf = await task.promise;
+  const signatures: PageLayoutSignature[] = [];
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const items = sortItemsReadingOrder(await collectPageTextItems(page));
+      signatures.push(
+        buildPageLayoutSignature(
+          pageNumber,
+          items.map((item) => ({ x: item.x, y: item.y })),
+        ),
+      );
+    }
+  } finally {
+    await pdf.destroy();
+  }
+  return signatures;
 }

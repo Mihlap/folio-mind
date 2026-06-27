@@ -12,6 +12,12 @@ export async function finalizeOptimizeVersion(params: {
   pageCount: number;
   operation: string;
   operationMeta: Record<string, unknown>;
+  confidence?: {
+    level: string;
+    score: number;
+    summary: string;
+    details: unknown;
+  };
   requestId?: string;
 }): Promise<string> {
   const {
@@ -24,15 +30,25 @@ export async function finalizeOptimizeVersion(params: {
     pageCount,
     operation,
     operationMeta,
+    confidence,
     requestId,
   } = params;
   const prisma = getPrisma();
   await prisma.documentVersion.update({
     where: { id: targetVersionId },
     data: {
-      status: 'ready',
+      status: 'processing',
       size: BigInt(outputBuffer.length),
-      pageCount,
+      ...(pageCount > 0 ? { pageCount } : {}),
+      ...(confidence
+        ? {
+            confidenceLevel: confidence.level,
+            confidenceScore: confidence.score,
+            confidenceSummary: confidence.summary,
+            confidenceDetails: confidence.details as object,
+            confidenceAnalyzedAt: new Date(),
+          }
+        : {}),
     },
   });
   const previewJob = await prisma.job.create({

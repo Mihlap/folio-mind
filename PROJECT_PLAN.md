@@ -655,7 +655,7 @@ _Вне плана v1–v4 (бэклог): Enterprise (SSO, on-prem), совме
 - [x] Промпты с JSON Schema / Zod: список предложений `{ page, originalText, suggestion, reason }`.
 - [x] Accept/reject в UI, запись в аудит; ручные правки «было / стало» в аннотациях.
 - [x] **Согласование:** «Собрать PDF» — тело без изменений + компактный реестр в приложении (`apply-accepted-suggestions`, `render-edits-appendix`).
-- [ ] **Финал:** «Применить правки» — DOCX-пайплайн (§2.4.1); отдельная джоба `apply-edits-final`, не расширение `apply-accepted-suggestions`.
+- [x] **Финал:** «Применить правки» — DOCX-пайплайн (§2.4.1); джоба `apply-edits-final`, не расширение `apply-accepted-suggestions`.
 
 #### 2.4b Финальная версия PDF (DOCX-пайплайн, §2.4)
 
@@ -663,25 +663,27 @@ _Вне плана v1–v4 (бэклог): Enterprise (SSO, on-prem), совме
 
 ##### Этап D — Source-first (приоритетный путь по умолчанию)
 
-- [ ] Prisma: поле `sourceDocxKey` у `DocumentVersion` (nullable).
-- [ ] UI: поле «Исходный DOCX» **рекомендуется** при загрузке; если пользователь выбрал категорию «Договор / ТЗ / Смета» — делать поле обязательным (с возможностью пропустить). Пояснение: «DOCX даёт идеальное качество финальных правок — таблицы, формулы и стили не ломаются».
-- [ ] Worker: pipeline замен в исходном DOCX (без PDF→DOCX конвертации): найти `originalText` в DOCX, заменить на `suggestion`, экспорт DOCX → PDF через Gotenberg.
-- [ ] API + UI: «Применить правки» при наличии `sourceDocxKey` использует source-first pipeline автоматически. Если DOCX нет — fallback на этап B (PDF→DOCX→правки→PDF).
+- [x] Prisma: поле `sourceDocxKey` у `DocumentVersion` (nullable).
+- [x] UI: поле «Исходный DOCX» при загрузке PDF+DOCX на дашборде; sidebar: бейджи и скачивание «DOCX исх.» / «DOCX правки».
+- [x] Worker: pipeline замен в исходном DOCX (без PDF→DOCX конвертации): найти `originalText` в DOCX, заменить на `suggestion`, экспорт DOCX → PDF через Gotenberg.
+- [x] API + UI: «Применить правки» при наличии `sourceDocxKey` использует source-first pipeline автоматически. Если DOCX нет — fallback на этап B (PDF→DOCX→правки→PDF).
 - [ ] UX: при загрузке PDF через drag-and-drop предложить дополнительно загрузить DOCX; при загрузке DOCX — автоматически конвертировать в PDF для просмотра.
+- [x] Smoke E2E: `pnpm smoke:phase3:docx` (7/7), `pnpm smoke:phase3:pdf2docx` (7/7), `pnpm smoke:phase3` (overlay).
 
 ##### Этап B — Инфраструктура конвертации
 
-- [ ] Gotenberg / LibreOffice headless в `docker-compose`; сервис конвертации PDF ↔ DOCX в worker.
-- [ ] Pre-convert при upload: фоновая джоба PDF → DOCX при загрузке PDF (если нет `sourceDocxKey`); кэш в S3 `processing/`.
+- [x] Gotenberg / LibreOffice headless в `docker-compose`; сервис конвертации PDF ↔ DOCX в worker.
+- [x] Pre-convert при upload: фоновая джоба PDF → DOCX при загрузке PDF (если нет `sourceDocxKey`); кэш в S3 `processing/`.
 - [ ] Экспорт DOCX с подсветкой правок (без автозамен) для ручной доработки.
-- [ ] Кэширование промежуточного DOCX в S3 (reuse при повторных итерациях правок).
+- [x] Кэширование промежуточного DOCX в S3 (reuse при повторных итерациях правок).
 
 ##### Этап C — Автозамены + Confidence Scoring
 
-- [ ] Worker: `apply-edits-final` — автозамены по реестру правок в DOCX; сортировка замен (длинная фраза первой); отчёт `applied` / `failed` / `ambiguous`.
-- [ ] API: `POST .../versions/:vid/operations/apply-edits-final` → `operationJobId`; polling статуса; presigned DOCX при частичном успехе.
-- [ ] UI: кнопка «Применить правки» рядом с «Собрать PDF»; пояснение двух режимов; результат — новая версия или «N из M» + скачать DOCX.
-- [ ] **Confidence scoring:** сравнение страниц исходного и результирующего PDF (bounding boxes или скриншот-сравнение); уровни Green/Yellow/Red; `confidenceScore` в `DocumentVersion`.
+- [x] Worker: `apply-edits-final` — автозамены по реестру правок в DOCX; сортировка замен (длинная фраза первой); отчёт `applied` / `failed` / `ambiguous`.
+- [x] API: `POST .../versions/:vid/operations/apply-edits-final` → `operationJobId`; polling статуса; presigned DOCX при частичном успехе.
+- [x] UI: кнопка «Применить правки» рядом с «Собрать PDF»; пояснение двух режимов; результат — новая версия или «N из M» + скачать DOCX.
+- [x] **Confidence scoring (MVP):** сравнение pageCount + текста неизменённых страниц; `confidenceLevel` green/yellow/red, `confidenceScore` 0–100 в `DocumentVersion`; бейдж в sidebar.
+- [ ] **Confidence scoring v2:** bounding boxes / pixel-diff (Ghostscript), side-by-side подтверждение для yellow.
 - [ ] Сравнение версий: diff текста страниц отражает реальные замены в теле (не только приложение).
 - [ ] Опционально: экспорт DOCX с track changes для юридического рецензирования.
 

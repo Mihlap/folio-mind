@@ -11,7 +11,7 @@ export function useDocumentVersionUpload(
   const docxInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const uploadState = useAppSelector((s) => s.backgroundUpload);
-  const { uploadDocumentVersion } = useBackgroundUpload();
+  const { uploadDocumentVersion, uploadDocumentVersionFromDocx } = useBackgroundUpload();
   const uploading =
     uploadState.active &&
     uploadState.kind === 'version' &&
@@ -26,6 +26,21 @@ export function useDocumentVersionUpload(
   const openDocxFilePicker = useCallback(() => {
     docxInputRef.current?.click();
   }, []);
+
+  const handleDocxFile = useCallback(
+    (file: File) => {
+      if (!file.name.toLowerCase().endsWith('.docx')) {
+        setValidationError('Только DOCX');
+        return;
+      }
+      setValidationError(null);
+      uploadDocumentVersionFromDocx(documentId, file, ({ versionId }) => {
+        onVersionCreated(versionId);
+      });
+      if (docxInputRef.current) docxInputRef.current.value = '';
+    },
+    [documentId, uploadDocumentVersionFromDocx, onVersionCreated],
+  );
 
   const handleFile = useCallback(
     (file: File, docxFile?: File) => {
@@ -62,5 +77,6 @@ export function useDocumentVersionUpload(
     openFilePicker,
     openDocxFilePicker,
     handleFile,
+    handleDocxFile,
   };
 }
