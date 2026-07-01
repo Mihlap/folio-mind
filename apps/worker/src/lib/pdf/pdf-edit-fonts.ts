@@ -80,7 +80,6 @@ export async function collectEmbeddedFontBytes(
         out.set(fontName, font.data);
       }
     } catch {
-      // шрифт не встроен или недоступен
     }
   }
   return out;

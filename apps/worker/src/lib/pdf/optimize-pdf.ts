@@ -94,7 +94,6 @@ export async function optimizePdfBuffer(
     const packed = await packWithPdfLib(sourceBuffer);
     candidates.push({ buffer: packed, method: 'pack' });
   } catch {
-    // pdf-lib pack is best-effort fallback
   }
 
   const smaller = candidates

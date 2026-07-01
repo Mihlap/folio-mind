@@ -91,7 +91,6 @@ export function useLayoutEditor({
     try {
       sessionStorage.setItem(`${STORAGE_PREFIX}${versionId}`, JSON.stringify(objects));
     } catch {
-      // Черновик с крупными data URL может превысить квоту — объекты остаются в памяти.
     }
   }, [versionId, objects]);
 

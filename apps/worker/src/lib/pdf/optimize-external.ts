@@ -33,7 +33,6 @@ function discoverBinaryOnWindows(dirPrefix: string, binName: string): string | n
       }
     }
   } catch {
-    // ignore
   }
   return null;
 }

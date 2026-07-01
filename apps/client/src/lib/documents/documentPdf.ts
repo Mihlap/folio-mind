@@ -24,7 +24,6 @@ function cachePdfBytes(key: string, bytes: Uint8Array): void {
       sessionStorage.setItem(`${SESSION_CACHE_PREFIX}${key}`, btoa(binary));
     }
   } catch {
-    // sessionStorage may be unavailable or full
   }
 }
 
