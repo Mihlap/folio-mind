@@ -65,6 +65,8 @@ export const documentsApi = baseApi.injectEndpoints({
           confidenceLevel: 'green' | 'yellow' | 'red' | null;
           confidenceScore: number | null;
           confidenceSummary: string | null;
+          confidenceDetails: Record<string, unknown> | null;
+          sourceVersionId: string | null;
           sourceDocxKey: string | null;
           hasAppliedDocx: boolean;
         }>;
@@ -476,6 +478,29 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: documentId },
       ],
     }),
+    optimizePdf: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        version: number;
+        status: 'processing';
+      },
+      {
+        documentId: string;
+        versionId: string;
+        preset: 'email' | 'archive' | 'print' | 'none';
+      }
+    >({
+      query: ({ documentId, versionId, preset }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/optimize-pdf`,
+        method: 'POST',
+        body: { preset },
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
     applyEditsFinal: build.mutation<
       {
         operationJobId: string;
@@ -496,6 +521,22 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: 'LIST' },
         { type: 'Documents', id: documentId },
       ],
+    }),
+    exportHighlightDocx: build.mutation<
+      { operationJobId: string; status: 'processing' },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/export-highlight-docx`,
+        method: 'POST',
+      }),
+    }),
+    getHighlightDocxUrl: build.query<
+      { url: string; expiresInSeconds: number },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) =>
+        `/documents/${documentId}/versions/${versionId}/highlight-docx-url`,
     }),
     compareVersions: build.query<
       {
@@ -578,6 +619,9 @@ export const {
   useGetVersionPreviewsQuery,
   useSplitPagesMutation,
   useMergeVersionsMutation,
+  useOptimizePdfMutation,
   useApplyEditsFinalMutation,
+  useExportHighlightDocxMutation,
+  useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
 } = documentsApi;

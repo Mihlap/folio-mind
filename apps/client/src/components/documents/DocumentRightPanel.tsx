@@ -4,6 +4,7 @@ import { PanelResizeHandle } from '../layout/PanelResizeHandle.js';
 import { PanelViewportToggle } from '../layout/PanelViewportToggle.js';
 import { DocumentAiPanel } from './DocumentAiPanel.js';
 import { DocumentPdfOperationsPanel } from './DocumentPdfOperationsPanel.js';
+import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import { DocumentReportPanel } from './DocumentReportPanel.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 export type DocumentRightTab = 'chat' | 'tools' | 'report';
@@ -18,11 +19,7 @@ type Props = {
   focusedAnnotationId?: string | null;
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
-  injectedEditBefore?: string | null;
-  injectedCoords?: {
-    x?: number;
-    y?: number;
-  } | null;
+  editTextInjection?: EditTextInjection | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -54,8 +51,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   focusedAnnotationId = null,
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
-  injectedEditBefore = null,
-  injectedCoords = null,
+  editTextInjection = null,
   collapsed,
   onToggleCollapsed,
   onExpand,
@@ -76,7 +72,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
       syncedToWorkspace
       onClick={collapsed ? onExpand : onToggleCollapsed}
       title={collapsed ? 'Развернуть панель' : 'Свернуть'}
-      className="hidden lg:flex"
+      className="hidden md:flex"
     />
   ) : null;
 
@@ -84,7 +80,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
     return (
       <aside
         ref={ref}
-        className="relative hidden h-full shrink-0 flex-col border-l border-slate-200 bg-white lg:flex lg:w-12"
+        className="relative hidden h-full shrink-0 flex-col border-l border-slate-200 bg-white md:flex md:w-12"
       >
         {viewportToggle}
         <div className="flex flex-col items-center gap-1.5 p-1.5 pt-3">
@@ -118,14 +114,14 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
       className={
         isDrawer
           ? 'relative flex h-full min-h-0 flex-col overflow-hidden bg-white'
-          : `relative hidden h-full min-h-0 shrink-0 flex-col overflow-visible border-l border-slate-200 bg-white lg:flex ${isResizing ? '' : 'transition-[width] duration-200'}`
+          : `relative hidden h-full min-h-0 shrink-0 flex-col overflow-visible border-l border-slate-200 bg-white md:flex ${isResizing ? '' : 'transition-[width] duration-200'}`
       }
     >
       {viewportToggle}
       {!isDrawer && <PanelResizeHandle edge="left" onMouseDown={onResizeStart} />}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className={`${shellPanelToolbarClass}`}>
+      <div className={`${shellPanelToolbarClass} ${isDrawer ? 'hidden' : ''}`}>
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -148,8 +144,6 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
               documentId={documentId}
               versionId={activeVersion.id}
               versionReady={versionReady}
-              onGoToPage={onGoToPage}
-              onSelectVersion={onSelectVersion}
             />
           ) : (
             <EmptyTab text="Выберите версию" />
@@ -167,8 +161,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             focusedAnnotationId={focusedAnnotationId}
             onOpenAcceptedEdit={onOpenAcceptedEdit}
             onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
-            injectedEditBefore={injectedEditBefore}
-            injectedCoords={injectedCoords}
+            editTextInjection={editTextInjection}
             versionReady={versionReady}
           />
         </div>

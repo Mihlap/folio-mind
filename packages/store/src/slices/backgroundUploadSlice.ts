@@ -1,6 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-export type BackgroundUploadKind = 'dashboard' | 'new-document' | 'version';
+export type BackgroundUploadKind = 'dashboard' | 'new-document' | 'version' | 'regulation';
 
 type BackgroundUploadState = {
   active: boolean;

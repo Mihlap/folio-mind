@@ -34,7 +34,7 @@ export function PdfViewerToolbar({
 }: PdfViewerToolbarProps) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-      <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
+      <div className="inline-flex shrink-0 rounded-lg border border-slate-200 p-0.5">
         <ToolbarButton
           active={displayMode === 'continuous'}
           onClick={() => onDisplayModeChange('continuous')}
@@ -47,12 +47,19 @@ export function PdfViewerToolbar({
         />
       </div>
 
-      <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-1">
+      <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-1">
         <IconButton label="Уменьшить" onClick={onZoomOut}>
           −
         </IconButton>
-        <span className="min-w-[3rem] text-center text-xs tabular-nums text-slate-600">
-          {zoomMode === 'fit-width' ? 'по ширине' : `${Math.round(customScale * 100)}%`}
+        <span className="min-w-[2.5rem] text-center text-[10px] tabular-nums text-slate-600 sm:min-w-[3rem] sm:text-xs">
+          {zoomMode === 'fit-width' ? (
+            <>
+              <span className="sm:hidden">шир.</span>
+              <span className="hidden sm:inline">по ширине</span>
+            </>
+          ) : (
+            `${Math.round(customScale * 100)}%`
+          )}
         </span>
         <IconButton label="Увеличить" onClick={onZoomIn}>
           +
@@ -62,7 +69,7 @@ export function PdfViewerToolbar({
         </IconButton>
       </div>
 
-      <div className="flex min-w-[12rem] flex-1 items-center gap-1">
+      <div className="flex min-w-0 w-full basis-full items-center gap-1 sm:basis-auto sm:flex-1">
         <input
           type="search"
           value={searchQuery}

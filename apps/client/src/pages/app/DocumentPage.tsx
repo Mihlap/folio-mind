@@ -43,6 +43,7 @@ import {
   listAcceptedEditAnnotations,
 } from '../../lib/documents/acceptedEditOverlays.js';
 import { AcceptedEditsModal } from '../../components/documents/AcceptedEditsModal.js';
+import type { EditTextInjection } from '../../components/documents/useDocumentAnnotationsPanel.js';
 const INITIAL_THUMB_PAGES = 15;
 const RIGHT_PANEL = {
   defaultWidth: 360,
@@ -72,11 +73,8 @@ export function DocumentPage() {
   const [focusedAnnotationId, setFocusedAnnotationId] = useState<string | null>(null);
   const [acceptedEditsModalOpen, setAcceptedEditsModalOpen] = useState(false);
   const [editsModalPageFilter, setEditsModalPageFilter] = useState<number | null>(null);
-  const [injectedEditBefore, setInjectedEditBefore] = useState<string | null>(null);
-  const [pendingCoords, setPendingCoords] = useState<{
-    x?: number;
-    y?: number;
-  } | null>(null);
+  const editInjectionKeyRef = useRef(0);
+  const [editTextInjection, setEditTextInjection] = useState<EditTextInjection | null>(null);
   const [pageNavTick, setPageNavTick] = useState(0);
   const [deleteAnnotation] = useDeleteAnnotationMutation();
   const [updateAnnotation, { isLoading: updatingAnnotation }] = useUpdateAnnotationMutation();
@@ -166,7 +164,7 @@ export function DocumentPage() {
     setViewerPage(1);
     setFocusedAnnotationId(null);
     setAcceptedEditsModalOpen(false);
-    setInjectedEditBefore(null);
+    setEditTextInjection(null);
     dispatch(resetZoom());
     dispatch(clearSearch());
   }, [activeVersion?.id, dispatch]);
@@ -218,11 +216,11 @@ export function DocumentPage() {
   );
   const handleTextQuoteForEdit = useCallback(
     ({ text, page, x, y }: { text: string; page: number; x?: number; y?: number }) => {
-      setInjectedEditBefore(text);
-      setPendingCoords({ x, y });
-      queueMicrotask(() => {
-        setInjectedEditBefore(null);
-        setPendingCoords(null);
+      editInjectionKeyRef.current += 1;
+      setEditTextInjection({
+        key: editInjectionKeyRef.current,
+        text,
+        coords: x != null || y != null ? { x, y } : undefined,
       });
       setRightTab('tools');
       handleGoToPage(page);
@@ -314,7 +312,8 @@ export function DocumentPage() {
   );
   const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
   const confidenceLevel = activeVersion?.confidenceLevel;
-  const showConfidenceNotice = confidenceLevel === 'red';
+  const showConfidenceNotice =
+    confidenceLevel === 'red' || confidenceLevel === 'yellow';
   const sizeLabel = activeVersion?.size
     ? `${(Number(activeVersion.size) / (1024 * 1024)).toFixed(1)} МБ`
     : null;
@@ -366,7 +365,7 @@ export function DocumentPage() {
         onNewDocument={newDocumentUpload.openFilePicker}
       />
 
-      <div ref={workspaceRowRef} className="flex min-h-0 flex-1">
+      <div ref={workspaceRowRef} className="flex min-h-0 min-w-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col min-h-0">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
             {pdfProcessing && (
@@ -382,7 +381,7 @@ export function DocumentPage() {
             {showConfidenceNotice && (
               <div className="mb-2 shrink-0">
                 <DocumentConfidenceNotice
-                  level={confidenceLevel}
+                  level={confidenceLevel === 'red' ? 'red' : 'yellow'}
                   summary={activeVersion?.confidenceSummary}
                   score={activeVersion?.confidenceScore}
                   onOpenCompare={openCompareTools}
@@ -547,8 +546,7 @@ export function DocumentPage() {
             if (first) openAcceptedEditsModal(first.page, first.id);
             else setAcceptedEditsModalOpen(true);
           }}
-          injectedEditBefore={injectedEditBefore}
-          injectedCoords={pendingCoords}
+          editTextInjection={editTextInjection}
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -561,7 +559,7 @@ export function DocumentPage() {
       </div>
 
       <nav
-        className="flex shrink-0 items-stretch justify-around border-t border-slate-200 bg-white lg:hidden"
+        className="flex shrink-0 items-stretch justify-around border-t border-slate-200 bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden"
         aria-label="Панели документа"
       >
         {(
@@ -571,7 +569,12 @@ export function DocumentPage() {
             { id: 'tools' as const, label: 'Инстр.' },
             { id: 'chat' as const, label: 'Чат' },
           ] as const
-        ).map((item) => (
+        ).map((item) => {
+          const isActive =
+            item.id === 'versions'
+              ? mobileSheet === 'versions'
+              : mobileSheet === 'panel' && rightTab === item.id;
+          return (
           <button
             key={item.id}
             type="button"
@@ -582,11 +585,16 @@ export function DocumentPage() {
               }
               openMobilePanel(item.id);
             }}
-            className="flex flex-1 cursor-pointer flex-col items-center py-2.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+            className={`flex flex-1 cursor-pointer flex-col items-center py-2.5 text-[11px] font-medium transition ${
+              isActive
+                ? 'bg-folio-50 text-folio-700'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
           >
             {item.label}
           </button>
-        ))}
+          );
+        })}
       </nav>
 
       <DocumentMobileSheet
@@ -655,8 +663,7 @@ export function DocumentPage() {
             if (first) openAcceptedEditsModal(first.page, first.id);
             else setAcceptedEditsModalOpen(true);
           }}
-          injectedEditBefore={injectedEditBefore}
-          injectedCoords={pendingCoords}
+          editTextInjection={editTextInjection}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

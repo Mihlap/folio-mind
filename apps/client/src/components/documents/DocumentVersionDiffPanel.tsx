@@ -45,12 +45,14 @@ type Props = {
   versions: DocumentVersionItem[];
   activeVersion: DocumentVersionItem | undefined;
   onGoToPage: (page: number) => void;
+  hideSectionHeader?: boolean;
 };
 export function DocumentVersionDiffPanel({
   documentId,
   versions,
   activeVersion,
   onGoToPage,
+  hideSectionHeader = false,
 }: Props) {
   const readyVersions = useMemo(() => versions.filter((v) => v.status === 'ready'), [versions]);
   const defaultBaseId = useMemo(() => {
@@ -107,14 +109,16 @@ export function DocumentVersionDiffPanel({
   }
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="text-sm font-medium text-slate-800">Сравнение версий</h3>
-        <p className="mt-1 text-xs text-slate-500">
-          Текст страниц договора и список правок «было / стало» (база → текущая версия). В
-          списке ниже — только страницы с заметными отличиями в тексте, а не артефакты
-          пересохранения PDF.
-        </p>
-      </div>
+      {!hideSectionHeader && (
+        <div>
+          <h3 className="text-sm font-medium text-slate-800">Сравнение версий</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Текст страниц договора и список правок «было / стало» (база → текущая версия). В
+            списке ниже — только страницы с заметными отличиями в тексте, а не артефакты
+            пересохранения PDF.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="min-w-[8rem] flex-1 text-xs text-slate-600">

@@ -108,11 +108,11 @@ export function LoginPage() {
             >
               {isLoading ? 'Вход…' : 'Войти'}
             </Button>
-            <div className="text-center text-sm">
+            <div className="flex flex-col gap-2 text-center text-sm sm:flex-row sm:justify-center sm:gap-0">
               <Link to="/magic-link" className="font-medium text-folio-600 hover:underline">
                 Войти по ссылке на почту
               </Link>
-              {' · '}
+              <span className="hidden text-slate-400 sm:inline sm:px-2">·</span>
               <Link to="/forgot-password" className="font-medium text-folio-600 hover:underline">
                 Забыли пароль?
               </Link>

@@ -33,6 +33,37 @@ function getMutationError(err: unknown): string {
   }
   return 'Не удалось выполнить операцию';
 }
+function SuggestionMetaRow({
+  page,
+  reason,
+  onGoToPage,
+}: {
+  page?: number | null;
+  reason?: string;
+  onGoToPage: (page: number) => void;
+}) {
+  const reasonText = reason?.trim();
+  if (page == null && !reasonText) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {page != null && (
+        <button
+          type="button"
+          onClick={() => onGoToPage(page)}
+          className="cursor-pointer text-[11px] font-medium text-folio-700 hover:underline"
+        >
+          стр. {page}
+        </button>
+      )}
+      {reasonText && (
+        <FeatureHelpButton title="Почему предложена правка">
+          <p className="whitespace-pre-wrap">{reasonText}</p>
+        </FeatureHelpButton>
+      )}
+    </div>
+  );
+}
+
 export function DocumentAiSuggestionsPanel({
   documentId,
   versionId,
@@ -51,6 +82,7 @@ export function DocumentAiSuggestionsPanel({
   const [error, setError] = useState<string | null>(null);
   const [applyHint, setApplyHint] = useState<string | null>(null);
   const [emptyAfterRun, setEmptyAfterRun] = useState(false);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const { data: job } = useGetJobQuery(jobId!, {
     skip: !jobId,
     pollingInterval: pollJob ? 2000 : 0,
@@ -67,6 +99,7 @@ export function DocumentAiSuggestionsPanel({
     setError(null);
     setApplyHint(null);
     setEmptyAfterRun(false);
+    setBulkUpdating(false);
   }, [versionId]);
   useEffect(() => {
     if (!job) return;
@@ -131,6 +164,7 @@ export function DocumentAiSuggestionsPanel({
   const rejected = data?.items.filter((s) => s.status === 'rejected') ?? [];
   const loading = requesting || pollJob;
   const applyPending = applying || pollOperation;
+  const decisionPending = updating || bulkUpdating;
   const hasSuggestions = pending.length > 0 || accepted.length > 0 || rejected.length > 0;
   async function handleRequest() {
     setError(null);
@@ -150,6 +184,24 @@ export function DocumentAiSuggestionsPanel({
       void refetch();
     } catch (err) {
       setError(getMutationError(err));
+    }
+  }
+  async function handleDecisionAll(status: 'accepted' | 'rejected') {
+    if (pending.length === 0) return;
+    setError(null);
+    setBulkUpdating(true);
+    try {
+      await Promise.all(
+        pending.map((item) =>
+          updateSuggestion({ documentId, versionId, suggestionId: item.id, status }).unwrap(),
+        ),
+      );
+      void refetch();
+    } catch (err) {
+      setError(getMutationError(err));
+      void refetch();
+    } finally {
+      setBulkUpdating(false);
     }
   }
   async function handleApplyPdf() {
@@ -173,8 +225,7 @@ export function DocumentAiSuggestionsPanel({
         helpContent={
           <>
             <p>
-              ИИ предлагает замены формулировок. «Принять» фиксирует решение и добавляет запись в
-              аннотации.
+              ИИ предлагает замены формулировок. «Принять» фиксирует решение и добавляет запись в список правок ниже.
             </p>
             <p>
               «Собрать PDF» — файл для пересылки: договор без изменений + реестр правок с полным
@@ -194,7 +245,7 @@ export function DocumentAiSuggestionsPanel({
             <>
               <p>
                 Система извлекает текст из PDF и отправляет его в ИИ. Ниже появятся карточки с
-                кнопками «Принять» и «Отклонить».
+                кнопками «Принять», «Отклонить» или «Принять всё» / «Отклонить всё».
               </p>
               <p>Нужна версия с текстовым слоем (не скан без OCR).</p>
             </>
@@ -248,30 +299,48 @@ export function DocumentAiSuggestionsPanel({
       )}
 
       {pending.length > 0 && (
-        <ul className="space-y-3">
-          <p className="text-xs font-medium text-slate-600">Новые предложения ({pending.length})</p>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-slate-600">
+              Новые предложения ({pending.length})
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                disabled={decisionPending || applyPending}
+                onClick={() => void handleDecisionAll('accepted')}
+                className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {bulkUpdating ? 'Обработка…' : 'Принять всё'}
+              </button>
+              <button
+                type="button"
+                disabled={decisionPending || applyPending}
+                onClick={() => void handleDecisionAll('rejected')}
+                className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Отклонить всё
+              </button>
+            </div>
+          </div>
+          <ul className="space-y-3">
           {pending.map((item) => (
             <li key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-              {item.page != null && (
-                <button
-                  type="button"
-                  onClick={() => onGoToPage(item.page!)}
-                  className="cursor-pointer text-[11px] font-medium text-folio-700 hover:underline"
-                >
-                  стр. {item.page}
-                </button>
-              )}
+              <SuggestionMetaRow
+                page={item.page}
+                reason={item.reason}
+                onGoToPage={onGoToPage}
+              />
               <AcceptedEditBeforeAfter
                 className="mt-2"
                 compact
                 before={item.originalText}
                 after={item.suggestion}
               />
-              <p className="mt-1 text-[11px] text-slate-500">{item.reason}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  disabled={updating || applyPending}
+                  disabled={decisionPending || applyPending}
                   onClick={() => void handleDecision(item.id, 'accepted')}
                   className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
@@ -279,14 +348,14 @@ export function DocumentAiSuggestionsPanel({
                 </button>
                 <FeatureHelpButton title="Принять правку">
                   <p>
-                    Фиксирует согласие с предложенной формулировкой и сохраняет её в аннотациях
-                    (вкладка «Инструменты»). PDF этой версии не меняется — для файла с пометками
-                    нажмите «Собрать PDF с правками».
+                    Фиксирует согласие с предложенной формулировкой и добавляет её в список правок
+                    ниже. PDF этой версии не меняется — для файла с пометками нажмите «Собрать PDF
+                    с правками».
                   </p>
                 </FeatureHelpButton>
                 <button
                   type="button"
-                  disabled={updating || applyPending}
+                  disabled={decisionPending || applyPending}
                   onClick={() => void handleDecision(item.id, 'rejected')}
                   className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
@@ -298,7 +367,8 @@ export function DocumentAiSuggestionsPanel({
               </div>
             </li>
           ))}
-        </ul>
+          </ul>
+        </div>
       )}
 
       {accepted.length > 0 && (
@@ -310,15 +380,11 @@ export function DocumentAiSuggestionsPanel({
                 key={item.id}
                 className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2"
               >
-                {item.page != null && (
-                  <button
-                    type="button"
-                    onClick={() => onGoToPage(item.page!)}
-                    className="cursor-pointer text-[11px] font-medium text-folio-700 hover:underline"
-                  >
-                    стр. {item.page}
-                  </button>
-                )}
+                <SuggestionMetaRow
+                  page={item.page}
+                  reason={item.reason}
+                  onGoToPage={onGoToPage}
+                />
                 <AcceptedEditBeforeAfter
                   className="mt-2"
                   compact

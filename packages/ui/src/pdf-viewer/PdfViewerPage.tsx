@@ -55,7 +55,7 @@ export function PdfViewerPage({
   useEffect(() => {
     const canvas = canvasRef.current;
     const textLayer = textLayerRef.current;
-    if (!canvas || !textLayer || !pdf || !pdfReady || !containerWidth) return;
+    if (!canvas || !textLayer || !pdf || !pdfReady) return;
     let cancelled = false;
     let renderTask: pdfjs.RenderTask | null = null;
     setPageError(null);
@@ -76,7 +76,11 @@ export function PdfViewerPage({
         canvas.style.height = `${baseViewport.height * cssScale}px`;
         textLayer.style.width = canvas.style.width;
         textLayer.style.height = canvas.style.height;
-        renderTask = page.render({ canvasContext: context, viewport });
+        renderTask = page.render({
+          canvasContext: context,
+          viewport,
+          canvas,
+        } as Parameters<typeof page.render>[0]);
         await renderTask.promise;
         if (cancelled) return;
         if (showTextLayer) {

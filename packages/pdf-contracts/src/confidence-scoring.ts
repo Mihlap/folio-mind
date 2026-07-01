@@ -18,6 +18,10 @@ export type ConfidenceDetails = {
   unchangedPagesDrifted: number;
   layoutPagesChecked?: number;
   layoutDriftPages?: number;
+  pixelPagesChecked?: number;
+  pixelDriftPages?: number;
+  pixelDriftRatio?: number;
+  visualDriftPages?: number[];
   method: ApplyEditsMethod;
 };
 
@@ -68,6 +72,10 @@ export function scoreDocxReflowConfidence(params: {
     unchangedPagesDrifted: 0,
     layoutPagesChecked: 0,
     layoutDriftPages: 0,
+    pixelPagesChecked: 0,
+    pixelDriftPages: 0,
+    pixelDriftRatio: 0,
+    visualDriftPages: [],
     method,
   };
 }
@@ -81,6 +89,10 @@ export function scoreApplyEditsConfidence(params: {
   method: ApplyEditsMethod;
   layoutPagesChecked?: number;
   layoutDriftPages?: number;
+  pixelPagesChecked?: number;
+  pixelDriftPages?: number;
+  pixelDriftRatio?: number;
+  visualDriftPages?: number[];
 }): ConfidenceResult {
   if (params.method === 'docx' || params.method === 'docx-converted') {
     return scoreDocxReflowConfidence({
@@ -100,6 +112,10 @@ export function scoreApplyEditsConfidence(params: {
     method,
     layoutPagesChecked = 0,
     layoutDriftPages = 0,
+    pixelPagesChecked = 0,
+    pixelDriftPages = 0,
+    pixelDriftRatio = 0,
+    visualDriftPages = [],
   } = params;
   const pageCountDelta = Math.abs(sourcePageCount - targetPageCount);
   const editedSet = new Set(editedPages.filter((p) => p >= 1));
@@ -136,6 +152,9 @@ export function scoreApplyEditsConfidence(params: {
   else if (pageCountDelta === 1) score -= 22;
   score -= Math.min(40, unchangedPagesDrifted * 10);
   score -= Math.min(25, layoutDriftPages * 8);
+  score -= Math.min(30, pixelDriftPages * 10);
+  if (pixelDriftRatio > 0.25) score -= 15;
+  else if (pixelDriftRatio > 0.1) score -= 8;
   if (driftRatio > 0.15 && driftRatio <= 0.3) score -= 10;
   if (layoutDriftRatio > 0.2) score -= 12;
   if (method === 'pdf-overlay' || method === 'docx-fallback-overlay') score -= 8;
@@ -146,14 +165,17 @@ export function scoreApplyEditsConfidence(params: {
     pageCountDelta > 1 ||
     driftRatio > 0.3 ||
     layoutDriftRatio > 0.35 ||
+    pixelDriftRatio > 0.35 ||
     (unchangedPagesDrifted >= 3 && driftRatio > 0.15) ||
-    (layoutDriftPages >= 3 && layoutDriftRatio > 0.2)
+    (layoutDriftPages >= 3 && layoutDriftRatio > 0.2) ||
+    (pixelDriftPages >= 3 && pixelDriftRatio > 0.2)
   ) {
     level = 'red';
   } else if (
     pageCountDelta === 1 ||
     unchangedPagesDrifted > 0 ||
     layoutDriftPages > 0 ||
+    pixelDriftPages > 0 ||
     method === 'pdf-overlay' ||
     method === 'docx-fallback-overlay'
   ) {
@@ -172,6 +194,8 @@ export function scoreApplyEditsConfidence(params: {
   } else if (level === 'yellow') {
     if (pageCountDelta === 1) {
       summary = 'Число страниц изменилось на 1 — проверьте результат визуально.';
+    } else if (pixelDriftPages > 0) {
+      summary = `На ${pixelDriftPages} страницах визуально заметны отличия от исходника (pixel-diff).`;
     } else if (layoutDriftPages > 0) {
       summary = `На ${layoutDriftPages} страницах смещён текстовый слой (bbox).`;
     } else if (unchangedPagesDrifted > 0) {
@@ -199,6 +223,10 @@ export function scoreApplyEditsConfidence(params: {
     unchangedPagesDrifted,
     layoutPagesChecked,
     layoutDriftPages,
+    pixelPagesChecked,
+    pixelDriftPages,
+    pixelDriftRatio,
+    visualDriftPages,
     method,
   };
 }

@@ -42,6 +42,27 @@ pnpm dev
 | `OTEL_ENABLED=true` | Консольные трейсы OpenTelemetry (server + worker)                       |
 | `DATABASE_URL`      | `postgresql://folio:folio@localhost:5434/folio_mind` при Docker compose |
 
+### Сжатие PDF (qpdf + Ghostscript)
+
+Джоба `optimize-pdf` на worker вызывает **qpdf** и **Ghostscript** (текст остаётся векторным, сжимаются потоки и встроенные картинки). Без них остаётся только упаковка pdf-lib — размер почти не меняется.
+
+**Windows (PowerShell):**
+
+```powershell
+winget install QPDF.QPDF
+# Ghostscript: https://ghostscript.com/releases/gsdnld.html (в winget пакета нет)
+```
+
+После установки qpdf перезапустите worker (или укажите путь в `apps/worker/.env`):
+
+```
+QPDF_BIN=C:\Program Files\qpdf 12.3.2\bin\qpdf.exe
+```
+
+Перезапустите worker. В логе при старте: `PDF optimize tools: qpdf=ok, ghostscript=ok`.
+
+Опционально в `apps/worker/.env`: `QPDF_BIN`, `GHOSTSCRIPT_BIN` (по умолчанию `qpdf` и `gswin64c`).
+
 Опционально переинициализировать MinIO вручную: `powershell -File .\tools\init-minio.ps1`
 
 ## Документация

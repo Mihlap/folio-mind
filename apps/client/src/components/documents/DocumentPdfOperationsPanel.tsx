@@ -1,20 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  OPTIMIZE_PRESET_INFO,
+  OPTIMIZE_PRESETS,
   useGetJobQuery,
   useGetVersionPreviewsQuery,
   useMergeVersionsMutation,
+  useOptimizePdfMutation,
   useSplitPagesMutation,
+  type OptimizePreset,
 } from '@folio-mind/store';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import {
   FeatureHelpActionButton,
   FeatureHelpButton,
-  PanelSectionHeader,
   reportActionBtnPrimary,
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
+import {
+  TOOL_SECTION_IDS,
+  ToolAccordionSection,
+  type ToolSectionId,
+} from '../ui/ToolAccordionSection.js';
 import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
-import { DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
+import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
+import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
+import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
+import { useDocumentAnnotationsPanel } from './useDocumentAnnotationsPanel.js';
 function parsePageNumbers(input: string, maxPage: number): number[] | string {
   const parts = input
     .split(/[,;\s]+/)
@@ -60,11 +71,7 @@ type Props = {
   focusedAnnotationId?: string | null;
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
-  injectedEditBefore?: string | null;
-  injectedCoords?: {
-    x?: number;
-    y?: number;
-  } | null;
+  editTextInjection?: EditTextInjection | null;
   versionReady: boolean;
   embedded?: boolean;
 };
@@ -78,14 +85,15 @@ export function DocumentPdfOperationsPanel({
   focusedAnnotationId = null,
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
-  injectedEditBefore = null,
-  injectedCoords = null,
+  editTextInjection = null,
   versionReady,
   embedded = false,
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
+  const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
   const [pagesInput, setPagesInput] = useState('');
   const [mergeOrder, setMergeOrder] = useState<string[]>([]);
+  const [optimizePreset, setOptimizePreset] = useState<OptimizePreset>('archive');
   const [operationJobId, setOperationJobId] = useState<string | null>(null);
   const [pollOperation, setPollOperation] = useState(false);
   const [targetVersionId, setTargetVersionId] = useState<string | null>(null);
@@ -94,6 +102,7 @@ export function DocumentPdfOperationsPanel({
   const [operationError, setOperationError] = useState<string | null>(null);
   const [splitPages, { isLoading: splitLoading }] = useSplitPagesMutation();
   const [mergeVersions, { isLoading: mergeLoading }] = useMergeVersionsMutation();
+  const [optimizePdf, { isLoading: optimizeLoading }] = useOptimizePdfMutation();
   const { data: operationJob } = useGetJobQuery(operationJobId!, {
     skip: !operationJobId,
     pollingInterval: pollOperation ? 2000 : 0,
@@ -127,7 +136,7 @@ export function DocumentPdfOperationsPanel({
     operationJob &&
     (operationJob.status === 'queued' || operationJob.status === 'processing'),
   );
-  const operationPending = splitLoading || mergeLoading || optimizeRunning;
+  const operationPending = splitLoading || mergeLoading || optimizeLoading || optimizeRunning;
   const splitBlockedReason = (() => {
     if (!activeVersion) return 'Выберите версию в списке слева';
     if (activeVersion.status === 'processing') return 'Версия ещё обрабатывается';
@@ -268,41 +277,189 @@ export function DocumentPdfOperationsPanel({
       setOperationError(getMutationError(err));
     }
   }
+  async function handleOptimize() {
+    if (!activeVersion || !activeReady) return;
+    setOperationError(null);
+    setStatusHint(null);
+    try {
+      const result = await optimizePdf({
+        documentId,
+        versionId: activeVersion.id,
+        preset: optimizePreset,
+      }).unwrap();
+      beginOperation(result);
+    } catch (err) {
+      setOperationError(getMutationError(err));
+    }
+  }
   const progressLabel = (() => {
     if (operationError) return null;
-    if (splitLoading || mergeLoading) return 'Запуск операции…';
-    if (optimizeRunning) return 'Собираем PDF…';
+    if (splitLoading || mergeLoading || optimizeLoading) return 'Запуск операции…';
+    if (optimizeRunning) return 'Сжимаем PDF…';
     return statusHint;
   })();
+  const versionSubtitle =
+    activeVersion && effectivePageCount > 0
+      ? `Из v${activeVersion.version} · ${effectivePageCount} стр.`
+      : activeVersion
+        ? `Из v${activeVersion.version}`
+        : 'Выберите версию слева';
+  const mergeSubtitle =
+    readyVersions.length < 2
+      ? 'Нужно минимум две готовые версии'
+      : `${readyVersions.length} готовых версий`;
+  const allSectionsOpen = openSections.size === TOOL_SECTION_IDS.length;
+  const noSectionsOpen = openSections.size === 0;
+  function isSectionOpen(id: ToolSectionId) {
+    return openSections.has(id);
+  }
+  function toggleSection(id: ToolSectionId) {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function expandAllSections() {
+    setOpenSections(new Set(TOOL_SECTION_IDS));
+  }
+  function collapseAllSections() {
+    setOpenSections(new Set());
+  }
+  useEffect(() => {
+    if (!editTextInjection) return;
+    setOpenSections((prev) => {
+      if (prev.has('edits')) return prev;
+      const next = new Set(prev);
+      next.add('edits');
+      return next;
+    });
+  }, [editTextInjection?.key]);
+  const annotationsSharedProps = {
+    documentId,
+    versionId: activeVersion?.id ?? '',
+    viewerPage,
+    versionReady,
+    focusedAnnotationId,
+    onOpenAcceptedEdit,
+    onOpenAllAcceptedEdits,
+    editTextInjection,
+    onGoToPage,
+    onSelectVersion,
+  };
+  const annotationsController = useDocumentAnnotationsPanel(annotationsSharedProps);
   const body = (
-    <div
-      className={
-        embedded ? 'space-y-6 p-4' : 'border-t border-slate-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5'
-      }
-    >
-      <div className={embedded ? 'space-y-6' : 'grid gap-6 lg:grid-cols-2'}>
-        <div>
-          <PanelSectionHeader
-            title="Вырезать страницы"
-            helpTitle="Вырезать страницы"
-            helpContent={
-              <>
-                <p>
-                  Укажите номера страниц открытой версии — через запятую или кнопкой «+ стр.»
-                  добавьте текущую страницу из просмотрщика.
-                </p>
-                <p>
-                  Будет создана новая версия PDF только с выбранными страницами. Исходная версия не
-                  изменяется.
-                </p>
-              </>
-            }
-          />
-          <p className="mt-1 text-[11px] text-slate-500">
-            Из текущей версии {activeVersion ? `v${activeVersion.version}` : '—'}
-            {effectivePageCount > 0 ? ` · всего ${effectivePageCount} стр.` : ''}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+    <div className={embedded ? 'space-y-2 p-3' : 'border-t border-slate-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5'}>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+        <p className="text-[11px] text-slate-500">Откройте нужный раздел или все сразу</p>
+        <div className="flex shrink-0 gap-1.5">
+          <button
+            type="button"
+            disabled={allSectionsOpen}
+            onClick={expandAllSections}
+            className="cursor-pointer rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Развернуть все
+          </button>
+          <button
+            type="button"
+            disabled={noSectionsOpen}
+            onClick={collapseAllSections}
+            className="cursor-pointer rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Свернуть все
+          </button>
+        </div>
+      </div>
+
+      {progressLabel && <p className="text-sm text-folio-700">{progressLabel}</p>}
+      {operationError && <p className="text-sm text-red-600">{operationError}</p>}
+
+      <div className="space-y-2">
+        <ToolAccordionSection
+          title="Сжать PDF"
+          subtitle="Меньший файл для почты и чатов"
+          isOpen={isSectionOpen('optimize')}
+          onToggle={() => toggleSection('optimize')}
+          helpTitle="Пресеты сжатия"
+          helpContent={
+            <>
+              <p>
+                Создаётся новая версия с меньшим размером. Текст в договорах обычно не ужимается —
+                заметный эффект у файлов с фотографиями и иллюстрациями.
+              </p>
+              <p>До 200 страниц. Исходная версия не изменяется.</p>
+            </>
+          }
+        >
+          <div className="space-y-2">
+            {OPTIMIZE_PRESETS.map((presetId) => {
+              const info = OPTIMIZE_PRESET_INFO[presetId];
+              return (
+                <label
+                  key={presetId}
+                  className={`flex cursor-pointer gap-2 rounded-lg border px-3 py-2 text-sm ${
+                    optimizePreset === presetId
+                      ? 'border-folio-300 bg-folio-50/60'
+                      : 'border-slate-100 hover:border-slate-200'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="optimize-preset"
+                    value={presetId}
+                    checked={optimizePreset === presetId}
+                    disabled={!activeReady || operationPending}
+                    onChange={() => setOptimizePreset(presetId)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="font-medium text-slate-900">{info.label}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{info.description}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <div className={`mt-3 ${reportActionsColumnClass}`}>
+            <FeatureHelpActionButton
+              helpTitle="Сжать в новую версию"
+              disabled={!activeReady || operationPending || effectivePageCount <= 0}
+              onClick={() => void handleOptimize()}
+              buttonClassName={reportActionBtnPrimary}
+              helpContent={
+                <>
+                  <p>Worker соберёт оптимизированный PDF и добавит его как новую версию в списке слева.</p>
+                  <p>Нужна готовая версия с известным числом страниц (не более 200).</p>
+                </>
+              }
+            >
+              {optimizeLoading ? 'Запуск…' : 'Сжать в новую версию'}
+            </FeatureHelpActionButton>
+          </div>
+        </ToolAccordionSection>
+
+        <ToolAccordionSection
+          title="Вырезать страницы"
+          subtitle={versionSubtitle}
+          isOpen={isSectionOpen('split')}
+          onToggle={() => toggleSection('split')}
+          helpTitle="Вырезать страницы"
+          helpContent={
+            <>
+              <p>
+                Укажите номера страниц открытой версии — через запятую или кнопкой «+ стр.» добавьте
+                текущую страницу из просмотрщика.
+              </p>
+              <p>
+                Будет создана новая версия PDF только с выбранными страницами. Исходная версия не
+                изменяется.
+              </p>
+            </>
+          }
+        >
+          <div className="flex flex-wrap gap-2">
             <input
               type="text"
               value={pagesInput}
@@ -359,27 +516,31 @@ export function DocumentPdfOperationsPanel({
           {splitBlockedReason && (
             <p className="mt-2 text-xs text-amber-700">{splitBlockedReason}</p>
           )}
-        </div>
+        </ToolAccordionSection>
 
-        <div>
-          <PanelSectionHeader
-            title="Объединить версии"
-            description="Порядок в списке ниже — порядок страниц в итоговом PDF"
-            helpTitle="Объединить версии"
-            helpContent={
-              <>
-                <p>
-                  Отметьте две и более готовые версии. Стрелками ↑↓ задайте порядок: сначала все
-                  страницы первой версии, затем второй и т.д.
-                </p>
-                <p>
-                  По кнопке «Объединить в новую версию» worker соберёт один PDF — новая версия
-                  появится в списке слева.
-                </p>
-              </>
-            }
-          />
-          <ul className="mt-3 space-y-2">
+        <ToolAccordionSection
+          title="Объединить версии"
+          subtitle={mergeSubtitle}
+          isOpen={isSectionOpen('merge')}
+          onToggle={() => toggleSection('merge')}
+          helpTitle="Объединить версии"
+          helpContent={
+            <>
+              <p>
+                Отметьте две и более готовые версии. Стрелками ↑↓ задайте порядок: сначала все
+                страницы первой версии, затем второй и т.д.
+              </p>
+              <p>
+                По кнопке «Объединить в новую версию» worker соберёт один PDF — новая версия появится
+                в списке слева.
+              </p>
+            </>
+          }
+        >
+          <p className="mb-2 text-[11px] text-slate-500">
+            Порядок в списке — порядок страниц в итоговом PDF
+          </p>
+          <ul className="space-y-2">
             {readyVersions.length < 2 ? (
               <li className="text-xs text-slate-500">Нужно минимум две готовые версии</li>
             ) : (
@@ -449,43 +610,74 @@ export function DocumentPdfOperationsPanel({
               {mergeLoading ? 'Запуск…' : 'Объединить в новую версию'}
             </FeatureHelpActionButton>
           </div>
-        </div>
-      </div>
+        </ToolAccordionSection>
 
-      {progressLabel && <p className="mt-4 text-sm text-folio-700">{progressLabel}</p>}
-      {operationError && <p className="mt-2 text-sm text-red-600">{operationError}</p>}
+        <DocumentAnnotationsControllerProvider value={annotationsController}>
+          <ToolAccordionSection
+            title="Аннотации"
+            subtitle="Комментарии к страницам PDF"
+            isOpen={isSectionOpen('annotations')}
+            onToggle={() => toggleSection('annotations')}
+            helpTitle="Аннотации"
+            helpContent={
+              <p>
+                <strong>Заметка</strong> — комментарий к странице без изменения текста договора.
+              </p>
+            }
+          >
+            <DocumentAnnotationsPanel variant="notes" hideSectionHeader />
+          </ToolAccordionSection>
 
-      <div
-        className={
-          embedded ? 'mt-8 border-t border-slate-100 pt-6' : 'mt-6 border-t border-slate-100 pt-6'
-        }
-      >
-        <DocumentAnnotationsPanel
-          documentId={documentId}
-          versionId={activeVersion?.id ?? ''}
-          viewerPage={viewerPage}
-          versionReady={versionReady}
-          focusedAnnotationId={focusedAnnotationId}
-          onOpenAcceptedEdit={onOpenAcceptedEdit}
-          onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
-          injectedEditBefore={injectedEditBefore}
-          injectedCoords={injectedCoords}
-          onGoToPage={onGoToPage}
-          onSelectVersion={onSelectVersion}
-        />
-      </div>
+          <ToolAccordionSection
+            title="Правки в PDF"
+            subtitle="Ручные и ИИ-правки, сборка новой версии"
+            isOpen={isSectionOpen('edits')}
+            onToggle={() => toggleSection('edits')}
+            helpTitle="Правки в PDF"
+            helpContent={
+              <>
+                <p>
+                  Зафиксируйте «было / стало» вручную или запросите предложения ИИ в этом же
+                  разделе.
+                </p>
+                <p>Затем соберите PDF с реестром правок, примените изменения в текст или выгрузите DOCX.</p>
+              </>
+            }
+          >
+            <DocumentAnnotationsPanel variant="edits" hideSectionHeader />
+            <DocumentAiSuggestionsPanel
+              documentId={documentId}
+              versionId={activeVersion?.id ?? ''}
+              versionReady={versionReady}
+              onGoToPage={onGoToPage}
+              onSelectVersion={onSelectVersion}
+            />
+          </ToolAccordionSection>
+        </DocumentAnnotationsControllerProvider>
 
-      <div
-        className={
-          embedded ? 'mt-8 border-t border-slate-100 pt-6' : 'mt-6 border-t border-slate-100 pt-6'
-        }
-      >
-        <DocumentVersionDiffPanel
-          documentId={documentId}
-          versions={versions}
-          activeVersion={activeVersion}
-          onGoToPage={onGoToPage}
-        />
+        <ToolAccordionSection
+          title="Сравнение версий"
+          subtitle="Текст и правки между версиями"
+          isOpen={isSectionOpen('diff')}
+          onToggle={() => toggleSection('diff')}
+          helpTitle="Сравнение версий"
+          helpContent={
+            <>
+              <p>
+                Сравнивает текст страниц и принятые правки между выбранной базовой версией и
+                текущей.
+              </p>
+            </>
+          }
+        >
+          <DocumentVersionDiffPanel
+            documentId={documentId}
+            versions={versions}
+            activeVersion={activeVersion}
+            onGoToPage={onGoToPage}
+            hideSectionHeader
+          />
+        </ToolAccordionSection>
       </div>
     </div>
   );

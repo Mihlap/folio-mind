@@ -60,4 +60,28 @@ describe('scoreApplyEditsConfidence', () => {
     expect(result.level).toBe('red');
     expect(result.unchangedPagesDrifted).toBeGreaterThan(1);
   });
+  it('red when pixel drift is high (overlay path)', () => {
+    const result = scoreApplyEditsConfidence({
+      sourcePageCount: 3,
+      targetPageCount: 3,
+      sourcePages: [
+        { page: 1, text: 'One' },
+        { page: 2, text: 'Two' },
+        { page: 3, text: 'Three' },
+      ],
+      targetPages: [
+        { page: 1, text: 'One' },
+        { page: 2, text: 'Two' },
+        { page: 3, text: 'Three' },
+      ],
+      editedPages: [1],
+      method: 'pdf-overlay',
+      pixelPagesChecked: 2,
+      pixelDriftPages: 2,
+      pixelDriftRatio: 1,
+      visualDriftPages: [2, 3],
+    });
+    expect(result.level).toBe('red');
+    expect(result.pixelDriftPages).toBe(2);
+  });
 });

@@ -204,6 +204,43 @@ export async function enqueueApplyEditsFinalJob(
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('apply-edits-final', payload, { jobId: payload.jobId });
 }
+export async function enqueueExportHighlightDocxJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    versionId: string;
+    rootVersionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    userSourceDocxKey: string | null;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('export-highlight-docx', payload, { jobId: payload.jobId });
+}
+
+export async function enqueueOptimizePdfJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    sourceVersionId: string;
+    targetVersionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    targetS3Key: string;
+    preset: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('optimize-pdf', payload, { jobId: payload.jobId });
+}
+
 export async function enqueuePreConvertJob(
   env: Env,
   payload: {

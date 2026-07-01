@@ -103,6 +103,14 @@ describe('compareVersionTexts', () => {
     expect(result.pages.find((p) => p.page === 2)?.status).toBe('unchanged');
     expect(result.pages.find((p) => p.page === 3)?.status).toBe('unchanged');
   });
+  it('strict mode shows drift on unchanged pages', () => {
+    const result = compareVersionTexts(
+      [{ page: 1, text: 'Alpha beta gamma' }],
+      [{ page: 1, text: 'Alpha beta delta' }],
+      { strict: true },
+    );
+    expect(result.summary.modifiedPages).toBe(1);
+  });
 });
 describe('diffPageLines', () => {
   it('returns equal lines for identical text', () => {

@@ -5,9 +5,9 @@ export function LandingPage() {
   const { data: health } = useHealthQuery();
   return (
     <div className="min-h-screen">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <span className="font-display text-2xl text-folio-950">РазУм</span>
-        <div className="flex gap-3">
+      <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6 sm:py-6">
+        <span className="font-display text-xl text-folio-950 sm:text-2xl">РазУм</span>
+        <div className="flex shrink-0 gap-2 sm:gap-3">
           <Link to="/login">
             <Button variant="ghost">Вход</Button>
           </Link>
@@ -17,25 +17,27 @@ export function LandingPage() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 pb-24 pt-16 text-center">
+      <section className="mx-auto max-w-6xl px-4 pb-20 pt-10 text-center sm:px-6 sm:pb-24 sm:pt-16">
         <p className="mb-4 inline-block rounded-full bg-folio-100 px-4 py-1 text-sm font-medium text-folio-700">
           PDF + ИИ · договоры и буклеты
         </p>
-        <h1 className="font-display text-5xl leading-tight text-slate-900 md:text-6xl">
+        <h1 className="font-display text-3xl leading-tight text-slate-900 sm:text-5xl md:text-6xl">
           Документы, которые
           <br />
           <span className="text-folio-600">понимают контекст</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:mt-6 sm:text-lg">
           Просмотр, версии, проверка рисков и совместная работа — без цикла «скачай, сожми,
           перекинь». Для юристов, архитекторов и команд, которые живут в PDF.
         </p>
-        <div className="mt-10 flex flex-wrap justify-center gap-4">
-          <Link to="/register">
-            <Button size="lg">Создать рабочее пространство</Button>
+        <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:gap-4">
+          <Link to="/register" className="w-full sm:w-auto">
+            <Button size="lg" className="w-full max-w-full whitespace-normal text-center sm:w-auto">
+              Создать рабочее пространство
+            </Button>
           </Link>
-          <Link to="/login">
-            <Button size="lg" variant="secondary">
+          <Link to="/login" className="w-full sm:w-auto">
+            <Button size="lg" variant="secondary" className="w-full sm:w-auto">
               Уже есть аккаунт
             </Button>
           </Link>

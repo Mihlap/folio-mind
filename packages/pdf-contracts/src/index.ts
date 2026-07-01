@@ -6,6 +6,7 @@ export {
   exportReportPdfKey,
   exportReportKey,
   exportReportWordKey,
+  highlightEditsDocxKey,
   preConvertedDocxKey,
   appliedDocxKey,
   previewPageKey,
@@ -51,6 +52,13 @@ export {
   type PageLayoutSignature,
 } from './layout-confidence.js';
 export {
+  comparePagePixelDiffs,
+  computePixelDiffRatio,
+  summarizePixelDrift,
+  type PagePixelDiffResult,
+  type RgbaPageBitmap,
+} from './pixel-diff.js';
+export {
   scoreApplyEditsConfidence,
   scoreDocxReflowConfidence,
   type ApplyEditsMethod,
@@ -58,6 +66,13 @@ export {
   type ConfidenceLevel,
   type ConfidenceResult,
 } from './confidence-scoring.js';
+export {
+  isOptimizePreset,
+  OPTIMIZE_PRESET_INFO,
+  OPTIMIZE_PRESETS,
+  type OptimizePreset,
+  type OptimizePresetInfo,
+} from './optimize-preset.js';
 export { UPLOAD_NETWORK_ERROR_MESSAGE } from './user-messages.js';
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';

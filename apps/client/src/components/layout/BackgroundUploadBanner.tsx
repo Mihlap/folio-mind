@@ -3,7 +3,9 @@ import { useBackgroundUpload } from '../../context/background-upload-provider.js
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 
 export function BackgroundUploadBanner() {
-  const { active, progress, fileLabel, showDone, error, clearError } = useBackgroundUpload();
+  const { active, progress, fileLabel, showDone, error, clearError, kind } = useBackgroundUpload();
+
+  if (kind === 'regulation') return null;
 
   if (!active && !error) return null;
 
@@ -38,7 +40,7 @@ export function BackgroundUploadBanner() {
       )}
       {error && (
         <div className="mx-auto flex max-w-3xl items-start justify-between gap-3">
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="min-w-0 flex-1 break-words text-sm text-red-600">{error}</p>
           <button
             type="button"
             onClick={clearError}

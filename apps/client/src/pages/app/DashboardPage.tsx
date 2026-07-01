@@ -180,7 +180,7 @@ export function DashboardPage() {
         )}
 
         {pendingDocx && (
-          <div className="mx-auto mt-5 flex max-w-lg items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2.5 sm:px-4">
+          <div className="mx-auto mt-5 flex max-w-lg flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2.5 sm:px-4">
             <span
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-sm font-bold text-emerald-700"
               aria-hidden
@@ -195,7 +195,7 @@ export function DashboardPage() {
                 {pendingDocx.name}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-1 sm:w-auto">
               <button
                 type="button"
                 disabled={active}
@@ -248,7 +248,7 @@ export function DashboardPage() {
           }}
         />
 
-        <div className="mx-auto mt-6 flex max-w-lg flex-col gap-3 sm:flex-row sm:justify-center">
+        <div className="mx-auto mt-6 flex max-w-lg flex-wrap justify-center gap-3">
           <button
             type="button"
             disabled={active}
@@ -264,7 +264,7 @@ export function DashboardPage() {
                 inputRef.current?.click();
               }
             }}
-            className="w-full rounded-lg bg-folio-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-folio-700 disabled:opacity-50 sm:min-w-[10.5rem]"
+            className="w-full min-w-0 rounded-lg bg-folio-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-folio-700 disabled:opacity-50 sm:w-auto sm:min-w-[10.5rem]"
           >
             {active
               ? `Загрузка ${progress}%…`
@@ -281,7 +281,7 @@ export function DashboardPage() {
               type="button"
               disabled={active}
               onClick={() => docxInputRef.current?.click()}
-              className={`w-full rounded-lg border px-5 py-2.5 text-sm font-medium disabled:opacity-50 sm:min-w-[10.5rem] ${
+              className={`w-full min-w-0 rounded-lg border px-5 py-2.5 text-sm font-medium disabled:opacity-50 sm:w-auto sm:min-w-[10.5rem] ${
                 pendingDocx
                   ? 'border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50'
                   : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'

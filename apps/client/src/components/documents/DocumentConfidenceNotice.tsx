@@ -17,9 +17,14 @@ export function DocumentConfidenceNotice({ level, summary, score, onOpenCompare 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium">
-            {level === 'red' ? 'Риск изменения вёрстки' : 'Рекомендуется проверить вёрстку'}
+            {level === 'red' ? 'Риск изменения вёрстки' : 'После «Применить правки» — проверьте глазами'}
           </p>
           {summary && <p className="text-[11px] leading-relaxed opacity-90">{summary}</p>}
+          <p className="text-[11px] leading-relaxed opacity-80">
+            {level === 'yellow'
+              ? 'Это напоминание, не сбой. Итоговый PDF уже открыт ниже в полном качестве. Цифра в скобках — оценка системы, насколько безопасно полагаться на автопересборку из Word.'
+              : 'Возможны сильные отличия вёрстки. Сверьте таблицы, картинки и переносы страниц в просмотрщике ниже.'}
+          </p>
           <DocumentVersionConfidenceBadge level={level} summary={summary} score={score} />
         </div>
         {onOpenCompare && (
@@ -28,7 +33,7 @@ export function DocumentConfidenceNotice({ level, summary, score, onOpenCompare 
             onClick={onOpenCompare}
             className="shrink-0 cursor-pointer rounded-md border border-current/20 bg-white/70 px-2.5 py-1 text-[11px] font-medium hover:bg-white"
           >
-            Сравнить версии
+            Сравнение в инструментах
           </button>
         )}
       </div>

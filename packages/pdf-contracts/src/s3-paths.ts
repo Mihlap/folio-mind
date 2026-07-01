@@ -33,6 +33,9 @@ export function exportReportWordKey(documentId: string, versionId: string): stri
 export function exportReportPdfKey(documentId: string, versionId: string): string {
   return resolveS3Key('exports', `${documentId}/${versionId}/report.pdf`);
 }
+export function highlightEditsDocxKey(documentId: string, versionId: string): string {
+  return resolveS3Key('exports', `${documentId}/${versionId}/edits-highlight.docx`);
+}
 export function assertS3KeyUnderFilesRoot(key: string): void {
   const normalized = key.replace(/^\/+/, '');
   if (normalized === 'pending') return;

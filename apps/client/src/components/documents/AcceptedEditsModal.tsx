@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DocumentAnnotation } from '@folio-mind/store';
 import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
+
+const EDIT_FIELD_ROWS = 8;
 type Props = {
   open: boolean;
   edits: DocumentAnnotation[];
@@ -96,7 +98,7 @@ export function AcceptedEditsModal({
         aria-label="Закрыть"
         onClick={onClose}
       />
-      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+      <div className="relative flex max-h-[min(92vh,900px)] min-h-[min(70vh,640px)] w-[min(96vw,56rem)] max-w-none resize flex-col overflow-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
           <h2 id="accepted-edits-modal-title" className="text-base font-semibold text-slate-900">
             Правки «было / стало»
@@ -119,8 +121,8 @@ export function AcceptedEditsModal({
         <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {edits.length === 0 ? (
             <p className="text-sm text-slate-500">
-              Нет правок. Добавьте свою в «Инструменты → Аннотации» или примите предложение ИИ во
-              вкладке «Отчёт».
+              Нет правок. Добавьте свою в «Инструменты → Правки в PDF» или примите предложение ИИ
+              там же.
             </p>
           ) : (
             <ul className="space-y-4">
@@ -170,23 +172,33 @@ export function AcceptedEditsModal({
                     </div>
 
                     {isEditing ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={draftBefore}
-                          onChange={(e) => setDraftBefore(e.target.value)}
-                          disabled={saving}
-                          rows={2}
-                          placeholder="Было…"
-                          className="w-full resize-none rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm disabled:opacity-50"
-                        />
-                        <textarea
-                          value={draftAfter}
-                          onChange={(e) => setDraftAfter(e.target.value)}
-                          disabled={saving}
-                          rows={2}
-                          placeholder="Стало…"
-                          className="w-full resize-none rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm disabled:opacity-50"
-                        />
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">
+                            Было
+                          </p>
+                          <textarea
+                            value={draftBefore}
+                            onChange={(e) => setDraftBefore(e.target.value)}
+                            disabled={saving}
+                            rows={EDIT_FIELD_ROWS}
+                            placeholder="Было…"
+                            className="min-h-[8rem] w-full resize-y rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm leading-relaxed disabled:opacity-50"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                            Стало
+                          </p>
+                          <textarea
+                            value={draftAfter}
+                            onChange={(e) => setDraftAfter(e.target.value)}
+                            disabled={saving}
+                            rows={EDIT_FIELD_ROWS}
+                            placeholder="Стало…"
+                            className="min-h-[8rem] w-full resize-y rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm leading-relaxed disabled:opacity-50"
+                          />
+                        </div>
                         {editError && <p className="text-xs text-red-600">{editError}</p>}
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -211,7 +223,7 @@ export function AcceptedEditsModal({
                         </div>
                       </div>
                     ) : item.quote ? (
-                      <AcceptedEditBeforeAfter before={item.quote} after={item.content} />
+                      <AcceptedEditBeforeAfter large before={item.quote} after={item.content} />
                     ) : (
                       <p className="text-sm text-slate-700">{item.content}</p>
                     )}

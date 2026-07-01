@@ -1,51 +1,45 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FeatureHelpButton } from '../../components/ui/FeatureHelp.js';
-import {
-  useCreateRagSourceMutation,
-  useDeleteRagSourceMutation,
-  useListRagSourcesQuery,
-  useUploadRagSourceFileMutation,
-} from '@folio-mind/store';
+import { useBackgroundUpload } from '../../context/background-upload-provider.js';
+import { useAppSelector } from '../../hooks/index.js';
+import { getUploadStage } from '../../lib/uploads/uploadStage.js';
+import { useDeleteRagSourceMutation, useListRagSourcesQuery } from '@folio-mind/store';
+
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'ожидает файл',
   processing: 'обрабатывается',
   ready: 'готов к проверке',
   failed: 'ошибка обработки',
 };
+
 export function RegulationsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const { data, refetch } = useListRagSourcesQuery(undefined, { pollingInterval: 5000 });
-  const [createSource] = useCreateRagSourceMutation();
-  const [uploadFile] = useUploadRagSourceFileMutation();
   const [deleteSource] = useDeleteRagSourceMutation();
-  async function handleFile(file: File) {
+  const uploadState = useAppSelector((s) => s.backgroundUpload);
+  const { error: uploadError, clearError, uploadRegulation, fileLabel } = useBackgroundUpload();
+
+  const uploading = uploadState.active && uploadState.kind === 'regulation';
+  const progress = uploading ? uploadState.progress : 0;
+  const showDone = uploading && uploadState.showDone;
+  const displayError = localError ?? (uploadState.kind === 'regulation' ? uploadError : null);
+
+  function handleFile(file: File) {
     const lower = file.name.toLowerCase();
     if (!lower.endsWith('.pdf') && !lower.endsWith('.txt')) {
-      setError('Поддерживаются PDF и TXT');
+      setLocalError('Поддерживаются PDF и TXT');
       return;
     }
-    setError(null);
-    setUploading(true);
-    try {
-      const title = file.name.replace(/\.(pdf|txt)$/i, '');
-      const created = await createSource({
-        title,
-        fileName: file.name,
-        mimeType: file.type || (lower.endsWith('.pdf') ? 'application/pdf' : 'text/plain'),
-        size: file.size,
-      }).unwrap();
-      await uploadFile({ sourceId: created.sourceId, file }).unwrap();
-      await refetch();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось загрузить регламент');
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = '';
-    }
+    setLocalError(null);
+    clearError();
+    uploadRegulation(file, () => {
+      void refetch();
+    });
+    if (inputRef.current) inputRef.current.value = '';
   }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -82,7 +76,7 @@ export function RegulationsPage() {
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) void handleFile(file);
+            if (file) handleFile(file);
           }}
         />
         <button
@@ -91,9 +85,31 @@ export function RegulationsPage() {
           onClick={() => inputRef.current?.click()}
           className="cursor-pointer rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700 disabled:opacity-50"
         >
-          {uploading ? 'Загрузка…' : 'Загрузить PDF или TXT'}
+          {uploading ? `Загрузка ${progress}%…` : 'Загрузить PDF или TXT'}
         </button>
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+        {uploading && (
+          <div className="mt-5 space-y-2">
+            <p className="truncate text-sm text-slate-700" title={fileLabel}>
+              {showDone && progress === 100 ? `✓ ${fileLabel}` : fileLabel}
+            </p>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full bg-folio-600 transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              {showDone && progress === 100
+                ? 'Файл загружен — идёт индексация регламента'
+                : `${progress}% · ${getUploadStage(progress)}`}
+            </p>
+          </div>
+        )}
+
+        {displayError && (
+          <p className="mt-3 break-words text-sm text-red-600">{displayError}</p>
+        )}
       </div>
 
       <ul className="mt-8 max-w-2xl space-y-2">
@@ -117,7 +133,7 @@ export function RegulationsPage() {
                 await deleteSource(item.id).unwrap();
                 await refetch();
               }}
-              className="cursor-pointer shrink-0 text-xs text-red-600 hover:underline disabled:opacity-50"
+              className="shrink-0 cursor-pointer text-xs text-red-600 hover:underline disabled:opacity-50"
             >
               Удалить
             </button>

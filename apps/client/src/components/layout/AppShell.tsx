@@ -202,10 +202,15 @@ export function AppShell() {
         )}
       </aside>
 
-      <aside className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white md:hidden">
-        <div className="border-b border-slate-100 px-3 py-3">
-          <span className="font-display text-lg text-folio-950">РазУм</span>
-          <p className="mt-0.5 truncate text-[10px] text-slate-500">{me?.email}</p>
+      <aside className={`flex w-full shrink-0 flex-col border-b border-slate-200 bg-white md:hidden ${isDocumentPage ? 'hidden' : ''}`}>
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-3">
+          <div className="min-w-0">
+            <span className="font-display text-lg text-folio-950">РазУм</span>
+            <p className="mt-0.5 truncate text-[10px] text-slate-500">{me?.email}</p>
+          </div>
+          <Button variant="ghost" className="shrink-0 px-2 py-1 text-xs" onClick={() => dispatch(logout())}>
+            Выйти
+          </Button>
         </div>
         <nav className="overflow-x-auto p-1.5">
           <div className="flex min-w-max gap-1">

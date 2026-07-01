@@ -5,6 +5,7 @@ import {
   type ApplyEditsMethod,
   type ConfidenceResult,
 } from '@folio-mind/pdf-contracts';
+import { comparePdfVisualDrift } from './compare-pdf-visual-drift.js';
 import { getObjectBuffer } from '../storage/s3.js';
 import { extractPageLayoutSignatures } from './find-text-positions.js';
 import { extractTextFromPdf } from './pdf-text.js';
@@ -46,6 +47,21 @@ export async function computeApplyEditsConfidence(params: {
     target: targetLayout,
     editedPages,
   });
+  const pixel =
+    params.method === 'pdf-overlay' || params.method === 'docx-fallback-overlay'
+      ? await comparePdfVisualDrift({
+          sourceBuffer,
+          targetBuffer: params.targetPdfBuffer,
+          sourcePageCount: sourceExtracted.pageCount,
+          targetPageCount: targetExtracted.pageCount,
+          editedPages,
+        })
+      : {
+          pixelPagesChecked: 0,
+          pixelDriftPages: 0,
+          pixelDriftRatio: 0,
+          visualDriftPages: [] as number[],
+        };
   return scoreApplyEditsConfidence({
     sourcePageCount: sourceExtracted.pageCount,
     targetPageCount: targetExtracted.pageCount,
@@ -55,5 +71,9 @@ export async function computeApplyEditsConfidence(params: {
     method: params.method,
     layoutPagesChecked: layout.layoutPagesChecked,
     layoutDriftPages: layout.layoutDriftPages,
+    pixelPagesChecked: pixel.pixelPagesChecked,
+    pixelDriftPages: pixel.pixelDriftPages,
+    pixelDriftRatio: pixel.pixelDriftRatio,
+    visualDriftPages: pixel.visualDriftPages,
   });
 }

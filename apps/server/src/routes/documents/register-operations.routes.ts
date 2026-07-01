@@ -14,7 +14,9 @@ import {
 import type { Env } from '../../lib/config/env.js';
 import {
   enqueueApplyEditsFinalJob,
+  enqueueExportHighlightDocxJob,
   enqueueMergeVersionsJob,
+  enqueueOptimizePdfJob,
   enqueueSplitPagesJob,
 } from '../../lib/queue/queue.js';
 import { isUserUploadedSourceDocxKey } from '@folio-mind/pdf-contracts';
@@ -23,6 +25,7 @@ import { buildOriginalKey } from './helpers.js';
 import {
   errorBody,
   mergeVersionsSchema,
+  optimizePdfSchema,
   splitPagesSchema,
   versionCompareResponseSchema,
 } from './schemas.js';
@@ -317,7 +320,14 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       const editedPages = new Set(
         [...baseEditRows, ...compareEditRows].map((row) => row.page),
       );
-      const diff = buildVersionCompareResult(basePages, comparePages, { editedPages });
+      const strictCompare = Boolean(
+        (baseVersion as { confidenceLevel?: string | null }).confidenceLevel ||
+          (compareVersion as { confidenceLevel?: string | null }).confidenceLevel,
+      );
+      const diff = buildVersionCompareResult(basePages, comparePages, {
+        editedPages,
+        strict: strictCompare,
+      });
       const acceptedEdits = compareAcceptedEdits(baseEditRows, compareEditRows);
       await app.prisma.auditLog.create({
         data: {
@@ -494,6 +504,200 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         operationJobId: operationJob.id,
         versionId: targetVersion.id,
         version: targetVersion.version,
+        status: 'processing',
+      });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/optimize-pdf',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        body: optimizePdfSchema,
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            version: z.number(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const { preset } = request.body;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      if (!sourceVersion.pageCount || sourceVersion.pageCount <= 0) {
+        return reply.code(400).send({ error: 'Source version pageCount is unknown' });
+      }
+      if (sourceVersion.pageCount > 200) {
+        return reply.code(400).send({ error: 'Оптимизация поддерживает PDF до 200 страниц' });
+      }
+      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
+      const targetS3Key = buildOriginalKey(
+        document.id,
+        nextVersionNumber,
+        `optimized-${preset}-v${sourceVersion.version}.pdf`,
+      );
+      const [targetVersion, operationJob] = await app.prisma.$transaction([
+        app.prisma.documentVersion.create({
+          data: {
+            documentId: document.id,
+            version: nextVersionNumber,
+            s3Key: targetS3Key,
+            size: BigInt(0),
+            mimeType: sourceVersion.mimeType,
+            status: 'processing',
+            sourceVersionId: sourceVersion.id,
+          },
+        }),
+        app.prisma.job.create({
+          data: {
+            type: 'optimize-pdf',
+            status: 'queued',
+            tenantId: user.tenantId,
+            payload: {
+              documentId,
+              sourceVersionId: sourceVersion.id,
+              preset,
+            },
+          },
+        }),
+      ]);
+      await enqueueOptimizePdfJob(env, {
+        jobId: `optimize-pdf-${targetVersion.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        sourceVersionId: sourceVersion.id,
+        targetVersionId: targetVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Key: sourceVersion.s3Key,
+        targetS3Key,
+        preset,
+        requestId: request.requestId,
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_optimize_pdf',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            sourceVersionId: sourceVersion.id,
+            targetVersionId: targetVersion.id,
+            preset,
+            operationJobId: operationJob.id,
+          },
+        },
+      });
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId: targetVersion.id,
+        version: targetVersion.version,
+        status: 'processing',
+      });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/export-highlight-docx',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        response: {
+          202: z.object({ operationJobId: z.string(), status: z.literal('processing') }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      const versionRows = document.versions.map(
+        (v: { id: string; sourceVersionId: string | null; s3Key: string; sourceDocxKey: string | null }) => ({
+          id: v.id,
+          sourceVersionId: v.sourceVersionId,
+          s3Key: v.s3Key,
+          sourceDocxKey: v.sourceDocxKey,
+        }),
+      );
+      const rootVersion = resolveRootVersion(versionRows, versionId);
+      const userSourceDocxKey = isUserUploadedSourceDocxKey(rootVersion.sourceDocxKey)
+        ? rootVersion.sourceDocxKey
+        : null;
+      const [acceptedAiCount, manualEditsCount] = await Promise.all([
+        app.prisma.aiSuggestion.count({
+          where: { documentId, versionId, tenantId: user.tenantId, status: 'accepted' },
+        }),
+        app.prisma.documentAnnotation.count({
+          where: { documentId, versionId, kind: 'accepted_edit' },
+        }),
+      ]);
+      if (acceptedAiCount === 0 && manualEditsCount === 0) {
+        return reply.code(400).send({ error: 'Нет принятых правок для экспорта' });
+      }
+      const operationJob = await app.prisma.job.create({
+        data: {
+          type: 'export-highlight-docx',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: { documentId, versionId, rootVersionId: rootVersion.id },
+        },
+      });
+      await enqueueExportHighlightDocxJob(env, {
+        jobId: `export-highlight-docx-${operationJob.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        versionId,
+        rootVersionId: rootVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Key: rootVersion.s3Key,
+        userSourceDocxKey,
+        requestId: request.requestId,
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.export_highlight_docx',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: { versionId, operationJobId: operationJob.id },
+        },
+      });
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
         status: 'processing',
       });
     },

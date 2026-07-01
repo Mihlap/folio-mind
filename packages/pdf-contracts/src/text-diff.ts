@@ -26,6 +26,8 @@ export type VersionTextCompareResult = {
 export type CompareVersionTextsOptions = {
   /** Страницы с правками — на остальных игнорируем шум пересохранения PDF. */
   editedPages?: ReadonlySet<number>;
+  /** Строгое сравнение без смягчения diff (после apply-edits-final). */
+  strict?: boolean;
 };
 
 function pageTextMap(pages: PageText[]): Map<number, string> {
@@ -157,7 +159,7 @@ export function compareVersionTexts(
     }
     const normalizedBase = normalizePageTextForCompare(baseText!);
     const normalizedCompare = normalizePageTextForCompare(compareText!);
-    const lenient = !editedPages.has(page);
+    const lenient = !options?.strict && !editedPages.has(page);
     if (!hasSubstantiveTextDiff(baseText!, compareText!, { lenient })) {
       summary.unchangedPages += 1;
       pages.push({

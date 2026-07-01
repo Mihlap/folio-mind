@@ -8,6 +8,7 @@ import {
 } from 'react';
 import {
   uploadPdfVersion,
+  uploadRagSource,
   uploadSourceDocx,
   formatUploadError,
   uploadStarted,
@@ -16,6 +17,7 @@ import {
   uploadFinished,
   uploadFailed,
   clearUploadError,
+  type BackgroundUploadKind,
   useCompleteDocxUploadMutation,
   useCompleteUploadMutation,
   useCreateDocumentMutation,
@@ -24,6 +26,9 @@ import {
   useCreateDocumentVersionMutation,
   useCreateDocumentVersionFromDocxMutation,
   useUploadVersionFileMutation,
+  useCompleteRagSourceMutation,
+  useCreateRagSourceMutation,
+  useUploadRagSourceFileMutation,
 } from '@folio-mind/store';
 import { useAppDispatch, useAppSelector } from '../hooks/index.js';
 import { uploadFileLabel } from '../lib/uploads/uploadStage.js';
@@ -58,6 +63,8 @@ type BackgroundUploadContextValue = {
     docxFile: File,
     onSuccess?: (result: VersionUploadSuccess) => void,
   ) => void;
+  uploadRegulation: (file: File, onSuccess?: () => void) => void;
+  kind: BackgroundUploadKind | null;
 };
 
 const BackgroundUploadContext = createContext<BackgroundUploadContextValue | null>(null);
@@ -76,10 +83,13 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   const [completeUpload] = useCompleteUploadMutation();
   const [completeDocxUpload] = useCompleteDocxUploadMutation();
   const [uploadVersionFile] = useUploadVersionFileMutation();
+  const [createRagSource] = useCreateRagSourceMutation();
+  const [completeRagSource] = useCompleteRagSourceMutation();
+  const [uploadRagSourceFile] = useUploadRagSourceFileMutation();
 
   const runUpload = useCallback(
     async (params: {
-      kind: 'dashboard' | 'new-document' | 'version';
+      kind: BackgroundUploadKind;
       fileLabel: string;
       documentId?: string;
       execute: (onProgress: (percent: number) => void) => Promise<void>;
@@ -320,6 +330,42 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
     [runUpload, createVersionFromDocx, importFromDocx, completeDocxUpload, token],
   );
 
+  const uploadRegulation = useCallback(
+    (file: File, onSuccess?: () => void) => {
+      void runUpload({
+        kind: 'regulation',
+        fileLabel: file.name,
+        execute: async (onProgress) => {
+          onProgress(5);
+          const lower = file.name.toLowerCase();
+          const title = file.name.replace(/\.(pdf|txt)$/i, '');
+          const mimeType =
+            file.type || (lower.endsWith('.pdf') ? 'application/pdf' : 'text/plain');
+          const created = await createRagSource({
+            title,
+            fileName: file.name,
+            mimeType,
+            size: file.size,
+          }).unwrap();
+          if (!created.uploadUrl) {
+            throw new Error('Не удалось получить ссылку для загрузки регламента');
+          }
+          await uploadRagSource({
+            sourceId: created.sourceId,
+            file,
+            uploadUrl: created.uploadUrl,
+            mimeType,
+            completeRagSource: (args) => completeRagSource(args).unwrap(),
+            fallbackProxyUpload: (args) => uploadRagSourceFile(args).unwrap(),
+            onProgress,
+          });
+          onSuccess?.();
+        },
+      });
+    },
+    [runUpload, createRagSource, completeRagSource, uploadRagSourceFile],
+  );
+
   const value = useMemo(
     () => ({
       active: uploadState.active,
@@ -327,12 +373,14 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
       fileLabel: uploadState.fileLabel,
       showDone: uploadState.showDone,
       error: uploadState.error,
+      kind: uploadState.kind,
       clearError: () => dispatch(clearUploadError()),
       uploadFromDashboard,
       uploadFromDocxOnly,
       uploadNewDocument,
       uploadDocumentVersion,
       uploadDocumentVersionFromDocx,
+      uploadRegulation,
     }),
     [
       uploadState.active,
@@ -340,12 +388,14 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
       uploadState.fileLabel,
       uploadState.showDone,
       uploadState.error,
+      uploadState.kind,
       dispatch,
       uploadFromDashboard,
       uploadFromDocxOnly,
       uploadNewDocument,
       uploadDocumentVersion,
       uploadDocumentVersionFromDocx,
+      uploadRegulation,
     ],
   );
 

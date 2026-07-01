@@ -6,9 +6,11 @@ import { processRagCompareJob } from './jobs/ai/rag-compare.js';
 import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
 import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accepted-suggestions.js';
 import { processApplyEditsFinalJob } from './jobs/optimize/apply-edits-final.js';
+import { processExportHighlightDocxJob } from './jobs/optimize/export-highlight-docx.js';
 import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
 import { processPreConvertPdfJob } from './jobs/optimize/pre-convert-pdf.js';
 import { processImportFromDocxJob } from './jobs/optimize/import-from-docx.js';
+import { processOptimizePdfJob } from './jobs/optimize/optimize-pdf.js';
 import { processSplitPagesJob } from './jobs/optimize/split-pages.js';
 import {
   processGeneratePreviewsJob,
@@ -20,6 +22,7 @@ import { loadAppEnv } from './lib/config/load-env.js';
 import type { WorkerJobPayload } from './lib/config/job-types.js';
 import { initWorkerS3, isWorkerS3Configured } from './lib/storage/s3.js';
 import { createRedisConnection, QUEUE_NAMES } from './queue/queues.js';
+import { getOptimizeToolAvailability } from './lib/pdf/optimize-external.js';
 loadAppEnv();
 initTracing('folio-mind-worker');
 const env = loadWorkerEnv();
@@ -29,6 +32,17 @@ if (!isWorkerS3Configured()) {
     '[worker] S3 не настроен — превью не будут создаваться. Проверьте apps/server/.env (S3_*) и перезапустите worker.',
   );
 }
+void getOptimizeToolAvailability().then((tools) => {
+  if (!tools.qpdf && !tools.ghostscript) {
+    console.warn(
+      '[worker] qpdf и Ghostscript не найдены — сжатие PDF почти не уменьшит размер. Windows: winget install qpdf; winget install ArtifexGhostscript.GhostScript',
+    );
+    return;
+  }
+  console.log(
+    `[worker] PDF optimize tools: qpdf=${tools.qpdf ? 'ok' : 'нет'}, ghostscript=${tools.ghostscript ? 'ok' : 'нет'}`,
+  );
+});
 const connection = createRedisConnection(env.REDIS_URL);
 function logJob(queue: string, jobId: string | undefined, data: WorkerJobPayload) {
   const requestId = data.requestId ?? '—';
@@ -116,6 +130,10 @@ function createOptimizeWorker() {
             await processApplyAcceptedSuggestionsJob(env, data);
           } else if (job.name === 'apply-edits-final') {
             await processApplyEditsFinalJob(env, data);
+          } else if (job.name === 'export-highlight-docx') {
+            await processExportHighlightDocxJob(env, data);
+          } else if (job.name === 'optimize-pdf') {
+            await processOptimizePdfJob(env, data);
           } else if (job.name === 'import-from-docx') {
             await processImportFromDocxJob(env, data);
           }

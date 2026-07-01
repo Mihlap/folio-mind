@@ -7,13 +7,13 @@ import {
 } from '@folio-mind/store';
 import {
   FeatureHelpButton,
-  reportActionBtnPrimary,
+  reportActionBtnSoft,
   reportIconCirclePdf,
   reportIconCircleWord,
   reportToolbarRowClass,
 } from '../ui/FeatureHelp.js';
-import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentRagComparePanel } from './DocumentRagComparePanel.js';
+
 function openDownloadUrl(url: string, target: '_self' | '_blank' = '_self') {
   if (target === '_blank') {
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -25,15 +25,11 @@ type Props = {
   documentId: string;
   versionId: string;
   versionReady: boolean;
-  onGoToPage: (page: number) => void;
-  onSelectVersion: (versionId: string) => void;
 };
 export function DocumentReportPanel({
   documentId,
   versionId,
   versionReady,
-  onGoToPage,
-  onSelectVersion,
 }: Props) {
   const { data: providersData } = useGetAiProvidersQuery();
   const [requestSummary, { isLoading: summaryRequestLoading }] = useRequestSummaryMutation();
@@ -122,7 +118,7 @@ export function DocumentReportPanel({
                 );
               }
             }}
-            className={reportActionBtnPrimary}
+            className={reportActionBtnSoft}
           >
             {summaryPending ? 'Получаем…' : 'Получить пересказ'}
           </button>
@@ -238,14 +234,6 @@ export function DocumentReportPanel({
           )}
         </div>
       )}
-
-      <DocumentAiSuggestionsPanel
-        documentId={documentId}
-        versionId={versionId}
-        versionReady={versionReady}
-        onGoToPage={onGoToPage}
-        onSelectVersion={onSelectVersion}
-      />
 
       <DocumentRagComparePanel
         documentId={documentId}

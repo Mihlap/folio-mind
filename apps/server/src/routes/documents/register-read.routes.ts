@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { appliedDocxKey, previewPageKey } from '@folio-mind/pdf-contracts';
+import { appliedDocxKey, highlightEditsDocxKey, previewPageKey } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
 import { clampPreviewRange } from '../../lib/documents/preview-config.js';
 import type { Env } from '../../lib/config/env.js';
@@ -158,6 +158,8 @@ export const registerReadRoutes: FastifyPluginAsync<{
             confidenceLevel: string | null;
             confidenceScore: number | null;
             confidenceSummary: string | null;
+            confidenceDetails: unknown;
+            sourceVersionId: string | null;
             sourceDocxKey: string | null;
           }) => ({
             id: v.id,
@@ -172,6 +174,8 @@ export const registerReadRoutes: FastifyPluginAsync<{
             confidenceLevel: v.confidenceLevel ?? null,
             confidenceScore: v.confidenceScore ?? null,
             confidenceSummary: v.confidenceSummary ?? null,
+            confidenceDetails: (v as { confidenceDetails?: unknown }).confidenceDetails ?? null,
+            sourceVersionId: (v as { sourceVersionId?: string | null }).sourceVersionId ?? null,
             sourceDocxKey: v.sourceDocxKey ?? null,
             hasAppliedDocx: appliedDocxVersionIds.has(v.id),
           }),
@@ -539,6 +543,46 @@ export const registerReadRoutes: FastifyPluginAsync<{
           meta: { versionId: version.id, docxKey },
         },
       });
+      return { url, expiresInSeconds };
+    },
+  );
+  r.get(
+    '/documents/:documentId/versions/:versionId/highlight-docx-url',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        response: {
+          200: z.object({ url: z.string(), expiresInSeconds: z.number() }),
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find(
+        (v: { id: string }) => v.id === request.params.versionId,
+      );
+      if (!version || version.status === 'pending_upload') {
+        return reply.code(404).send({ error: 'Version not available' });
+      }
+      const docxKey = highlightEditsDocxKey(document.id, version.id);
+      if (!(await s3ObjectExists(docxKey))) {
+        return reply.code(404).send({ error: 'DOCX с подсветкой ещё не готов' });
+      }
+      const expiresInSeconds = 3600;
+      const url = await getPresignedGetUrl({ key: docxKey, expiresInSeconds });
       return { url, expiresInSeconds };
     },
   );

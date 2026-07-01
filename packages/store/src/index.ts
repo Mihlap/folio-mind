@@ -1,6 +1,12 @@
 export { createAppStore, type AppStore, type RootState, type AppDispatch } from './store.js';
+export {
+  OPTIMIZE_PRESET_INFO,
+  OPTIMIZE_PRESETS,
+  type OptimizePreset,
+} from '@folio-mind/pdf-contracts';
 export { apiBaseUrl } from './api/baseApi.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
+export { uploadRagSource, type UploadRagSourceArgs } from './lib/uploadRagSource.js';
 export { uploadSourceDocx } from './lib/uploadSourceDocx.js';
 export { putFileToPresignedUrl } from './lib/presignedUpload.js';
 export {
@@ -77,7 +83,10 @@ export {
   useGetVersionPreviewsQuery,
   useSplitPagesMutation,
   useMergeVersionsMutation,
+  useOptimizePdfMutation,
   useApplyEditsFinalMutation,
+  useExportHighlightDocxMutation,
+  useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useCompareVersionIntegrityQuery,
 } from './api/documentsApi.js';

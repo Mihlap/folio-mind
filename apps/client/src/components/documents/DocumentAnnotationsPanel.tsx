@@ -1,15 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  useApplyAcceptedSuggestionsMutation,
-  useApplyEditsFinalMutation,
-  useCreateAnnotationMutation,
-  useDeleteAnnotationMutation,
-  useGetDocumentQuery,
-  useGetJobQuery,
-  useLazyGetDownloadUrlQuery,
-  useLazyGetSourceDocxUrlQuery,
-  useListAnnotationsQuery,
-} from '@folio-mind/store';
+import { createContext, useContext, type ReactNode } from 'react';
 import {
   FeatureHelpActionButton,
   PanelSectionHeader,
@@ -20,594 +9,403 @@ import {
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { ExpandableEditField } from './ExpandableEditField.js';
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
-import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
-type Props = {
-  documentId: string;
-  versionId: string;
-  viewerPage: number;
-  versionReady: boolean;
-  onGoToPage: (page: number, annotationId?: string) => void;
-  onOpenAcceptedEdit: (page: number, annotationId: string) => void;
-  onOpenAllAcceptedEdits: () => void;
-  onSelectVersion: (versionId: string) => void;
-  focusedAnnotationId?: string | null;
-  injectedEditBefore?: string | null;
-  injectedCoords?: {
-    x?: number;
-    y?: number;
-  } | null;
-};
-export function DocumentAnnotationsPanel({
-  documentId,
-  versionId,
-  viewerPage,
-  versionReady,
-  onGoToPage,
-  onOpenAcceptedEdit,
-  onOpenAllAcceptedEdits,
-  onSelectVersion,
-  focusedAnnotationId = null,
-  injectedEditBefore = null,
-  injectedCoords = null,
-}: Props) {
-  const { data, refetch } = useListAnnotationsQuery(
-    { documentId, versionId },
-    { skip: !versionId },
+import {
+  useDocumentAnnotationsPanel,
+  type DocumentAnnotationsController,
+  type DocumentAnnotationsRootProps,
+} from './useDocumentAnnotationsPanel.js';
+
+const DocumentAnnotationsContext = createContext<DocumentAnnotationsController | null>(null);
+
+export function DocumentAnnotationsControllerProvider({
+  value,
+  children,
+}: {
+  value: DocumentAnnotationsController;
+  children: ReactNode;
+}) {
+  return (
+    <DocumentAnnotationsContext.Provider value={value}>{children}</DocumentAnnotationsContext.Provider>
   );
-  const [createAnnotation, { isLoading: creating }] = useCreateAnnotationMutation();
-  const [deleteAnnotation] = useDeleteAnnotationMutation();
-  const [applyAccepted, { isLoading: applying }] = useApplyAcceptedSuggestionsMutation();
-  const [applyEditsFinal, { isLoading: applyingFinal }] = useApplyEditsFinalMutation();
-  const { data: docData, refetch: refetchDocument } = useGetDocumentQuery(documentId, {
-    skip: !documentId,
-  });
-  const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
-  const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
-  const [content, setContent] = useState('');
-  const [editBefore, setEditBefore] = useState('');
-  const [editAfter, setEditAfter] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [applyJobId, setApplyJobId] = useState<string | null>(null);
-  const [pollApply, setPollApply] = useState(false);
-  const [applyHint, setApplyHint] = useState<string | null>(null);
-  const [applyEditResults, setApplyEditResults] = useState<
-    Array<{ page: number; originalText: string; suggestion: string; status: string }>
-  >([]);
-  const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
-  const pendingCoordsRef = useRef<{
-    x?: number;
-    y?: number;
-  } | null>(null);
-  const { data: applyJob } = useGetJobQuery(applyJobId!, {
-    skip: !applyJobId,
-    pollingInterval: pollApply ? 2000 : 0,
-  });
-  useEffect(() => {
-    setContent('');
-    setEditBefore('');
-    setEditAfter('');
-    setError(null);
-    setApplyJobId(null);
-    setPollApply(false);
-    setApplyHint(null);
-    setApplyEditResults([]);
-  }, [versionId]);
-  useEffect(() => {
-    if (!applyJob) return;
-    if (applyJob.status === 'completed') {
-      setPollApply(false);
-      const p = applyJob.payload as Record<string, unknown> | null;
-      const editResults = Array.isArray(p?.editResults)
-        ? (p!.editResults as Array<{
-            page: number;
-            originalText: string;
-            suggestion: string;
-            status: string;
-          }>)
-        : [];
-      setApplyEditResults(editResults);
-      const applied = typeof p?.applied === 'number' ? p.applied : null;
-      const failed = typeof p?.failed === 'number' ? p.failed : null;
-      const method = typeof p?.method === 'string' ? p.method : null;
-      if (p?.status === 'success') {
-        const methodNote =
-          method === 'docx-converted'
-            ? ' (PDF пересобран из Word)'
-            : method === 'docx'
-              ? ' (PDF пересобран из исходного DOCX)'
-              : method === 'pdf-overlay'
-                ? ' (наложение на PDF)'
-                : '';
-        setApplyHint(
-          applied != null
-            ? `Применено ${applied} правок${methodNote}. Новая версия готова.`
-            : p?.method === 'docx-fallback-overlay'
-              ? String(
-                  p.message ??
-                    'Текст из PDF не совпал с Word — правки наложены на PDF. Для идеального качества сверьте «было» с DOCX.',
-                )
-              : 'Новая версия с правками готова!',
-        );
-      } else if (p?.status === 'docx_only') {
-        setApplyHint(String(p.message ?? 'Правки применены — DOCX готов, PDF не создан.'));
-      } else if (p?.status === 'partial' || p?.method === 'docx-fallback-overlay') {
-        setApplyHint(
-          String(
-            p.message ??
-              (applied === 0
-                ? 'Правки не применились — проверьте поле «было» или загрузите DOCX.'
-                : `Применено ${applied ?? '?'} из ${(applied ?? 0) + (failed ?? 0)} правок.`),
-          ),
-        );
-      } else {
-        setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
-      }
-      void refetchDocument();
-    }
-    if (applyJob.status === 'failed') {
-      setPollApply(false);
-      setApplyHint(
-        typeof applyJob.payload === 'object' && applyJob.payload && 'error' in applyJob.payload
-          ? String(
-              (
-                applyJob.payload as {
-                  error?: string;
-                }
-              ).error,
-            )
-          : 'Не удалось собрать PDF с правками',
-      );
-    }
-  }, [applyJob, refetchDocument]);
-  useEffect(() => {
-    if (!focusedAnnotationId) return;
-    const el = itemRefs.current.get(focusedAnnotationId);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [focusedAnnotationId]);
-  useEffect(() => {
-    if (!injectedEditBefore) return;
-    setEditBefore(injectedEditBefore);
-    setError(null);
-  }, [injectedEditBefore]);
-  useEffect(() => {
-    if (!injectedCoords) return;
-    pendingCoordsRef.current = injectedCoords;
-  }, [injectedCoords]);
-  const items = data?.items ?? [];
-  const userComments = items.filter((a) => a.kind === 'comment' || a.kind === 'highlight');
-  const acceptedEdits = items.filter((a) => a.kind === 'accepted_edit');
-  function consumeCoords(): {
-    x?: number;
-    y?: number;
-  } {
-    const coords = pendingCoordsRef.current;
-    pendingCoordsRef.current = null;
-    return coords ?? {};
+}
+
+export function DocumentAnnotationsRoot({
+  children,
+  ...props
+}: DocumentAnnotationsRootProps & { children: ReactNode }) {
+  const controller = useDocumentAnnotationsPanel(props);
+  return (
+    <DocumentAnnotationsControllerProvider value={controller}>
+      {children}
+    </DocumentAnnotationsControllerProvider>
+  );
+}
+
+type PanelProps = {
+  variant: 'notes' | 'edits';
+  hideSectionHeader?: boolean;
+};
+
+export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }: PanelProps) {
+  const c = useContext(DocumentAnnotationsContext);
+  if (!c) {
+    throw new Error('DocumentAnnotationsPanel must be used inside DocumentAnnotationsRoot');
   }
-  async function handleAddComment() {
-    const text = content.trim();
-    if (!text) return;
-    setError(null);
-    try {
-      const coords = consumeCoords();
-      await createAnnotation({
-        documentId,
-        versionId,
-        page: viewerPage,
-        content: text,
-        kind: 'comment',
-        ...coords,
-      }).unwrap();
-      setContent('');
-      void refetch();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить заметку');
-    }
-  }
-  async function handleAddManualEdit() {
-    const before = editBefore.trim();
-    const after = editAfter.trim();
-    if (!before || !after) return;
-    setError(null);
-    try {
-      const coords = consumeCoords();
-      await createAnnotation({
-        documentId,
-        versionId,
-        page: viewerPage,
-        content: after,
-        quote: before,
-        kind: 'accepted_edit',
-        ...coords,
-      }).unwrap();
-      setEditBefore('');
-      setEditAfter('');
-      void refetch();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить правку');
-    }
-  }
-  const sourceVersion = docData?.versions.find((v) => v.id === versionId);
-  const hasSourceDocx = hasUserSourceDocx(sourceVersion?.sourceDocxKey);
-  const applyPayload = applyJob?.payload as Record<string, unknown> | null;
-  const applyConfidenceLevel =
-    applyPayload?.confidenceLevel === 'green' ||
-    applyPayload?.confidenceLevel === 'yellow' ||
-    applyPayload?.confidenceLevel === 'red'
-      ? applyPayload.confidenceLevel
-      : null;
-  const applyConfidenceScore =
-    typeof applyPayload?.confidenceScore === 'number' ? applyPayload.confidenceScore : null;
-  const applyConfidenceSummary =
-    typeof applyPayload?.confidenceSummary === 'string' ? applyPayload.confidenceSummary : null;
-  async function handleApplyFinal() {
-    setError(null);
-    setApplyHint(null);
-    try {
-      const result = await applyEditsFinal({ documentId, versionId }).unwrap();
-      setApplyJobId(result.operationJobId);
-      setPollApply(true);
-      onSelectVersion(result.versionId);
-      setApplyHint(
-        `Версия ${result.version} создаётся — PDF появится через несколько секунд.`,
-      );
-    } catch (err) {
-      const msg =
-        typeof err === 'object' && err && 'data' in err
-          ? typeof (
-              err as {
-                data: unknown;
-              }
-            ).data === 'string'
-            ? (
-                err as {
-                  data: string;
-                }
-              ).data
-            : 'Не удалось применить правки'
-          : 'Не удалось применить правки';
-      setError(msg);
-    }
-  }
-  function getApplyTargetVersionId(): string | undefined {
-    const p = applyJob?.payload as Record<string, unknown> | null;
-    return (p?.targetVersionId as string) ?? undefined;
-  }
-  async function handleDownloadPdf() {
-    const targetId = getApplyTargetVersionId();
-    if (!targetId) return;
-    try {
-      const { url } = await fetchDownloadUrl({ documentId, versionId: targetId }).unwrap();
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch {
-      setError('Не удалось скачать PDF');
-    }
-  }
-  async function handleDownloadDocx() {
-    const targetId = getApplyTargetVersionId();
-    if (!targetId) return;
-    try {
-      const { url } = await fetchDocxUrl({ documentId, versionId: targetId }).unwrap();
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch {
-      setError('Не удалось скачать DOCX');
-    }
-  }
-  async function handleApplyPdf() {
-    setError(null);
-    setApplyHint(null);
-    try {
-      const result = await applyAccepted({ documentId, versionId }).unwrap();
-      setApplyJobId(result.operationJobId);
-      setPollApply(true);
-      onSelectVersion(result.versionId);
-      setApplyHint(`Создана версия ${result.version}. Собираем PDF…`);
-    } catch (err) {
-      const msg =
-        typeof err === 'object' && err && 'data' in err
-          ? typeof (
-              err as {
-                data: unknown;
-              }
-            ).data === 'string'
-            ? (
-                err as {
-                  data: string;
-                }
-              ).data
-            : 'Не удалось собрать PDF с правками'
-          : 'Не удалось собрать PDF с правками';
-      setError(msg);
-    }
-  }
+
+  const {
+    documentId,
+    versionId,
+    viewerPage,
+    versionReady,
+    focusedAnnotationId,
+    onGoToPage,
+    onOpenAcceptedEdit,
+    onOpenAllAcceptedEdits,
+    creating,
+    applying,
+    applyingFinal,
+    exportingHighlight,
+    pollApply,
+    pollExportHighlight,
+    content,
+    setContent,
+    editBefore,
+    setEditBefore,
+    editAfter,
+    setEditAfter,
+    error,
+    applyHint,
+    applyJob,
+    applyEditResults,
+    applyConfidenceLevel,
+    applyConfidenceScore,
+    applyConfidenceSummary,
+    hasSourceDocx,
+    userComments,
+    acceptedEdits,
+    itemRefs,
+    deleteAnnotation,
+    refetch,
+    handleAddComment,
+    handleAddManualEdit,
+    handleExportHighlightDocx,
+    handleApplyFinal,
+    handleDownloadPdf,
+    handleDownloadDocx,
+    handleApplyPdf,
+  } = c;
+
   return (
     <div className="space-y-4">
-      <PanelSectionHeader
-        title="Аннотации"
-        helpTitle="Аннотации"
-        helpContent={
-          <>
+      {!hideSectionHeader && variant === 'notes' && (
+        <PanelSectionHeader
+          title="Аннотации"
+          helpTitle="Аннотации"
+          helpContent={
             <p>
-              <strong>Заметка</strong> — комментарий к странице (метка на PDF).{' '}
-              <strong>Своя правка</strong> — вы сами указываете «было» и «стало»; полный текст в
-              всплывающем окне.
+              <strong>Заметка</strong> — комментарий к странице (метка на PDF), без изменения текста
+              договора.
             </p>
+          }
+        />
+      )}
+      {!hideSectionHeader && variant === 'edits' && (
+        <PanelSectionHeader
+          title="Правки в PDF"
+          helpTitle="Правки в PDF"
+          helpContent={
             <p>
-              Правки от ИИ появляются после «Принять» во вкладке «Отчёт». Сборка PDF — «Собрать PDF
-              с правками».
+              Зафиксируйте «было / стало» вручную или примите предложения ИИ в этом же разделе.
+              Затем соберите новую версию PDF или выгрузите DOCX с подсветкой.
             </p>
-          </>
-        }
-      />
-
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-slate-600">Заметка к стр. {viewerPage}</p>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          disabled={!versionReady || creating}
-          placeholder="Комментарий без замены текста…"
-          rows={2}
-          className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+          }
         />
-        <FeatureHelpActionButton
-          helpTitle="Добавить заметку"
-          disabled={!versionReady || creating || !content.trim()}
-          onClick={() => void handleAddComment()}
-          buttonClassName={reportActionBtnPrimary}
-          helpContent={<p>Короткий комментарий к текущей странице viewer.</p>}
-        >
-          {creating ? 'Сохранение…' : 'Добавить заметку'}
-        </FeatureHelpActionButton>
-      </div>
-
-      <div className="space-y-2 border-t border-slate-100 pt-4">
-        <p className="text-xs font-medium text-slate-600">Своя правка к стр. {viewerPage}</p>
-        <p className="text-[11px] text-slate-500">
-          Выделите фрагмент в PDF → «В правку «было»» — текст попадёт в поле ниже.
-        </p>
-        <ExpandableEditField
-          label="Было (исходный текст)"
-          value={editBefore}
-          onChange={setEditBefore}
-          disabled={!versionReady || creating}
-          placeholder="Было (исходный текст)…"
-          fieldClassName="w-full rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm disabled:opacity-50"
-        />
-        <ExpandableEditField
-          label="Стало (новая формулировка)"
-          value={editAfter}
-          onChange={setEditAfter}
-          disabled={!versionReady || creating}
-          placeholder="Стало (новая формулировка)…"
-          fieldClassName="w-full rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm disabled:opacity-50"
-        />
-        <div className={reportActionsColumnClass}>
-          <FeatureHelpActionButton
-            helpTitle="Сохранить правку"
-            disabled={!versionReady || creating || !editBefore.trim() || !editAfter.trim()}
-            onClick={() => void handleAddManualEdit()}
-            buttonClassName={reportActionBtnPrimary}
-            helpContent={
-              <p>
-                Сохраняет пару «было / стало» как правку. На PDF — чип «Правки» с числом в углу
-                страницы; полный текст — во всплывающем окне.
-              </p>
-            }
-          >
-            {creating ? 'Сохранение…' : 'Сохранить правку'}
-          </FeatureHelpActionButton>
-        </div>
-      </div>
-
-      {error && <p className="text-xs text-red-600">{error}</p>}
-
-      {userComments.length > 0 && (
-        <ul className="space-y-2 border-t border-slate-100 pt-3">
-          <p className="text-xs font-medium text-slate-600">Заметки</p>
-          {userComments.map((item) => (
-            <li
-              key={item.id}
-              ref={(el) => {
-                if (el) itemRefs.current.set(item.id, el);
-                else itemRefs.current.delete(item.id);
-              }}
-              className={`rounded-lg border bg-white p-2 transition-shadow ${
-                focusedAnnotationId === item.id
-                  ? 'border-folio-500 ring-2 ring-folio-200 shadow-sm'
-                  : 'border-slate-200 hover:border-folio-200'
-              }`}
-            >
-              <div className="flex items-start gap-2">
-                <button
-                  type="button"
-                  onClick={() => onGoToPage(item.page, item.id)}
-                  className="min-w-0 flex-1 cursor-pointer text-left"
-                >
-                  <span className="text-[11px] font-medium text-folio-700">стр. {item.page}</span>
-                  <p className="mt-0.5 text-xs text-slate-700">{item.content}</p>
-                </button>
-                <button
-                  type="button"
-                  title="Удалить"
-                  onClick={() => {
-                    void (async () => {
-                      await deleteAnnotation({
-                        documentId,
-                        versionId,
-                        annotationId: item.id,
-                      });
-                      void refetch();
-                    })();
-                  }}
-                  className="cursor-pointer shrink-0 text-lg text-slate-400 hover:text-red-600"
-                >
-                  ✕
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
       )}
 
-      {acceptedEdits.length > 0 && (
-        <div className="space-y-2 border-t border-slate-100 pt-3">
-          <p className="text-[11px] text-slate-500">
-            Полный текст — «Правки» над PDF или «Открыть все» здесь. После «Собрать PDF» в
-            приложении в конце файла — реестр с полным текстом «было / стало», без блоков на
-            страницах.
-          </p>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium text-slate-600">
-              Правки «было / стало» ({acceptedEdits.length})
-            </p>
-            <button
-              type="button"
-              onClick={onOpenAllAcceptedEdits}
-              className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
-            >
-              Открыть все
-            </button>
-          </div>
-
-          <div className={reportActionsColumnClass}>
+      {variant === 'notes' && (
+        <>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-slate-600">Заметка к стр. {viewerPage}</p>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              disabled={!versionReady || creating}
+              placeholder="Комментарий без замены текста…"
+              rows={2}
+              className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+            />
             <FeatureHelpActionButton
-              helpTitle="Собрать PDF с правками"
-              disabled={!versionReady || creating || applying || pollApply}
-              onClick={() => void handleApplyPdf()}
-              buttonClassName={reportActionBtnHighlight}
-              helpContent={
-                <>
-                  <p>
-                    Создаёт новую версию: текст страниц договора не меняется; в приложении —
-                    реестр с полным текстом «было / стало» по всем принятым правкам ИИ и
-                    ручным из «Аннотации».
-                  </p>
-                  <p>
-                    Исходный текст в PDF не переписывается автоматически — это рабочая версия для
-                    согласования. Для финального договора правки вносят в Word и загружают новый
-                    PDF.
-                  </p>
-                </>
-              }
+              helpTitle="Добавить заметку"
+              disabled={!versionReady || creating || !content.trim()}
+              onClick={() => void handleAddComment()}
+              buttonClassName={reportActionBtnPrimary}
+              helpContent={<p>Короткий комментарий к текущей странице viewer.</p>}
             >
-              {applying || pollApply ? 'Сборка PDF…' : 'Собрать PDF с правками'}
-            </FeatureHelpActionButton>
-            <FeatureHelpActionButton
-              helpTitle="Применить правки"
-              disabled={!versionReady || creating || applyingFinal || pollApply}
-              onClick={() => void handleApplyFinal()}
-              buttonClassName={reportActionBtnHighlight}
-              helpContent={
-                <>
-                  <p>
-                    Создаёт новую версию с изменённым текстом. Если есть Word (исходный DOCX или
-                    конвертированный) — правки вносятся в документ и PDF пересобирается из Word.
-                    Без Word или при сбое — наложение текста на текущий PDF (те же страницы).
-                  </p>
-                  {hasSourceDocx ? (
-                    <p>
-                      При загруженном DOCX PDF и Word будут совпадать по тексту правок. Номера
-                      страниц могут немного сместиться относительно исходного PDF.
-                    </p>
-                  ) : (
-                    <p>
-                      Без исходного DOCX: сначала PDF→Word, затем новый PDF; иначе — наложение на
-                      PDF.
-                    </p>
-                  )}
-                </>
-              }
-            >
-              {applyingFinal ? 'Применение…' : 'Применить правки'}
+              {creating ? 'Сохранение…' : 'Добавить заметку'}
             </FeatureHelpActionButton>
           </div>
 
-          {applyHint && (
-            <div className="space-y-1">
-              <p className="text-xs text-folio-700">{applyHint}</p>
-              {applyConfidenceLevel && applyJob?.status === 'completed' && (
-                <DocumentVersionConfidenceBadge
-                  level={applyConfidenceLevel}
-                  summary={applyConfidenceSummary}
-                  score={applyConfidenceScore}
-                />
-              )}
-              {applyEditResults.length > 0 && (
-                <ul className="max-h-28 space-y-0.5 overflow-y-auto rounded border border-slate-200 bg-slate-50/80 p-1.5 text-[10px]">
-                  {applyEditResults.map((item, index) => (
-                    <li
-                      key={`${item.page}-${index}`}
-                      className={
-                        item.status === 'applied' ? 'text-emerald-700' : 'text-amber-700'
-                      }
-                    >
-                      стр. {item.page}:{' '}
-                      {item.status === 'applied' ? '✓' : '✗'}{' '}
-                      <span className="text-slate-600">
-                        {item.originalText.slice(0, 48)}
-                        {item.originalText.length > 48 ? '…' : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {applyJob?.status === 'completed' && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleDownloadPdf()}
-                    className="flex cursor-pointer items-center gap-1 rounded-md bg-folio-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-folio-700"
-                  >
-                    <DownloadIcon className="h-3 w-3" />
-                    Скачать PDF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDownloadDocx()}
-                    className="flex cursor-pointer items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
-                  >
-                    <DownloadIcon className="h-3 w-3" />
-                    Скачать DOCX
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          {error && <p className="text-xs text-red-600">{error}</p>}
 
-          <ul className="space-y-1.5">
-            {acceptedEdits.map((item) => (
-              <li
-                key={item.id}
-                ref={(el) => {
-                  if (el) itemRefs.current.set(item.id, el);
-                  else itemRefs.current.delete(item.id);
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpenAcceptedEdit(item.page, item.id)}
-                  className={`w-full cursor-pointer rounded-lg border px-2 py-1.5 text-left text-xs transition ${
+          {userComments.length > 0 ? (
+            <ul className="space-y-2 border-t border-slate-100 pt-3">
+              <p className="text-xs font-medium text-slate-600">Заметки</p>
+              {userComments.map((item) => (
+                <li
+                  key={item.id}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(item.id, el);
+                    else itemRefs.current.delete(item.id);
+                  }}
+                  className={`rounded-lg border bg-white p-2 transition-shadow ${
                     focusedAnnotationId === item.id
-                      ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200'
-                      : 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
+                      ? 'border-folio-500 ring-2 ring-folio-200 shadow-sm'
+                      : 'border-slate-200 hover:border-folio-200'
                   }`}
                 >
-                  <span className="font-medium text-folio-700">стр. {item.page}</span>
-                  <span className="mt-0.5 block line-clamp-3 text-slate-600">
-                    {item.content || item.quote || '—'}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+                  <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onGoToPage(item.page, item.id)}
+                      className="min-w-0 flex-1 cursor-pointer text-left"
+                    >
+                      <span className="text-[11px] font-medium text-folio-700">стр. {item.page}</span>
+                      <p className="mt-0.5 text-xs text-slate-700">{item.content}</p>
+                    </button>
+                    <button
+                      type="button"
+                      title="Удалить"
+                      onClick={() => {
+                        void (async () => {
+                          await deleteAnnotation({
+                            documentId,
+                            versionId,
+                            annotationId: item.id,
+                          });
+                          void refetch();
+                        })();
+                      }}
+                      className="cursor-pointer shrink-0 text-lg text-slate-400 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[11px] text-slate-400">Пока нет заметок к этой версии.</p>
+          )}
+        </>
       )}
 
-      {items.length === 0 && (
-        <p className="text-[11px] text-slate-400">
-          Пока нет записей. Добавьте заметку или свою правку к текущей странице.
-        </p>
+      {variant === 'edits' && (
+        <>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-slate-600">Своя правка к стр. {viewerPage}</p>
+            <p className="text-[11px] text-slate-500">
+              Выделите фрагмент в PDF → «В правку «было»» — текст попадёт в поле ниже.
+            </p>
+            <ExpandableEditField
+              label="Было (исходный текст)"
+              value={editBefore}
+              onChange={setEditBefore}
+              disabled={!versionReady || creating}
+              placeholder="Было (исходный текст)…"
+              fieldClassName="w-full rounded-lg border border-red-100 bg-red-50/50 px-3 py-2 text-sm disabled:opacity-50"
+            />
+            <ExpandableEditField
+              label="Стало (новая формулировка)"
+              value={editAfter}
+              onChange={setEditAfter}
+              disabled={!versionReady || creating}
+              placeholder="Стало (новая формулировка)…"
+              fieldClassName="w-full rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm disabled:opacity-50"
+            />
+            <div className={reportActionsColumnClass}>
+              <FeatureHelpActionButton
+                helpTitle="Сохранить правку"
+                disabled={!versionReady || creating || !editBefore.trim() || !editAfter.trim()}
+                onClick={() => void handleAddManualEdit()}
+                buttonClassName={reportActionBtnPrimary}
+                helpContent={
+                  <p>
+                    Сохраняет пару «было / стало». На PDF — чип «Правки» с числом в углу страницы;
+                    полный текст — во всплывающем окне.
+                  </p>
+                }
+              >
+                {creating ? 'Сохранение…' : 'Сохранить правку'}
+              </FeatureHelpActionButton>
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
+          {acceptedEdits.length > 0 ? (
+            <div className="space-y-2 border-t border-slate-100 pt-3">
+              <p className="text-[11px] text-slate-500">
+                Полный текст — «Правки» над PDF или «Открыть все» ниже. После сборки в конце файла —
+                реестр «было / стало».
+              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-medium text-slate-600">
+                  Правки «было / стало» ({acceptedEdits.length})
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenAllAcceptedEdits}
+                  className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
+                >
+                  Открыть все
+                </button>
+              </div>
+
+              <div className={reportActionsColumnClass}>
+                <FeatureHelpActionButton
+                  helpTitle="Собрать PDF с правками"
+                  disabled={!versionReady || creating || applying || pollApply}
+                  onClick={() => void handleApplyPdf()}
+                  buttonClassName={reportActionBtnHighlight}
+                  helpContent={
+                    <p>
+                      Создаёт новую версию с реестром правок. Исходный текст на страницах PDF не
+                      переписывается — рабочая версия для согласования.
+                    </p>
+                  }
+                >
+                  {applying || pollApply ? 'Сборка PDF…' : 'Собрать PDF с правками'}
+                </FeatureHelpActionButton>
+                <FeatureHelpActionButton
+                  helpTitle="Применить правки"
+                  disabled={!versionReady || creating || applyingFinal || pollApply}
+                  onClick={() => void handleApplyFinal()}
+                  buttonClassName={reportActionBtnHighlight}
+                  helpContent={
+                    <>
+                      <p>
+                        Создаёт новую версию с изменённым текстом. При наличии Word правки вносятся
+                        в документ и PDF пересобирается из Word.
+                      </p>
+                      {hasSourceDocx ? (
+                        <p>При загруженном DOCX PDF и Word совпадут по тексту правок.</p>
+                      ) : (
+                        <p>Без исходного DOCX — PDF→Word, затем новый PDF или наложение на PDF.</p>
+                      )}
+                    </>
+                  }
+                >
+                  {applyingFinal ? 'Применение…' : 'Применить правки'}
+                </FeatureHelpActionButton>
+                <FeatureHelpActionButton
+                  helpTitle="DOCX с подсветкой правок"
+                  disabled={
+                    !versionReady ||
+                    creating ||
+                    applying ||
+                    applyingFinal ||
+                    exportingHighlight ||
+                    pollApply ||
+                    pollExportHighlight
+                  }
+                  onClick={() => void handleExportHighlightDocx()}
+                  buttonClassName={reportActionBtnPrimary}
+                  helpContent={
+                    <p>
+                      Word с подсветкой принятых правок — для ручной доработки без автозамены текста.
+                    </p>
+                  }
+                >
+                  {exportingHighlight || pollExportHighlight
+                    ? 'Экспорт DOCX…'
+                    : 'DOCX с подсветкой'}
+                </FeatureHelpActionButton>
+              </div>
+
+              {applyHint && (
+                <div className="space-y-1">
+                  <p className="break-words text-xs leading-snug text-folio-700">{applyHint}</p>
+                  {applyConfidenceLevel && applyJob?.status === 'completed' && (
+                    <DocumentVersionConfidenceBadge
+                      level={applyConfidenceLevel}
+                      summary={applyConfidenceSummary}
+                      score={applyConfidenceScore}
+                    />
+                  )}
+                  {applyEditResults.length > 0 && (
+                    <ul className="max-h-28 space-y-0.5 overflow-y-auto rounded border border-slate-200 bg-slate-50/80 p-1.5 text-[10px]">
+                      {applyEditResults.map((item, index) => (
+                        <li
+                          key={`${item.page}-${index}`}
+                          className={
+                            item.status === 'applied' ? 'text-emerald-700' : 'text-amber-700'
+                          }
+                        >
+                          стр. {item.page}: {item.status === 'applied' ? '✓' : '✗'}{' '}
+                          <span className="text-slate-600">
+                            {item.originalText.slice(0, 48)}
+                            {item.originalText.length > 48 ? '…' : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {applyJob?.status === 'completed' && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleDownloadPdf()}
+                        className="flex cursor-pointer items-center gap-1 rounded-md bg-folio-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-folio-700"
+                      >
+                        <DownloadIcon className="h-3 w-3" />
+                        Скачать PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDownloadDocx()}
+                        className="flex cursor-pointer items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
+                      >
+                        <DownloadIcon className="h-3 w-3" />
+                        Скачать DOCX
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <ul className="space-y-1.5">
+                {acceptedEdits.map((item) => (
+                  <li
+                    key={item.id}
+                    ref={(el) => {
+                      if (el) itemRefs.current.set(item.id, el);
+                      else itemRefs.current.delete(item.id);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onOpenAcceptedEdit(item.page, item.id)}
+                      className={`w-full cursor-pointer rounded-lg border px-2 py-1.5 text-left text-xs transition ${
+                        focusedAnnotationId === item.id
+                          ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200'
+                          : 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
+                      }`}
+                    >
+                      <span className="font-medium text-folio-700">стр. {item.page}</span>
+                      <span className="mt-0.5 block line-clamp-3 text-slate-600">
+                        {item.content || item.quote || '—'}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-400">
+              Пока нет правок. Добавьте «было / стало» вручную или примите предложения ИИ ниже.
+            </p>
+          )}
+        </>
       )}
     </div>
   );
