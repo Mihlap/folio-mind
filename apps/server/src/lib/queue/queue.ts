@@ -222,6 +222,31 @@ export async function enqueueExportHighlightDocxJob(
   await optimizeQueue.add('export-highlight-docx', payload, { jobId: payload.jobId });
 }
 
+export async function enqueueApplyLayoutPdfJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    sourceVersionId: string;
+    targetVersionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    targetS3Key: string;
+    layoutObjects: Array<{
+      id: string;
+      page: number;
+      rect: { x: number; y: number; width: number; height: number };
+      imageSrc: string;
+      rotation: number;
+    }>;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('apply-layout-pdf', payload, { jobId: payload.jobId });
+}
+
 export async function enqueueOptimizePdfJob(
   env: Env,
   payload: {

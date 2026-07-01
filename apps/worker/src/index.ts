@@ -4,6 +4,7 @@ import { processAiChatJob } from './jobs/ai/ai-chat.js';
 import { processAiSuggestionsJob } from './jobs/ai/ai-suggestions.js';
 import { processRagCompareJob } from './jobs/ai/rag-compare.js';
 import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
+import { processApplyLayoutPdfJob } from './jobs/optimize/apply-layout-pdf.js';
 import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accepted-suggestions.js';
 import { processApplyEditsFinalJob } from './jobs/optimize/apply-edits-final.js';
 import { processExportHighlightDocxJob } from './jobs/optimize/export-highlight-docx.js';
@@ -134,6 +135,8 @@ function createOptimizeWorker() {
             await processExportHighlightDocxJob(env, data);
           } else if (job.name === 'optimize-pdf') {
             await processOptimizePdfJob(env, data);
+          } else if (job.name === 'apply-layout-pdf') {
+            await processApplyLayoutPdfJob(env, data);
           } else if (job.name === 'import-from-docx') {
             await processImportFromDocxJob(env, data);
           }

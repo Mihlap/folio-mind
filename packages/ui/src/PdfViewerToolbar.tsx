@@ -15,6 +15,8 @@ type PdfViewerToolbarProps = {
   onPrevMatch: () => void;
   onNextMatch: () => void;
   onClearSearch: () => void;
+  layoutMode?: boolean;
+  onLayoutModeChange?: (enabled: boolean) => void;
 };
 export function PdfViewerToolbar({
   displayMode,
@@ -31,6 +33,8 @@ export function PdfViewerToolbar({
   onPrevMatch,
   onNextMatch,
   onClearSearch,
+  layoutMode = false,
+  onLayoutModeChange,
 }: PdfViewerToolbarProps) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -68,6 +72,14 @@ export function PdfViewerToolbar({
           ↺
         </IconButton>
       </div>
+
+      {onLayoutModeChange && (
+        <ToolbarButton
+          active={layoutMode}
+          onClick={() => onLayoutModeChange(!layoutMode)}
+          label="Макет"
+        />
+      )}
 
       <div className="flex min-w-0 w-full basis-full items-center gap-1 sm:basis-auto sm:flex-1">
         <input

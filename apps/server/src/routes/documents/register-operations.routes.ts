@@ -14,6 +14,7 @@ import {
 import type { Env } from '../../lib/config/env.js';
 import {
   enqueueApplyEditsFinalJob,
+  enqueueApplyLayoutPdfJob,
   enqueueExportHighlightDocxJob,
   enqueueMergeVersionsJob,
   enqueueOptimizePdfJob,
@@ -24,6 +25,7 @@ import { isS3Configured } from '../../lib/storage/s3.js';
 import { buildOriginalKey } from './helpers.js';
 import {
   errorBody,
+  applyLayoutPdfSchema,
   mergeVersionsSchema,
   optimizePdfSchema,
   splitPagesSchema,
@@ -605,6 +607,116 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
             sourceVersionId: sourceVersion.id,
             targetVersionId: targetVersion.id,
             preset,
+            operationJobId: operationJob.id,
+          },
+        },
+      });
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId: targetVersion.id,
+        version: targetVersion.version,
+        status: 'processing',
+      });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/apply-layout-pdf',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        body: applyLayoutPdfSchema,
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            version: z.number(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const { objects } = request.body;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      if (!sourceVersion.pageCount || sourceVersion.pageCount <= 0) {
+        return reply.code(400).send({ error: 'Source version pageCount is unknown' });
+      }
+      const maxPage = objects.reduce((max, object) => Math.max(max, object.page), 0);
+      if (maxPage > sourceVersion.pageCount) {
+        return reply.code(400).send({ error: `Страница ${maxPage} больше числа страниц PDF` });
+      }
+      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
+      const targetS3Key = buildOriginalKey(
+        document.id,
+        nextVersionNumber,
+        `layout-v${sourceVersion.version}.pdf`,
+      );
+      const [targetVersion, operationJob] = await app.prisma.$transaction([
+        app.prisma.documentVersion.create({
+          data: {
+            documentId: document.id,
+            version: nextVersionNumber,
+            s3Key: targetS3Key,
+            size: BigInt(0),
+            mimeType: sourceVersion.mimeType,
+            status: 'processing',
+            sourceVersionId: sourceVersion.id,
+          },
+        }),
+        app.prisma.job.create({
+          data: {
+            type: 'apply-layout-pdf',
+            status: 'queued',
+            tenantId: user.tenantId,
+            payload: {
+              documentId,
+              sourceVersionId: sourceVersion.id,
+              objectCount: objects.length,
+            },
+          },
+        }),
+      ]);
+      await enqueueApplyLayoutPdfJob(env, {
+        jobId: `apply-layout-pdf-${targetVersion.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        sourceVersionId: sourceVersion.id,
+        targetVersionId: targetVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Key: sourceVersion.s3Key,
+        targetS3Key,
+        layoutObjects: objects,
+        requestId: request.requestId,
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_apply_layout_pdf',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            sourceVersionId: sourceVersion.id,
+            targetVersionId: targetVersion.id,
+            objectCount: objects.length,
             operationJobId: operationJob.id,
           },
         },

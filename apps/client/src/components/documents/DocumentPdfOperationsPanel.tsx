@@ -9,6 +9,11 @@ import {
   useSplitPagesMutation,
   type OptimizePreset,
 } from '@folio-mind/store';
+import {
+  estimateOptimizeSize,
+  formatFileSize,
+  formatOptimizeSizeRange,
+} from '@folio-mind/store';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import {
   FeatureHelpActionButton,
@@ -24,7 +29,9 @@ import {
 import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
+import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
+import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 import { useDocumentAnnotationsPanel } from './useDocumentAnnotationsPanel.js';
 function parsePageNumbers(input: string, maxPage: number): number[] | string {
   const parts = input
@@ -74,6 +81,14 @@ type Props = {
   editTextInjection?: EditTextInjection | null;
   versionReady: boolean;
   embedded?: boolean;
+  focusSection?: ToolSectionId | null;
+  onFocusSectionHandled?: () => void;
+  layout?: LayoutEditorState;
+  layoutAddNotice?: string | null;
+  onAddLayoutImages?: (
+    files: File[],
+    options?: { distributeAcrossPages?: boolean },
+  ) => Promise<void>;
 };
 export function DocumentPdfOperationsPanel({
   documentId,
@@ -88,6 +103,11 @@ export function DocumentPdfOperationsPanel({
   editTextInjection = null,
   versionReady,
   embedded = false,
+  focusSection = null,
+  onFocusSectionHandled,
+  layout,
+  layoutAddNotice = null,
+  onAddLayoutImages,
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
   const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
@@ -152,9 +172,27 @@ export function DocumentPdfOperationsPanel({
     if (operationJob.status === 'completed') {
       setPollOperation(false);
       if (targetVersion) {
-        setStatusHint(
-          `Версия ${targetVersion.version} собрана — PDF в viewer, миниатюры подгружаются.`,
-        );
+        const payload = operationJob.payload;
+        const optimizeMessage =
+          typeof payload === 'object' && payload && 'message' in payload
+            ? String((payload as { message?: string }).message ?? '')
+            : '';
+        const savedPct =
+          typeof payload === 'object' && payload && 'savedPercent' in payload
+            ? Number((payload as { savedPercent?: number }).savedPercent)
+            : NaN;
+        const outputBytes =
+          typeof payload === 'object' && payload && 'outputBytes' in payload
+            ? Number((payload as { outputBytes?: number }).outputBytes)
+            : NaN;
+        const sizeNote =
+          Number.isFinite(outputBytes) && outputBytes > 0
+            ? ` · ${formatFileSize(outputBytes)}`
+            : '';
+        const savedNote =
+          Number.isFinite(savedPct) && savedPct > 0 ? ` (−${savedPct}%)` : '';
+        const detail = optimizeMessage || `Версия ${targetVersion.version} собрана`;
+        setStatusHint(`${detail}${sizeNote}${savedNote} — PDF в viewer, миниатюры подгружаются.`);
         setStatusHintVersionId(targetVersion.id);
       }
     }
@@ -308,6 +346,11 @@ export function DocumentPdfOperationsPanel({
     readyVersions.length < 2
       ? 'Нужно минимум две готовые версии'
       : `${readyVersions.length} готовых версий`;
+  const sourceBytes = activeVersion?.size ? Number(activeVersion.size) : 0;
+  const optimizeEstimate = useMemo(() => {
+    if (!activeReady || sourceBytes <= 0) return null;
+    return estimateOptimizeSize(sourceBytes, effectivePageCount, optimizePreset);
+  }, [activeReady, effectivePageCount, optimizePreset, sourceBytes]);
   const allSectionsOpen = openSections.size === TOOL_SECTION_IDS.length;
   const noSectionsOpen = openSections.size === 0;
   function isSectionOpen(id: ToolSectionId) {
@@ -336,6 +379,17 @@ export function DocumentPdfOperationsPanel({
       return next;
     });
   }, [editTextInjection?.key]);
+  useEffect(() => {
+    if (!focusSection) return;
+    setExpanded(true);
+    setOpenSections((prev) => {
+      if (prev.has(focusSection)) return prev;
+      const next = new Set(prev);
+      next.add(focusSection);
+      return next;
+    });
+    onFocusSectionHandled?.();
+  }, [focusSection, onFocusSectionHandled]);
   const annotationsSharedProps = {
     documentId,
     versionId: activeVersion?.id ?? '',
@@ -422,6 +476,28 @@ export function DocumentPdfOperationsPanel({
               );
             })}
           </div>
+          {sourceBytes > 0 && (
+            <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
+              <p>
+                Текущий файл:{' '}
+                <span className="font-medium text-slate-800">{formatFileSize(sourceBytes)}</span>
+                {effectivePageCount > 0 ? ` · ${effectivePageCount} стр.` : ''}
+              </p>
+              {optimizeEstimate && (
+                <p className="mt-1">
+                  Ожидаемый размер:{' '}
+                  <span className="font-medium text-slate-800">
+                    {formatOptimizeSizeRange(optimizeEstimate)}
+                  </span>
+                  {optimizeEstimate.likelyTextOnly && optimizePreset !== 'none' && (
+                    <span className="mt-0.5 block text-slate-500">
+                      Похоже на текстовый PDF — заметного сжатия может не быть.
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+          )}
           <div className={`mt-3 ${reportActionsColumnClass}`}>
             <FeatureHelpActionButton
               helpTitle="Сжать в новую версию"
@@ -611,6 +687,35 @@ export function DocumentPdfOperationsPanel({
             </FeatureHelpActionButton>
           </div>
         </ToolAccordionSection>
+
+        {layout && (
+          <ToolAccordionSection
+            title="Макет"
+            subtitle="Изображения на листе, линейки и сетка"
+            isOpen={isSectionOpen('layout')}
+            onToggle={() => toggleSection('layout')}
+            helpTitle="Режим макета"
+            helpContent={
+              <>
+                <p>Для буклетов и альбомов: разместите рендер или фото на странице PDF.</p>
+                <p>Линейки в миллиметрах, сетка и привязка помогают выровнять картинку на листе.</p>
+              </>
+            }
+          >
+            <DocumentLayoutPanel
+              layout={layout}
+              viewerPage={viewerPage}
+              versionReady={versionReady}
+              documentId={documentId}
+              versionId={activeVersion?.id ?? ''}
+              pageCount={activeVersion?.pageCount ?? 0}
+              onSelectVersion={onSelectVersion}
+              onGoToPage={onGoToPage}
+              addNotice={layoutAddNotice}
+              onAddImages={onAddLayoutImages}
+            />
+          </ToolAccordionSection>
+        )}
 
         <DocumentAnnotationsControllerProvider value={annotationsController}>
           <ToolAccordionSection

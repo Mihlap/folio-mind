@@ -7,6 +7,8 @@ import { DocumentPdfOperationsPanel } from './DocumentPdfOperationsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import { DocumentReportPanel } from './DocumentReportPanel.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
+import type { ToolSectionId } from '../ui/ToolAccordionSection.js';
+import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 export type DocumentRightTab = 'chat' | 'tools' | 'report';
 type Props = {
   documentId: string;
@@ -20,6 +22,14 @@ type Props = {
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
   editTextInjection?: EditTextInjection | null;
+  toolsFocusSection?: ToolSectionId | null;
+  onToolsFocusSectionHandled?: () => void;
+  layout?: LayoutEditorState;
+  layoutAddNotice?: string | null;
+  onAddLayoutImages?: (
+    files: File[],
+    options?: { distributeAcrossPages?: boolean },
+  ) => Promise<void>;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -52,6 +62,11 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
   editTextInjection = null,
+  toolsFocusSection = null,
+  onToolsFocusSectionHandled,
+  layout,
+  layoutAddNotice = null,
+  onAddLayoutImages,
   collapsed,
   onToggleCollapsed,
   onExpand,
@@ -163,6 +178,11 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
             editTextInjection={editTextInjection}
             versionReady={versionReady}
+            focusSection={toolsFocusSection}
+            onFocusSectionHandled={onToolsFocusSectionHandled}
+            layout={layout}
+            layoutAddNotice={layoutAddNotice}
+            onAddLayoutImages={onAddLayoutImages}
           />
         </div>
         <div className={activeTab === 'chat' ? 'block' : 'hidden'}>

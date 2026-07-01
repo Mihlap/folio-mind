@@ -2,7 +2,16 @@ export { createAppStore, type AppStore, type RootState, type AppDispatch } from 
 export {
   OPTIMIZE_PRESET_INFO,
   OPTIMIZE_PRESETS,
+  estimateOptimizeSize,
+  formatFileSize,
+  formatOptimizeSizeRange,
   type OptimizePreset,
+  layoutStepFraction,
+  pdfPointsToMm,
+  rotateLayoutObject,
+  type LayoutImageObject,
+  type LayoutRect,
+  type OptimizeSizeEstimate,
 } from '@folio-mind/pdf-contracts';
 export { apiBaseUrl } from './api/baseApi.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
@@ -84,6 +93,7 @@ export {
   useSplitPagesMutation,
   useMergeVersionsMutation,
   useOptimizePdfMutation,
+  useApplyLayoutPdfMutation,
   useApplyEditsFinalMutation,
   useExportHighlightDocxMutation,
   useLazyGetHighlightDocxUrlQuery,

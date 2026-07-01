@@ -1,12 +1,20 @@
 import type { ReactNode } from 'react';
 import { FeatureHelpButton } from './FeatureHelp.js';
 
-export type ToolSectionId = 'optimize' | 'split' | 'merge' | 'annotations' | 'edits' | 'diff';
+export type ToolSectionId =
+  | 'optimize'
+  | 'split'
+  | 'merge'
+  | 'annotations'
+  | 'edits'
+  | 'diff'
+  | 'layout';
 
 export const TOOL_SECTION_IDS: ToolSectionId[] = [
   'optimize',
   'split',
   'merge',
+  'layout',
   'annotations',
   'edits',
   'diff',

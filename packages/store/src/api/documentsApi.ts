@@ -501,6 +501,35 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: documentId },
       ],
     }),
+    applyLayoutPdf: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        version: number;
+        status: 'processing';
+      },
+      {
+        documentId: string;
+        versionId: string;
+        objects: Array<{
+          id: string;
+          page: number;
+          rect: { x: number; y: number; width: number; height: number };
+          imageSrc: string;
+          rotation: number;
+        }>;
+      }
+    >({
+      query: ({ documentId, versionId, objects }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/apply-layout-pdf`,
+        method: 'POST',
+        body: { objects },
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
     applyEditsFinal: build.mutation<
       {
         operationJobId: string;
@@ -620,6 +649,7 @@ export const {
   useSplitPagesMutation,
   useMergeVersionsMutation,
   useOptimizePdfMutation,
+  useApplyLayoutPdfMutation,
   useApplyEditsFinalMutation,
   useExportHighlightDocxMutation,
   useLazyGetHighlightDocxUrlQuery,

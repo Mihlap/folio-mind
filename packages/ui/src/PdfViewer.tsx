@@ -6,7 +6,7 @@ import { clearDocumentSelection } from './pdf-text-selection.js';
 import type { PdfPageMarker } from './pdf-page-markers.js';
 import { PageNavButton } from './pdf-viewer/PageNavButton.js';
 import { PagePlaceholder } from './pdf-viewer/PagePlaceholder.js';
-import { PdfViewerPage } from './pdf-viewer/PdfViewerPage.js';
+import { PdfViewerPage, type PdfViewerLayoutProps } from './pdf-viewer/PdfViewerPage.js';
 import {
   usePdfTextSelection,
   type PdfLiveSelection,
@@ -45,7 +45,7 @@ type PdfViewerProps = {
   pageNavTick?: number;
   enableTextSelection?: boolean;
   onTextQuoteForEdit?: (payload: { text: string; page: number; x?: number; y?: number }) => void;
-};
+} & PdfViewerLayoutProps;
 export function PdfViewer({
   url,
   pdfData,
@@ -68,9 +68,21 @@ export function PdfViewer({
   pageAcceptedEditCountByPage = {},
   onPageAcceptedEditsOpen,
   onMarkersOverflowClick,
+  pageLayoutCountByPage = {},
+  onPageLayoutOpen,
   pageNavTick = 0,
   enableTextSelection = false,
   onTextQuoteForEdit,
+  enabled: layoutEnabled = false,
+  objects: layoutObjects = [],
+  selectedObjectId = null,
+  showGrid = true,
+  showRulers = true,
+  gridStepMm = 10,
+  snapEnabled = false,
+  onLayoutObjectSelect,
+  onLayoutObjectChange,
+  onLayoutFilesDrop,
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -280,6 +292,18 @@ export function PdfViewer({
     onMarkersOverflowClick,
     pageAcceptedEditCountByPage,
     onPageAcceptedEditsOpen,
+    pageLayoutCountByPage,
+    onPageLayoutOpen,
+    enabled: layoutEnabled,
+    objects: layoutObjects,
+    selectedObjectId,
+    showGrid,
+    showRulers,
+    gridStepMm,
+    snapEnabled,
+    onLayoutObjectSelect,
+    onLayoutObjectChange,
+    onLayoutFilesDrop,
   };
   return (
     <div
@@ -317,12 +341,15 @@ export function PdfViewer({
       {error ? (
         <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
       ) : displayMode === 'single' ? (
-        <PdfViewerPage
-          {...pageProps}
-          pageNumber={pageNum}
-          highlight={activeMatch?.page === pageNum}
-          selectionHighlightRects={selectionForPage(pageNum)}
-        />
+        <div className="scrollbar-thin flex min-h-0 flex-1 justify-center overflow-auto rounded-lg bg-slate-100 p-2">
+          <PdfViewerPage
+            key={pageNum}
+            {...pageProps}
+            pageNumber={pageNum}
+            highlight={activeMatch?.page === pageNum}
+            selectionHighlightRects={selectionForPage(pageNum)}
+          />
+        </div>
       ) : (
         <div
           ref={scrollRef}

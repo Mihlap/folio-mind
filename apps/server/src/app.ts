@@ -27,6 +27,7 @@ export type BuildAppOptions = {
 export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
     logger: options.env.NODE_ENV !== 'test',
+    bodyLimit: 16 * 1024 * 1024,
   });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);

@@ -44,6 +44,9 @@ import {
 } from '../../lib/documents/acceptedEditOverlays.js';
 import { AcceptedEditsModal } from '../../components/documents/AcceptedEditsModal.js';
 import type { EditTextInjection } from '../../components/documents/useDocumentAnnotationsPanel.js';
+import { useLayoutEditor } from '../../hooks/useLayoutEditor.js';
+import { formatLayoutAddSummary } from '../../lib/layout/layoutAddSummary.js';
+import type { ToolSectionId } from '../../components/ui/ToolAccordionSection.js';
 const INITIAL_THUMB_PAGES = 15;
 const RIGHT_PANEL = {
   defaultWidth: 360,
@@ -79,6 +82,8 @@ export function DocumentPage() {
   const [deleteAnnotation] = useDeleteAnnotationMutation();
   const [updateAnnotation, { isLoading: updatingAnnotation }] = useUpdateAnnotationMutation();
   const [rightTab, setRightTab] = useState<DocumentRightTab>('report');
+  const [toolsFocusSection, setToolsFocusSection] = useState<ToolSectionId | null>(null);
+  const [layoutAddNotice, setLayoutAddNotice] = useState<string | null>(null);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
   const workspaceRowRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLElement>(null);
@@ -89,6 +94,12 @@ export function DocumentPage() {
   const versions = useMemo(() => doc?.versions ?? [], [doc?.versions]);
   const latest = versions[0];
   const activeVersion = versions.find((v) => v.id === selectedVersionId) ?? latest;
+  const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
+  const layout = useLayoutEditor({
+    versionId: activeVersion?.id,
+    viewerPage,
+    pageCount: activeVersion?.pageCount ?? 0,
+  });
   const {
     pdfViewMode,
     pdfUrl,
@@ -196,6 +207,53 @@ export function DocumentPage() {
     setFocusedAnnotationId(annotationId ?? null);
     setPageNavTick((t) => t + 1);
   }, []);
+  const handleLayoutAddImages = useCallback(
+    async (
+      files: File[],
+      targetPage: number,
+      options?: { distributeAcrossPages?: boolean },
+    ) => {
+      if (!versionReady || files.length === 0) return;
+      if (!layout.enabled) layout.setEnabled(true);
+      setRightTab('tools');
+      setToolsFocusSection('layout');
+      try {
+        const created =
+          files.length === 1
+            ? [await layout.addImageFromFile(files[0]!, targetPage)]
+            : await layout.addImagesFromFiles(files, {
+                startPage: targetPage,
+                distributeAcrossPages: options?.distributeAcrossPages ?? false,
+              });
+        const focusPage = created[0]!.page;
+        handleGoToPage(focusPage);
+        setLayoutAddNotice(formatLayoutAddSummary(created));
+      } catch (err) {
+        setLayoutAddNotice(null);
+        throw err;
+      }
+    },
+    [handleGoToPage, layout, versionReady],
+  );
+  const handleLayoutFilesDrop = useCallback(
+    async (files: File[], targetPage: number) => {
+      try {
+        await handleLayoutAddImages(files, targetPage, { distributeAcrossPages: false });
+      } catch (err) {
+        setLayoutAddNotice(err instanceof Error ? err.message : 'Не удалось добавить изображения');
+      }
+    },
+    [handleLayoutAddImages],
+  );
+  const handlePageLayoutOpen = useCallback(
+    (page: number) => {
+      if (!layout.enabled) layout.setEnabled(true);
+      setRightTab('tools');
+      setToolsFocusSection('layout');
+      handleGoToPage(page);
+    },
+    [handleGoToPage, layout],
+  );
   const openAcceptedEditsModal = useCallback(
     (page: number, annotationId?: string, pageFilter?: number | null) => {
       handleGoToPage(page, annotationId);
@@ -291,9 +349,11 @@ export function DocumentPage() {
   }
   const openCompareTools = useCallback(() => {
     setRightTab('tools');
+    setToolsFocusSection('diff');
     rightPanel.expand();
     setMobileSheet('panel');
   }, [rightPanel]);
+  const clearToolsFocusSection = useCallback(() => setToolsFocusSection(null), []);
   usePanelToggleCenterY(
     workspaceRowRef,
     rightPanelRef,
@@ -310,7 +370,6 @@ export function DocumentPage() {
     pdfReadyForUi,
     previews?.pages?.length ?? 0,
   );
-  const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
   const confidenceLevel = activeVersion?.confidenceLevel;
   const showConfidenceNotice =
     confidenceLevel === 'red' || confidenceLevel === 'yellow';
@@ -439,6 +498,15 @@ export function DocumentPage() {
                       onPrevMatch={() => dispatch(prevSearchMatch())}
                       onNextMatch={() => dispatch(nextSearchMatch())}
                       onClearSearch={() => dispatch(clearSearch())}
+                      layoutMode={layout.enabled}
+                      onLayoutModeChange={(enabled) => {
+                        layout.setEnabled(enabled);
+                        if (enabled) {
+                          setRightTab('tools');
+                          setToolsFocusSection('layout');
+                          rightPanel.expand();
+                        }
+                      }}
                     />
                   )}
                 </div>
@@ -513,8 +581,20 @@ export function DocumentPage() {
                           handleGoToPage(page);
                         }}
                         pageNavTick={pageNavTick}
-                        enableTextSelection={versionReady && pdfReadyForUi}
+                        enableTextSelection={versionReady && pdfReadyForUi && !layout.enabled}
                         onTextQuoteForEdit={handleTextQuoteForEdit}
+                        enabled={layout.enabled}
+                        objects={layout.objects}
+                        selectedObjectId={layout.selectedId}
+                        showGrid={layout.showGrid}
+                        showRulers={layout.showRulers}
+                        gridStepMm={layout.gridStepMm}
+                        snapEnabled={layout.snapEnabled}
+                        onLayoutObjectSelect={layout.setSelectedId}
+                        onLayoutObjectChange={layout.updateObjectRect}
+                        onLayoutFilesDrop={handleLayoutFilesDrop}
+                        pageLayoutCountByPage={layout.enabled ? layout.objectCountByPage : {}}
+                        onPageLayoutOpen={handlePageLayoutOpen}
                       />
                     </div>
                   )}
@@ -547,6 +627,13 @@ export function DocumentPage() {
             else setAcceptedEditsModalOpen(true);
           }}
           editTextInjection={editTextInjection}
+          toolsFocusSection={toolsFocusSection}
+          onToolsFocusSectionHandled={clearToolsFocusSection}
+          layout={layout}
+          layoutAddNotice={layoutAddNotice}
+          onAddLayoutImages={(files, options) =>
+            handleLayoutAddImages(files, viewerPage, options)
+          }
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -664,6 +751,13 @@ export function DocumentPage() {
             else setAcceptedEditsModalOpen(true);
           }}
           editTextInjection={editTextInjection}
+          toolsFocusSection={toolsFocusSection}
+          onToolsFocusSectionHandled={clearToolsFocusSection}
+          layout={layout}
+          layoutAddNotice={layoutAddNotice}
+          onAddLayoutImages={(files, options) =>
+            handleLayoutAddImages(files, viewerPage, options)
+          }
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

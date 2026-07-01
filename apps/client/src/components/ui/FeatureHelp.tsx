@@ -75,6 +75,8 @@ export function FeatureHelpButton({ title, children, corner = false }: FeatureHe
 export const reportActionBtnBase =
   'inline-flex min-h-8 min-w-0 max-w-full cursor-pointer items-center justify-center rounded-md px-3 py-1.5 text-xs font-medium leading-snug transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-[14rem]';
 export const reportActionBtnPrimary = `${reportActionBtnBase} bg-folio-600 text-white hover:bg-folio-700`;
+/** Как primary, но без ограничения ширины — для парных кнопок в колонке. */
+export const reportActionBtnPrimaryStretch = reportActionBtnPrimary.replace(' sm:max-w-[14rem]', '');
 export const reportActionBtnSecondary = `${reportActionBtnBase} border border-slate-200 bg-white text-slate-700 hover:border-folio-300 hover:bg-slate-50`;
 export const reportActionBtnHighlight = `${reportActionBtnBase} border border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100`;
 export const reportActionBtnSoft = `${reportActionBtnBase} border border-folio-200 bg-folio-50 text-folio-800 hover:bg-folio-100`;
@@ -88,18 +90,36 @@ type FeatureHelpActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   helpTitle: string;
   helpContent: ReactNode;
   buttonClassName?: string;
+  /** Кнопка на всю ширину строки (иконка «i» справа в той же строке). */
+  stretch?: boolean;
 };
 export function FeatureHelpActionButton({
   helpTitle,
   helpContent,
   buttonClassName = reportActionBtnPrimary,
+  stretch = false,
   children,
   className,
   ...props
 }: FeatureHelpActionButtonProps) {
   return (
-    <div className={`flex w-full min-w-0 max-w-full items-center gap-2 ${className ?? ''}`}>
-      <button type="button" className={`min-w-0 flex-1 sm:flex-none ${buttonClassName}`} {...props}>
+    <div
+      className={[
+        'flex min-w-0 max-w-full flex-nowrap items-center gap-1.5',
+        stretch ? 'w-full' : 'w-full',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <button
+        type="button"
+        className={[
+          stretch ? 'min-w-0 flex-1' : 'min-w-0 flex-1 sm:flex-none',
+          buttonClassName,
+        ].join(' ')}
+        {...props}
+      >
         {children}
       </button>
       <FeatureHelpButton title={helpTitle} corner>

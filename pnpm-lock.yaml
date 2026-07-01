@@ -382,10 +382,16 @@ importers:
 
   packages/ui:
     dependencies:
+      '@folio-mind/pdf-contracts':
+        specifier: workspace:*
+        version: link:../pdf-contracts
       pdfjs-dist:
         specifier: ^4.10.38
         version: 4.10.38
     devDependencies:
+      '@types/node':
+        specifier: ^22.13.10
+        version: 22.19.19
       '@types/react':
         specifier: ^19.0.11
         version: 19.2.15

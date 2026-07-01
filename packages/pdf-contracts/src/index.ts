@@ -73,6 +73,27 @@ export {
   type OptimizePreset,
   type OptimizePresetInfo,
 } from './optimize-preset.js';
+export {
+  estimateOptimizeSize,
+  formatFileSize,
+  formatOptimizeSizeRange,
+  type OptimizeSizeEstimate,
+} from './optimize-size-estimate.js';
+export {
+  clampLayoutRect,
+  layoutRectToPx,
+  layoutStepFraction,
+  pdfPointsToMm,
+  pxDeltaToLayoutRect,
+  snapLayoutRect,
+  computeLayoutImageDrawParams,
+  normalizeLayoutRotation,
+  rotateLayoutObject,
+  PDF_POINT_TO_MM,
+  type LayoutImageObject,
+  type LayoutRect,
+  type LayoutImageDrawParams,
+} from './layout-editor.js';
 export { UPLOAD_NETWORK_ERROR_MESSAGE } from './user-messages.js';
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';

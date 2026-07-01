@@ -40,6 +40,49 @@ export const mergeVersionsSchema = z.object({
 export const optimizePdfSchema = z.object({
   preset: z.enum(OPTIMIZE_PRESETS),
 });
+
+const layoutRectSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  width: z.number().min(0.01).max(1),
+  height: z.number().min(0.01).max(1),
+});
+
+const layoutImageObjectSchema = z.object({
+  id: z.string().min(1),
+  page: z.number().int().min(1).max(500),
+  rect: layoutRectSchema,
+  imageSrc: z
+    .string()
+    .min(22)
+    .refine(
+      (value) =>
+        value.startsWith('data:image/png;base64,') ||
+        value.startsWith('data:image/jpeg;base64,') ||
+        value.startsWith('data:image/jpg;base64,'),
+      'Изображения: только PNG или JPEG (data URL)',
+    ),
+  rotation: z.number().default(0),
+});
+
+export const applyLayoutPdfSchema = z
+  .object({
+    objects: z.array(layoutImageObjectSchema).min(1).max(30),
+  })
+  .superRefine((body, ctx) => {
+    const totalBytes = body.objects.reduce((sum, object) => {
+      const base64 = object.imageSrc.split(',')[1] ?? '';
+      return sum + Math.ceil((base64.length * 3) / 4);
+    }, 0);
+    const maxBytes = 12 * 1024 * 1024;
+    if (totalBytes > maxBytes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Суммарный размер изображений превышает ${Math.round(maxBytes / (1024 * 1024))} МБ`,
+        path: ['objects'],
+      });
+    }
+  });
 const textDiffLineSchema = z.object({
   type: z.enum(['equal', 'insert', 'delete']),
   text: z.string(),
