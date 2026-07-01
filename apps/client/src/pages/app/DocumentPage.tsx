@@ -73,6 +73,7 @@ export function DocumentPage() {
   });
   const [selectedVersionId, setSelectedVersionId] = useState<string | undefined>();
   const [viewerPage, setViewerPage] = useState(1);
+  const [pdfNumPages, setPdfNumPages] = useState(0);
   const [focusedAnnotationId, setFocusedAnnotationId] = useState<string | null>(null);
   const [acceptedEditsModalOpen, setAcceptedEditsModalOpen] = useState(false);
   const [editsModalPageFilter, setEditsModalPageFilter] = useState<number | null>(null);
@@ -95,10 +96,12 @@ export function DocumentPage() {
   const latest = versions[0];
   const activeVersion = versions.find((v) => v.id === selectedVersionId) ?? latest;
   const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
+  const layoutPageCount =
+    pdfNumPages > 0 ? pdfNumPages : (activeVersion?.pageCount ?? 0);
   const layout = useLayoutEditor({
     versionId: activeVersion?.id,
     viewerPage,
-    pageCount: activeVersion?.pageCount ?? 0,
+    pageCount: layoutPageCount,
   });
   const {
     pdfViewMode,
@@ -173,12 +176,18 @@ export function DocumentPage() {
   ]);
   useEffect(() => {
     setViewerPage(1);
+    setPdfNumPages(0);
     setFocusedAnnotationId(null);
     setAcceptedEditsModalOpen(false);
     setEditTextInjection(null);
     dispatch(resetZoom());
     dispatch(clearSearch());
   }, [activeVersion?.id, dispatch]);
+
+  useEffect(() => {
+    if (pdfNumPages <= 0) return;
+    setViewerPage((page) => Math.min(Math.max(1, page), pdfNumPages));
+  }, [pdfNumPages]);
   const { data: annotationsData } = useListAnnotationsQuery(
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     { skip: !id || !activeVersion?.id },
@@ -207,24 +216,52 @@ export function DocumentPage() {
     setFocusedAnnotationId(annotationId ?? null);
     setPageNavTick((t) => t + 1);
   }, []);
+  const layoutActionsRef = useRef({
+    enabled: layout.enabled,
+    setEnabled: layout.setEnabled,
+    distributeAcrossPages: layout.distributeAcrossPages,
+    addImageFromFile: layout.addImageFromFile,
+    addImagesFromFiles: layout.addImagesFromFiles,
+  });
+  layoutActionsRef.current = {
+    enabled: layout.enabled,
+    setEnabled: layout.setEnabled,
+    distributeAcrossPages: layout.distributeAcrossPages,
+    addImageFromFile: layout.addImageFromFile,
+    addImagesFromFiles: layout.addImagesFromFiles,
+  };
+
   const handleLayoutAddImages = useCallback(
     async (
       files: File[],
-      targetPage: number,
-      options?: { distributeAcrossPages?: boolean },
+      options?: { distributeAcrossPages?: boolean; startPage?: number },
     ) => {
-      if (!versionReady || files.length === 0) return;
-      if (!layout.enabled) layout.setEnabled(true);
+      if (!versionReady) {
+        throw new Error('Версия документа ещё не готова для макета');
+      }
+      if (files.length === 0) {
+        throw new Error(
+          'Файлы не выбраны. Если выбирали несколько — закройте диалог кнопкой «Открыть», не «Отмена».',
+        );
+      }
+      const actions = layoutActionsRef.current;
+      if (!actions.enabled) actions.setEnabled(true);
       setRightTab('tools');
       setToolsFocusSection('layout');
+      const rawPage = options?.startPage ?? viewerPage;
+      const targetPage =
+        layoutPageCount > 0
+          ? Math.min(Math.max(1, rawPage), layoutPageCount)
+          : Math.max(1, rawPage);
+      const distribute = options?.distributeAcrossPages ?? false;
       try {
         const created =
-          files.length === 1
-            ? [await layout.addImageFromFile(files[0]!, targetPage)]
-            : await layout.addImagesFromFiles(files, {
+          distribute || files.length > 1
+            ? await actions.addImagesFromFiles(files, {
                 startPage: targetPage,
-                distributeAcrossPages: options?.distributeAcrossPages ?? false,
-              });
+                distributeAcrossPages: distribute,
+              })
+            : [await actions.addImageFromFile(files[0]!, targetPage)];
         const focusPage = created[0]!.page;
         handleGoToPage(focusPage);
         setLayoutAddNotice(formatLayoutAddSummary(created));
@@ -233,12 +270,15 @@ export function DocumentPage() {
         throw err;
       }
     },
-    [handleGoToPage, layout, versionReady],
+    [handleGoToPage, layoutPageCount, versionReady, viewerPage],
   );
   const handleLayoutFilesDrop = useCallback(
     async (files: File[], targetPage: number) => {
       try {
-        await handleLayoutAddImages(files, targetPage, { distributeAcrossPages: false });
+        await handleLayoutAddImages(files, {
+          distributeAcrossPages: layoutActionsRef.current.distributeAcrossPages,
+          startPage: targetPage,
+        });
       } catch (err) {
         setLayoutAddNotice(err instanceof Error ? err.message : 'Не удалось добавить изображения');
       }
@@ -563,6 +603,7 @@ export function DocumentPage() {
                         sourceKey={pdfSourceKey ?? undefined}
                         onDocumentLoad={onPdfDocumentLoad}
                         onDocumentLoadError={onPdfDocumentLoadError}
+                        onDocumentPagesLoad={setPdfNumPages}
                         page={viewerPage}
                         onPageChange={setViewerPage}
                         displayMode={viewer.displayMode}
@@ -593,7 +634,7 @@ export function DocumentPage() {
                         onLayoutObjectSelect={layout.setSelectedId}
                         onLayoutObjectChange={layout.updateObjectRect}
                         onLayoutFilesDrop={handleLayoutFilesDrop}
-                        pageLayoutCountByPage={layout.enabled ? layout.objectCountByPage : {}}
+                        pageLayoutCountByPage={layout.objectCountByPage}
                         onPageLayoutOpen={handlePageLayoutOpen}
                       />
                     </div>
@@ -631,9 +672,8 @@ export function DocumentPage() {
           onToolsFocusSectionHandled={clearToolsFocusSection}
           layout={layout}
           layoutAddNotice={layoutAddNotice}
-          onAddLayoutImages={(files, options) =>
-            handleLayoutAddImages(files, viewerPage, options)
-          }
+          layoutPageCount={layoutPageCount}
+          onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -755,9 +795,8 @@ export function DocumentPage() {
           onToolsFocusSectionHandled={clearToolsFocusSection}
           layout={layout}
           layoutAddNotice={layoutAddNotice}
-          onAddLayoutImages={(files, options) =>
-            handleLayoutAddImages(files, viewerPage, options)
-          }
+          layoutPageCount={layoutPageCount}
+          onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

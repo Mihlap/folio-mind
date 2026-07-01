@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { searchPdfText, type PdfSearchMatch } from './pdf-search.js';
 import { PdfTextSelectionPrompt } from './PdfTextSelectionPrompt.js';
@@ -27,6 +27,7 @@ type PdfViewerProps = {
   httpHeaders?: Record<string, string>;
   onDocumentLoad?: () => void;
   onDocumentLoadError?: (message: string) => void;
+  onDocumentPagesLoad?: (numPages: number) => void;
   className?: string;
   page?: number;
   onPageChange?: (page: number) => void;
@@ -53,6 +54,7 @@ export function PdfViewer({
   httpHeaders,
   onDocumentLoad,
   onDocumentLoadError,
+  onDocumentPagesLoad,
   className,
   page,
   onPageChange,
@@ -179,6 +181,7 @@ export function PdfViewer({
         }
         pdfRef.current = pdf;
         setNumPages(pdf.numPages);
+        onDocumentPagesLoad?.(pdf.numPages);
         setPdfReady(true);
         onDocumentLoad?.();
       })
@@ -197,7 +200,7 @@ export function PdfViewer({
         pdfRef.current = null;
       }
     };
-  }, [url, pdfData, httpHeaders, onPageChange, onSearchMatches, onDocumentLoad, onDocumentLoadError]);
+  }, [url, pdfData, httpHeaders, onPageChange, onSearchMatches, onDocumentLoad, onDocumentLoadError, onDocumentPagesLoad]);
   useEffect(() => {
     const pdf = pdfRef.current;
     if (!pdf || !pdfReady) return;
@@ -278,6 +281,18 @@ export function PdfViewer({
     if (selectionPrompt?.page === pageNumber) return selectionPrompt.highlightRects;
     return undefined;
   };
+  const layoutObjectPages = useMemo(() => {
+    const pages = new Set<number>();
+    for (const object of layoutObjects) pages.add(Number(object.page));
+    return pages;
+  }, [layoutObjects]);
+  const shouldRenderPage = useCallback(
+    (pageNumber: number) =>
+      visiblePages.has(pageNumber) ||
+      Math.abs(pageNumber - pageNum) <= 2 ||
+      layoutObjectPages.has(pageNumber),
+    [layoutObjectPages, pageNum, visiblePages],
+  );
   const pageProps = {
     pdf: pdfRef.current,
     containerWidth,
@@ -365,7 +380,7 @@ export function PdfViewer({
               data-page={pageNumber}
               className="mb-4 flex justify-center last:mb-0"
             >
-              {visiblePages.has(pageNumber) || Math.abs(pageNumber - pageNum) <= 2 ? (
+              {shouldRenderPage(pageNumber) ? (
                 <PdfViewerPage
                   {...pageProps}
                   pageNumber={pageNumber}

@@ -44,7 +44,7 @@ export function PdfLayoutObjectsOverlay({
   const dragRef = useRef<DragState | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const pageObjects = objects.filter((o) => o.page === pageNumber);
+  const pageObjects = objects.filter((o) => Number(o.page) === pageNumber);
 
   const finishPointer = useCallback(() => {
     dragRef.current = null;

@@ -90,6 +90,7 @@ export function PdfViewerPage({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const renderGenRef = useRef(0);
   const [pageError, setPageError] = useState<string | null>(null);
   const [pageMetrics, setPageMetrics] = useState(EMPTY_METRICS);
   const [dropActive, setDropActive] = useState(false);
@@ -103,21 +104,19 @@ export function PdfViewerPage({
   }
 
   useEffect(() => {
-    setPageMetrics(EMPTY_METRICS);
-  }, [pageNumber]);
-
-  useEffect(() => {
     const canvas = canvasRef.current;
     const textLayer = textLayerRef.current;
     if (!canvas || !textLayer || !pdf || !pdfReady) return;
+    const generation = ++renderGenRef.current;
     let cancelled = false;
     let renderTask: pdfjs.RenderTask | null = null;
     setPageError(null);
+    setPageMetrics(EMPTY_METRICS);
     textLayer.replaceChildren();
     void (async () => {
       try {
         const page = await pdf.getPage(pageNumber);
-        if (cancelled) return;
+        if (cancelled || generation !== renderGenRef.current) return;
         const baseViewport = page.getViewport({ scale: 1 });
         const cssScale = computeScale(baseViewport.width);
         const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -132,6 +131,7 @@ export function PdfViewerPage({
         canvas.style.height = `${heightPx}px`;
         textLayer.style.width = canvas.style.width;
         textLayer.style.height = canvas.style.height;
+        if (generation !== renderGenRef.current) return;
         setPageMetrics({
           widthPx,
           heightPx,
@@ -270,7 +270,7 @@ export function PdfViewerPage({
       {(acceptedEditCount > 0 || layoutObjectCount > 0 || markersOnPage.length > 0) && (
         <>
           <div className="pointer-events-none absolute top-2 right-2 z-10 flex flex-col items-end gap-1.5">
-            {layoutObjectCount > 0 && onPageLayoutOpen && layoutEnabled && (
+            {layoutObjectCount > 0 && onPageLayoutOpen && (
               <PdfLayoutObjectsHint
                 count={layoutObjectCount}
                 onClick={() => onPageLayoutOpen(pageNumber)}
@@ -333,7 +333,8 @@ export function PdfViewerPage({
 
   return (
     <PdfLayoutPageShell
-      enabled={layoutEnabled && layoutMetricsReady}
+      enabled={layoutEnabled}
+      metricsReady={layoutMetricsReady}
       pageWidthPx={pageMetrics.widthPx}
       pageHeightPx={pageMetrics.heightPx}
       pageWidthPt={pageMetrics.widthPt}

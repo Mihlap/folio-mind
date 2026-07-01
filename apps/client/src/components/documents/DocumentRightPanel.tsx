@@ -26,9 +26,10 @@ type Props = {
   onToolsFocusSectionHandled?: () => void;
   layout?: LayoutEditorState;
   layoutAddNotice?: string | null;
+  layoutPageCount?: number;
   onAddLayoutImages?: (
     files: File[],
-    options?: { distributeAcrossPages?: boolean },
+    options?: { distributeAcrossPages?: boolean; startPage?: number },
   ) => Promise<void>;
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -66,6 +67,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   onToolsFocusSectionHandled,
   layout,
   layoutAddNotice = null,
+  layoutPageCount = 0,
   onAddLayoutImages,
   collapsed,
   onToggleCollapsed,
@@ -182,6 +184,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             onFocusSectionHandled={onToolsFocusSectionHandled}
             layout={layout}
             layoutAddNotice={layoutAddNotice}
+            layoutPageCount={layoutPageCount}
             onAddLayoutImages={onAddLayoutImages}
           />
         </div>

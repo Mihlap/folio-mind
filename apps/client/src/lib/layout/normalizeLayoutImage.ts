@@ -76,14 +76,23 @@ async function resizeDataUrlForUpload(dataUrl: string): Promise<string> {
     : canvas.toDataURL('image/jpeg', JPEG_QUALITY);
 }
 
-/** PNG/JPEG — как есть; WebP — конвертация в PNG для pdf-lib. */
 export async function normalizeLayoutImageSrcForPdf(imageSrc: string): Promise<string> {
   if (isPdfReadyDataUrl(imageSrc)) return imageSrc;
-  if (isWebpDataUrl(imageSrc)) return convertDataUrlToPngViaCanvas(imageSrc);
+  if (
+    isWebpDataUrl(imageSrc) ||
+    imageSrc.trim().toLowerCase().startsWith('data:image/gif') ||
+    imageSrc.trim().toLowerCase().startsWith('data:image/bmp')
+  ) {
+    return convertDataUrlToPngViaCanvas(imageSrc);
+  }
   throw new Error('Поддерживаются PNG, JPEG и WebP');
 }
 
-/** Сжатие перед отправкой на сервер (лимит тела запроса и очереди). */
+export async function compressLayoutImageSrcForDraft(imageSrc: string): Promise<string> {
+  const normalized = await normalizeLayoutImageSrcForPdf(imageSrc);
+  return resizeDataUrlForUpload(normalized);
+}
+
 export async function compressLayoutImageSrcForUpload(imageSrc: string): Promise<string> {
   const normalized = await normalizeLayoutImageSrcForPdf(imageSrc);
   return resizeDataUrlForUpload(normalized);

@@ -21,7 +21,7 @@ type Props = {
   addNotice?: string | null;
   onAddImages?: (
     files: File[],
-    options?: { distributeAcrossPages?: boolean },
+    options?: { distributeAcrossPages?: boolean; startPage?: number },
   ) => Promise<void>;
 };
 
@@ -60,12 +60,12 @@ export function DocumentLayoutPanel({
   onAddImages,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const insertStartPageRef = useRef(viewerPage);
   const [error, setError] = useState<string | null>(null);
   const [statusHint, setStatusHint] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [operationJobId, setOperationJobId] = useState<string | null>(null);
   const [pollOperation, setPollOperation] = useState(false);
-  const [distributeAcrossPages, setDistributeAcrossPages] = useState(false);
   const [targetVersionId, setTargetVersionId] = useState<string | null>(null);
 
   const pagesWithObjects = useMemo(() => {
@@ -79,6 +79,10 @@ export function DocumentLayoutPanel({
     skip: !operationJobId,
     pollingInterval: pollOperation ? 2000 : 0,
   });
+
+  useEffect(() => {
+    insertStartPageRef.current = viewerPage;
+  }, [viewerPage]);
 
   useEffect(() => {
     if (!operationJobId || !operationJob) return;
@@ -109,13 +113,23 @@ export function DocumentLayoutPanel({
   }, [layout, onSelectVersion, operationJob, operationJobId, targetVersionId]);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files;
+    const selected = Array.from(event.target.files ?? []);
     event.target.value = '';
-    if (!files || files.length === 0 || !onAddImages) return;
+    if (selected.length === 0) {
+      setError('Не удалось прочитать выбранные файлы. Попробуйте снова.');
+      return;
+    }
+    if (!onAddImages) {
+      setError('Добавление изображений недоступно. Обновите страницу.');
+      return;
+    }
     setError(null);
     setAdding(true);
     try {
-      await onAddImages(Array.from(files), { distributeAcrossPages });
+      await onAddImages(selected, {
+        distributeAcrossPages: layout.distributeAcrossPages,
+        startPage: insertStartPageRef.current,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось добавить изображение');
     } finally {
@@ -163,18 +177,20 @@ export function DocumentLayoutPanel({
     <div className="space-y-3">
       <p className="text-xs text-slate-600">
         Несколько файлов по умолчанию попадают на <strong>стр. {viewerPage}</strong> (слегка
-        смещены — разведите по листу). Перетащите файлы на нужный лист в PDF. Включите «Режим
-        макета», чтобы видеть сетку и картинки.
+        смещены — разведите по листу). Перетащите файлы на лист, с которого начнётся вставка.
+        Включите «По одной на каждую следующую страницу» — тогда и кнопка, и перетаскивание
+        распределят файлы по стр. {viewerPage}, {viewerPage + 1}…
       </p>
 
       <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
         <input
           type="checkbox"
-          checked={distributeAcrossPages}
-          onChange={(e) => setDistributeAcrossPages(e.target.checked)}
+          checked={layout.distributeAcrossPages}
+          onChange={(e) => layout.setDistributeAcrossPages(e.target.checked)}
           className="rounded border-slate-300"
         />
-        По одной картинке на каждую следующую страницу (стр. {viewerPage}, {viewerPage + 1}…)
+        По одной картинке на каждую следующую страницу (стр. {viewerPage}
+        {pageCount > 0 ? `–${Math.min(viewerPage + 2, pageCount)}` : `, ${viewerPage + 1}…`})
       </label>
 
       <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
@@ -269,7 +285,10 @@ export function DocumentLayoutPanel({
           helpTitle="Добавить изображение"
           stretch
           disabled={!versionReady || adding || savePending}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            insertStartPageRef.current = viewerPage;
+            fileInputRef.current?.click();
+          }}
           buttonClassName={reportActionBtnPrimaryStretch}
           helpContent={
             <p>

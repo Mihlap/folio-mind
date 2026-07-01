@@ -5,6 +5,7 @@ import { getLayoutRulerOffset } from './layout-utils.js';
 
 export type PdfLayoutPageShellProps = {
   enabled: boolean;
+  metricsReady: boolean;
   pageWidthPx: number;
   pageHeightPx: number;
   pageWidthPt: number;
@@ -16,6 +17,7 @@ export type PdfLayoutPageShellProps = {
 
 export function PdfLayoutPageShell({
   enabled,
+  metricsReady,
   pageWidthPx,
   pageHeightPx,
   pageWidthPt,
@@ -24,20 +26,21 @@ export function PdfLayoutPageShell({
   gridStepMm,
   children,
 }: PdfLayoutPageShellProps) {
-  if (!enabled || pageWidthPx <= 0 || pageHeightPx <= 0) {
+  if (!enabled) {
     return <>{children}</>;
   }
 
   const rulerOffset = showRulers ? getLayoutRulerOffset() : 0;
   const pageWidthMm = pdfPointsToMm(pageWidthPt);
   const pageHeightMm = pdfPointsToMm(pageHeightPt);
+  const rulersReady = metricsReady && pageWidthPx > 0 && pageHeightPx > 0;
 
   return (
     <div
       className="relative inline-block"
-      style={{ marginLeft: rulerOffset, marginTop: rulerOffset }}
+      style={showRulers ? { paddingLeft: rulerOffset, paddingTop: rulerOffset } : undefined}
     >
-      {showRulers && (
+      {showRulers && rulersReady && (
         <PdfLayoutRulers
           pageWidthPx={pageWidthPx}
           pageHeightPx={pageHeightPx}
@@ -46,12 +49,7 @@ export function PdfLayoutPageShell({
           pageHeightMm={pageHeightMm}
         />
       )}
-      <div
-        className="relative"
-        style={showRulers ? { marginLeft: rulerOffset, marginTop: rulerOffset } : undefined}
-      >
-        {children}
-      </div>
+      <div className="relative">{children}</div>
     </div>
   );
 }

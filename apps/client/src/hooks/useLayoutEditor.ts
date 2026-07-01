@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   layoutStepFraction,
   pdfPointsToMm,
@@ -7,7 +7,7 @@ import {
   type LayoutRect,
 } from '@folio-mind/store';
 import { filterImageFiles, isImageFile } from '../lib/layout/isImageFile.js';
-import { normalizeLayoutImageSrcForPdf } from '../lib/layout/normalizeLayoutImage.js';
+import { compressLayoutImageSrcForDraft } from '../lib/layout/normalizeLayoutImage.js';
 
 const STORAGE_PREFIX = 'folio-layout-draft:';
 
@@ -32,6 +32,12 @@ function loadImageAspect(dataUrl: string): Promise<number> {
   });
 }
 
+function clampPage(page: number, maxPage: number): number {
+  const normalized = Math.max(1, Math.floor(page));
+  if (maxPage > 0) return Math.min(normalized, maxPage);
+  return normalized;
+}
+
 type Options = {
   versionId: string | undefined;
   viewerPage: number;
@@ -54,6 +60,8 @@ export function useLayoutEditor({
   const [showRulers, setShowRulers] = useState(true);
   const [gridStepMm, setGridStepMm] = useState(10);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [distributeAcrossPages, setDistributeAcrossPages] = useState(false);
+  const skipSaveRef = useRef(true);
 
   const pageWidthMm = pdfPointsToMm(pageWidthPt);
   const snapStep = snapEnabled ? layoutStepFraction(gridStepMm, pageWidthMm) : 0;
@@ -64,6 +72,7 @@ export function useLayoutEditor({
       setSelectedId(null);
       return;
     }
+    skipSaveRef.current = true;
     try {
       const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${versionId}`);
       setObjects(raw ? (JSON.parse(raw) as LayoutImageObject[]) : []);
@@ -74,6 +83,10 @@ export function useLayoutEditor({
   }, [versionId]);
 
   useEffect(() => {
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
     if (!versionId) return;
     try {
       sessionStorage.setItem(`${STORAGE_PREFIX}${versionId}`, JSON.stringify(objects));
@@ -84,11 +97,12 @@ export function useLayoutEditor({
 
   const addImageFromFile = useCallback(
     async (file: File, page = viewerPage, stackIndex?: number) => {
+      const targetPage = clampPage(page, pageCount);
       const index =
-        stackIndex ?? objects.filter((item) => item.page === page).length;
+        stackIndex ?? objects.filter((item) => Number(item.page) === targetPage).length;
       const created = await buildLayoutImageObject(
         file,
-        page,
+        targetPage,
         pageWidthPt,
         pageHeightPt,
         index,
@@ -97,7 +111,7 @@ export function useLayoutEditor({
       setSelectedId(created.id);
       return created;
     },
-    [objects, pageHeightPt, pageWidthPt, viewerPage],
+    [objects, pageCount, pageHeightPt, pageWidthPt, viewerPage],
   );
 
   const addImagesFromFiles = useCallback(
@@ -109,13 +123,19 @@ export function useLayoutEditor({
       if (list.length === 0) {
         throw new Error('Выберите один или несколько файлов изображений (PNG, JPG, WebP)');
       }
-      const startPage = options.startPage ?? viewerPage;
+      const maxPage = pageCount > 0 ? pageCount : 0;
+      const startPage = clampPage(options.startPage ?? viewerPage, maxPage);
       const distribute = options.distributeAcrossPages ?? false;
       const created: LayoutImageObject[] = [];
       let page = startPage;
-      let stackIndex = objects.filter((item) => item.page === startPage).length;
+      const stackByPage = new Map<number, number>();
+      for (const item of objects) {
+        const itemPage = Number(item.page);
+        stackByPage.set(itemPage, (stackByPage.get(itemPage) ?? 0) + 1);
+      }
+      let stackIndex = stackByPage.get(startPage) ?? 0;
       for (const file of list) {
-        if (distribute && pageCount > 0 && page > pageCount) break;
+        if (distribute && maxPage > 0 && page > maxPage) break;
         const targetPage = distribute ? page : startPage;
         const index = distribute ? 0 : stackIndex;
         created.push(
@@ -128,7 +148,11 @@ export function useLayoutEditor({
         }
       }
       if (created.length === 0) {
-        throw new Error('Недостаточно страниц для всех выбранных изображений');
+        throw new Error(
+          maxPage > 0 && startPage > maxPage
+            ? `Текущая страница (${startPage}) выходит за пределы документа (${maxPage} стр.)`
+            : 'Недостаточно страниц для всех выбранных изображений',
+        );
       }
       setObjects((prev) => [...prev, ...created]);
       const last = created[created.length - 1]!;
@@ -160,11 +184,12 @@ export function useLayoutEditor({
     setSelectedId(null);
   }, [selectedId]);
 
-  const pageObjectCount = objects.filter((item) => item.page === viewerPage).length;
+  const pageObjectCount = objects.filter((item) => Number(item.page) === viewerPage).length;
   const objectCountByPage = useMemo(() => {
     const counts: Record<number, number> = {};
     for (const item of objects) {
-      counts[item.page] = (counts[item.page] ?? 0) + 1;
+      const page = Number(item.page);
+      counts[page] = (counts[page] ?? 0) + 1;
     }
     return counts;
   }, [objects]);
@@ -183,6 +208,8 @@ export function useLayoutEditor({
     setGridStepMm,
     snapEnabled,
     setSnapEnabled,
+    distributeAcrossPages,
+    setDistributeAcrossPages,
     snapStep,
     addImageFromFile,
     addImagesFromFiles,
@@ -208,7 +235,7 @@ async function buildLayoutImageObject(
     throw new Error('Поддерживаются только файлы изображений (PNG, JPG, WebP)');
   }
   const rawDataUrl = await readFileAsDataUrl(file);
-  const dataUrl = await normalizeLayoutImageSrcForPdf(rawDataUrl);
+  const dataUrl = await compressLayoutImageSrcForDraft(rawDataUrl);
   const aspect = await loadImageAspect(dataUrl);
   const width = 0.4;
   const pageAspect = pageWidthPt / pageHeightPt;

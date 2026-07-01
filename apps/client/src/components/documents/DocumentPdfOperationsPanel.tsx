@@ -85,9 +85,10 @@ type Props = {
   onFocusSectionHandled?: () => void;
   layout?: LayoutEditorState;
   layoutAddNotice?: string | null;
+  layoutPageCount?: number;
   onAddLayoutImages?: (
     files: File[],
-    options?: { distributeAcrossPages?: boolean },
+    options?: { distributeAcrossPages?: boolean; startPage?: number },
   ) => Promise<void>;
 };
 export function DocumentPdfOperationsPanel({
@@ -107,6 +108,7 @@ export function DocumentPdfOperationsPanel({
   onFocusSectionHandled,
   layout,
   layoutAddNotice = null,
+  layoutPageCount = 0,
   onAddLayoutImages,
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
@@ -708,7 +710,7 @@ export function DocumentPdfOperationsPanel({
               versionReady={versionReady}
               documentId={documentId}
               versionId={activeVersion?.id ?? ''}
-              pageCount={activeVersion?.pageCount ?? 0}
+              pageCount={layoutPageCount}
               onSelectVersion={onSelectVersion}
               onGoToPage={onGoToPage}
               addNotice={layoutAddNotice}
