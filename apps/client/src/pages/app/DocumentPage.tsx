@@ -7,6 +7,7 @@ import {
   useGetDocumentQuery,
   useGetVersionPreviewsQuery,
   useListAnnotationsQuery,
+  useListGuestCommentsQuery,
   clearSearch,
   nextSearchMatch,
   prevSearchMatch,
@@ -38,6 +39,7 @@ import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.j
 import { usePanelToggleCenterY } from '../../hooks/usePanelToggleCenterY.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
 import { annotationsToPageMarkers } from '../../lib/documents/annotationMarkers.js';
+import { guestCommentsToPageMarkers } from '../../lib/documents/guestCommentMarkers.js';
 import {
   countAcceptedEditsByPage,
   listAcceptedEditAnnotations,
@@ -192,10 +194,27 @@ export function DocumentPage() {
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     { skip: !id || !activeVersion?.id },
   );
-  const pageMarkers = useMemo(
-    () => annotationsToPageMarkers(annotationsData?.items ?? []),
-    [annotationsData?.items],
+  const { data: guestCommentsData } = useListGuestCommentsQuery(
+    { documentId: id!, versionId: activeVersion?.id ?? '' },
+    {
+      skip: !id || !activeVersion?.id || !versionReady,
+      pollingInterval: 4000,
+      refetchOnFocus: true,
+    },
   );
+  const pageMarkers = useMemo(
+    () => [
+      ...annotationsToPageMarkers(annotationsData?.items ?? []),
+      ...guestCommentsToPageMarkers(guestCommentsData?.items ?? []),
+    ],
+    [annotationsData?.items, guestCommentsData?.items],
+  );
+  const guestCommentIds = useMemo(
+    () => new Set((guestCommentsData?.items ?? []).map((item) => item.id)),
+    [guestCommentsData?.items],
+  );
+  const focusedGuestCommentId =
+    focusedAnnotationId && guestCommentIds.has(focusedAnnotationId) ? focusedAnnotationId : null;
   const acceptedEditsList = useMemo(
     () => listAcceptedEditAnnotations(annotationsData?.items ?? []),
     [annotationsData?.items],
@@ -306,9 +325,13 @@ export function DocumentPage() {
     (marker: PdfPageMarker) => {
       if (marker.kind === 'accepted_edit') {
         openAcceptedEditsModal(marker.page, marker.id);
-      } else {
-        handleGoToPage(marker.page, marker.id);
+        return;
       }
+      if (marker.kind === 'guest_comment') {
+        setRightTab('tools');
+        setToolsFocusSection('share');
+      }
+      handleGoToPage(marker.page, marker.id);
     },
     [handleGoToPage, openAcceptedEditsModal],
   );
@@ -467,16 +490,6 @@ export function DocumentPage() {
       <div ref={workspaceRowRef} className="flex min-h-0 min-w-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col min-h-0">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
-            {pdfProcessing && (
-              <div className="mb-2 shrink-0 rounded-lg border border-folio-200 bg-folio-50/80 px-3 py-2 text-center">
-                <p className="text-xs font-medium text-folio-800">
-                  Собираем новую версию с правками…
-                </p>
-                <p className="mt-0.5 text-[11px] text-folio-700/80">
-                  Обычно 10–30 секунд. PDF откроется автоматически.
-                </p>
-              </div>
-            )}
             {showConfidenceNotice && (
               <div className="mb-2 shrink-0">
                 <DocumentConfidenceNotice
@@ -590,11 +603,6 @@ export function DocumentPage() {
                   )}
                   {pdfReadyForUi && !pdfError && (
                     <div className="relative flex min-h-0 flex-1 flex-col">
-                      {pdfLoading && (
-                        <p className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-white/85 text-sm text-slate-500">
-                          <span>{pdfLoadStageLabel(pdfLoadStage === 'ready' ? 'opening' : pdfLoadStage)}</span>
-                        </p>
-                      )}
                       <PdfViewer
                         key={pdfViewerKey}
                         className="min-h-0 flex-1"
@@ -665,6 +673,7 @@ export function DocumentPage() {
           onSelectVersion={setSelectedVersionId}
           onGoToPage={handleGoToPage}
           focusedAnnotationId={focusedAnnotationId}
+          focusedGuestCommentId={focusedGuestCommentId}
           onOpenAcceptedEdit={openAcceptedEditsModal}
           onOpenAllAcceptedEdits={() => {
             const first = acceptedEditsList[0];
@@ -788,6 +797,7 @@ export function DocumentPage() {
           onSelectVersion={setSelectedVersionId}
           onGoToPage={handleGoToPage}
           focusedAnnotationId={focusedAnnotationId}
+          focusedGuestCommentId={focusedGuestCommentId}
           onOpenAcceptedEdit={openAcceptedEditsModal}
           onOpenAllAcceptedEdits={() => {
             const first = acceptedEditsList[0];

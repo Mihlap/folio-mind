@@ -55,6 +55,10 @@ export function exportReportPdfKey(documentId: string, versionId: string): strin
 export function highlightEditsDocxKey(documentId: string, versionId: string): string {
   return resolveS3Key('exports', `${documentId}/${versionId}/edits-highlight.docx`);
 }
+export function mediaAssetKey(tenantId: string, assetId: string, fileName: string): string {
+  const safeName = fileName.replace(/^\/+/, '').replace(/\.\./g, '');
+  return resolveS3Key('media', `${tenantId}/${assetId}/${safeName}`);
+}
 export function assertS3KeyUnderFilesRoot(key: string): void {
   const normalized = key.replace(/^\/+/, '');
   if (normalized === 'pending') return;

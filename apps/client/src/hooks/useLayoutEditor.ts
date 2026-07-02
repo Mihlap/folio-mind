@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  DEFAULT_LAYOUT_GRADIENT_FILL,
+  DEFAULT_LAYOUT_SOLID_FILL,
+  isLayoutImageObject,
   layoutStepFraction,
   pdfPointsToMm,
-  rotateLayoutObject,
+  rotateLayoutPageObject,
   layoutGuidesForPreset,
   normalizeLayoutCrop,
+  type LayoutFill,
   type LayoutImageObject,
   type LayoutMarginPresetId,
+  type LayoutPageObject,
   type LayoutRect,
+  type LayoutShapeObject,
 } from '@folio-mind/store';
 import { filterImageFiles, isImageFile } from '../lib/layout/isImageFile.js';
 import { compressLayoutImageSrcForDraft } from '../lib/layout/normalizeLayoutImage.js';
@@ -57,7 +63,7 @@ export function useLayoutEditor({
   pageHeightPt = 842,
 }: Options) {
   const [enabled, setEnabled] = useState(false);
-  const [objects, setObjects] = useState<LayoutImageObject[]>([]);
+  const [objects, setObjects] = useState<LayoutPageObject[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [showRulers, setShowRulers] = useState(true);
@@ -86,7 +92,7 @@ export function useLayoutEditor({
     skipSaveRef.current = true;
     try {
       const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${versionId}`);
-      setObjects(raw ? (JSON.parse(raw) as LayoutImageObject[]) : []);
+      setObjects(raw ? (JSON.parse(raw) as LayoutPageObject[]) : []);
     } catch {
       setObjects([]);
     }
@@ -104,6 +110,28 @@ export function useLayoutEditor({
     } catch {
     }
   }, [versionId, objects]);
+
+  const addImageFromDataUrl = useCallback(
+    async (dataUrl: string, page = viewerPage, stackIndex?: number) => {
+      const targetPage = clampPage(page, pageCount);
+      const index =
+        stackIndex ?? objects.filter((item) => Number(item.page) === targetPage).length;
+      const compressed = await compressLayoutImageSrcForDraft(dataUrl);
+      const aspect = await loadImageAspect(compressed);
+      const created = buildLayoutImageFromDataUrl(
+        compressed,
+        aspect,
+        targetPage,
+        pageWidthPt,
+        pageHeightPt,
+        index,
+      );
+      setObjects((prev) => [...prev, created]);
+      setSelectedId(created.id);
+      return created;
+    },
+    [objects, pageCount, pageHeightPt, pageWidthPt, viewerPage],
+  );
 
   const addImageFromFile = useCallback(
     async (file: File, page = viewerPage, stackIndex?: number) => {
@@ -123,6 +151,36 @@ export function useLayoutEditor({
     },
     [objects, pageCount, pageHeightPt, pageWidthPt, viewerPage],
   );
+
+  const addShape = useCallback(
+    (fill: LayoutFill, page = viewerPage) => {
+      const targetPage = clampPage(page, pageCount);
+      const width = 0.5;
+      const height = 0.18;
+      const created: LayoutShapeObject = {
+        kind: 'shape',
+        id: crypto.randomUUID(),
+        page: targetPage,
+        fill,
+        rect: {
+          x: (1 - width) / 2,
+          y: (1 - height) / 2,
+          width,
+          height,
+        },
+      };
+      setObjects((prev) => [...prev, created]);
+      setSelectedId(created.id);
+      return created;
+    },
+    [pageCount, viewerPage],
+  );
+
+  const updateShapeFill = useCallback((id: string, fill: LayoutFill) => {
+    setObjects((prev) =>
+      prev.map((item) => (item.id === id && item.kind === 'shape' ? { ...item, fill } : item)),
+    );
+  }, []);
 
   const addImagesFromFiles = useCallback(
     async (
@@ -178,14 +236,20 @@ export function useLayoutEditor({
 
   const updateObjectCrop = useCallback((id: string, crop: LayoutRect) => {
     setObjects((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, crop: normalizeLayoutCrop(crop) } : item)),
+      prev.map((item) =>
+        item.id === id && isLayoutImageObject(item)
+          ? { ...item, crop: normalizeLayoutCrop(crop) }
+          : item,
+      ),
     );
   }, []);
 
   const resetSelectedCrop = useCallback(() => {
     if (!selectedId) return;
     setObjects((prev) =>
-      prev.map((item) => (item.id === selectedId ? { ...item, crop: undefined } : item)),
+      prev.map((item) =>
+        item.id === selectedId && isLayoutImageObject(item) ? { ...item, crop: undefined } : item,
+      ),
     );
   }, [selectedId]);
 
@@ -202,7 +266,7 @@ export function useLayoutEditor({
       if (!selectedId) return;
       setObjects((prev) =>
         prev.map((item) =>
-          item.id === selectedId ? rotateLayoutObject(item, deltaDeg) : item,
+          item.id === selectedId ? rotateLayoutPageObject(item, deltaDeg) : item,
         ),
       );
     },
@@ -249,8 +313,11 @@ export function useLayoutEditor({
     cropMode,
     setCropMode,
     snapStep,
+    addImageFromDataUrl,
     addImageFromFile,
     addImagesFromFiles,
+    addShape,
+    updateShapeFill,
     updateObjectRect,
     updateObjectCrop,
     resetSelectedCrop,
@@ -260,6 +327,8 @@ export function useLayoutEditor({
     pageObjectCount,
     totalObjectCount: objects.length,
     objectCountByPage,
+    pageWidthPt,
+    pageHeightPt,
   };
 }
 
@@ -282,8 +351,34 @@ async function buildLayoutImageObject(
   const pageAspect = pageWidthPt / pageHeightPt;
   const height = Math.min(0.55, (width / aspect) * pageAspect);
   const shift = Math.min(0.12, stackIndex * 0.035);
+  return buildLayoutImageObjectFromParts(dataUrl, page, width, height, shift);
+}
+
+function buildLayoutImageFromDataUrl(
+  dataUrl: string,
+  aspect: number,
+  page: number,
+  pageWidthPt: number,
+  pageHeightPt: number,
+  stackIndex = 0,
+): LayoutImageObject {
+  const width = 0.4;
+  const pageAspect = pageWidthPt / pageHeightPt;
+  const height = Math.min(0.55, (width / aspect) * pageAspect);
+  const shift = Math.min(0.12, stackIndex * 0.035);
+  return buildLayoutImageObjectFromParts(dataUrl, page, width, height, shift);
+}
+
+function buildLayoutImageObjectFromParts(
+  dataUrl: string,
+  page: number,
+  width: number,
+  height: number,
+  shift: number,
+): LayoutImageObject {
   return {
     id: crypto.randomUUID(),
+    kind: 'image',
     page,
     imageSrc: dataUrl,
     rotation: 0,

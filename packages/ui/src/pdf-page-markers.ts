@@ -4,8 +4,12 @@ export type PdfPageMarker = {
   page: number;
   kind: PdfPageMarkerKind;
   title: string;
+  /** Позиция в пикселях на отрендеренной странице */
   x?: number;
   y?: number;
+  /** Нормализованная позиция 0–1 (гостевые метки) */
+  xNorm?: number;
+  yNorm?: number;
 };
 export function markersForPage(markers: PdfPageMarker[], pageNumber: number): PdfPageMarker[] {
   return markers.filter((m) => m.page === pageNumber);
@@ -16,6 +20,8 @@ export function markerKindClass(kind: PdfPageMarkerKind): string {
       return 'bg-red-400 ring-red-200 hover:bg-red-500';
     case 'highlight':
       return 'bg-yellow-400 ring-yellow-200 hover:bg-yellow-500';
+    case 'guest_comment':
+      return 'bg-sky-500 ring-sky-200 hover:bg-sky-600';
     default:
       return 'bg-amber-500 ring-amber-200 hover:bg-amber-600';
   }

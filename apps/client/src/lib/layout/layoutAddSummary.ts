@@ -1,7 +1,7 @@
-import type { LayoutImageObject } from '@folio-mind/store';
+import type { LayoutPageObject } from '@folio-mind/store';
 
 export function countLayoutObjectsByPage(
-  objects: LayoutImageObject[],
+  objects: LayoutPageObject[],
 ): Record<number, number> {
   const counts: Record<number, number> = {};
   for (const object of objects) {
@@ -10,7 +10,7 @@ export function countLayoutObjectsByPage(
   return counts;
 }
 
-export function formatLayoutAddSummary(created: LayoutImageObject[]): string {
+export function formatLayoutAddSummary(created: LayoutPageObject[]): string {
   if (created.length === 0) return '';
   if (created.length === 1) {
     return `Добавлена 1 картинка на стр. ${created[0]!.page}. Перетащите её на листе.`;

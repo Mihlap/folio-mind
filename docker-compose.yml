@@ -84,7 +84,11 @@ services:
     build: ./docker/pdf2docx
     ports:
       - '8080:8080'
-    mem_limit: 512m
+    environment:
+      # Согласовано с MAX_UPLOAD_BYTES (100 МБ) в API
+      MAX_UPLOAD_MB: '100'
+    # pdf2docx жрёт RAM: ориентир ~40–60 МБ RAM на 1 МБ PDF (иллюстрации, сложная вёрстка)
+    mem_limit: 4g
     healthcheck:
       test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 15s

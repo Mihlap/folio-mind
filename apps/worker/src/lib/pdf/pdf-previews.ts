@@ -1,4 +1,5 @@
 import { createCanvas, type Canvas } from '@napi-rs/canvas';
+import { drawGuestViewWatermark } from './guest-view-watermark.js';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -86,6 +87,14 @@ async function renderPageCanvas(
     canvas,
   } as Parameters<typeof page.render>[0]).promise;
   return canvas;
+}
+
+function toGuestViewPng(canvas: Canvas): Buffer {
+  const context = canvas.getContext('2d');
+  if (context) {
+    drawGuestViewWatermark(context, canvas.width, canvas.height);
+  }
+  return canvas.toBuffer('image/png');
 }
 
 function downscaleToThumb(source: Canvas): Buffer {
@@ -207,7 +216,7 @@ export async function renderPdfPageRange(
     const viewCanvas = await renderPageCanvas(pdf, pageNum, viewWidth);
     previews.push({
       page: pageNum,
-      view: viewCanvas.toBuffer('image/png'),
+      view: toGuestViewPng(viewCanvas),
       thumb: downscaleToThumb(viewCanvas),
     });
   }

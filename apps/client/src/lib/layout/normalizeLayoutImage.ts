@@ -1,7 +1,12 @@
 import {
   isFullLayoutCrop,
+  isLayoutImageObject,
+  isLayoutShapeObject,
   normalizeLayoutCrop,
+  type LayoutImageObject,
+  type LayoutPageObject,
   type LayoutRect,
+  type LayoutShapeObject,
 } from '@folio-mind/store';
 
 const PDF_IMAGE_PREFIXES = ['data:image/png', 'data:image/jpeg', 'data:image/jpg'] as const;
@@ -126,23 +131,81 @@ export async function compressLayoutImageSrcForUpload(imageSrc: string): Promise
   return resizeDataUrlForUpload(normalized);
 }
 
-type LayoutObjectForPdf = { imageSrc: string; crop?: LayoutRect };
+async function rasterizeLayoutShape(
+  shape: LayoutShapeObject,
+  pageWidthPt: number,
+  pageHeightPt: number,
+): Promise<string> {
+  const width = Math.max(64, Math.round(shape.rect.width * pageWidthPt));
+  const height = Math.max(64, Math.round(shape.rect.height * pageHeightPt));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Не удалось подготовить подложку');
 
-export async function normalizeLayoutObjectsForPdf<T extends LayoutObjectForPdf>(
-  objects: T[],
-): Promise<T[]> {
-  return Promise.all(
-    objects.map(async (object) => {
-      const cropped = await applyCropToDataUrl(object.imageSrc, object.crop);
-      return {
-        ...object,
-        imageSrc: await compressLayoutImageSrcForUpload(cropped),
-        crop: undefined,
-      };
-    }),
-  );
+  if (shape.fill.type === 'solid') {
+    ctx.fillStyle = shape.fill.color;
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    const angle = (shape.fill.angleDeg * Math.PI) / 180;
+    const cx = width / 2;
+    const cy = height / 2;
+    const len = Math.sqrt(width * width + height * height);
+    const x0 = cx - (Math.cos(angle) * len) / 2;
+    const y0 = cy - (Math.sin(angle) * len) / 2;
+    const x1 = cx + (Math.cos(angle) * len) / 2;
+    const y1 = cy + (Math.sin(angle) * len) / 2;
+    const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+    for (const stop of shape.fill.stops) {
+      gradient.addColorStop(stop.offset, stop.color);
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  return canvas.toDataURL('image/png');
 }
 
-export function estimateLayoutObjectsBytes(objects: Array<{ imageSrc: string }>): number {
-  return objects.reduce((sum, object) => sum + estimateDataUrlBytes(object.imageSrc), 0);
+type LayoutObjectForPdf = { imageSrc: string; crop?: LayoutRect };
+
+export async function normalizeLayoutObjectsForPdf(
+  objects: LayoutPageObject[],
+  pageWidthPt = 595,
+  pageHeightPt = 842,
+): Promise<LayoutImageObject[]> {
+  const result: LayoutImageObject[] = [];
+  for (const object of objects) {
+    if (isLayoutImageObject(object)) {
+      const cropped = await applyCropToDataUrl(object.imageSrc, object.crop);
+      result.push({
+        ...object,
+        kind: 'image',
+        imageSrc: await compressLayoutImageSrcForUpload(cropped),
+        crop: undefined,
+      });
+      continue;
+    }
+    if (isLayoutShapeObject(object)) {
+      const imageSrc = await rasterizeLayoutShape(object, pageWidthPt, pageHeightPt);
+      result.push({
+        kind: 'image',
+        id: object.id,
+        page: object.page,
+        rect: object.rect,
+        imageSrc: await compressLayoutImageSrcForUpload(imageSrc),
+        rotation: object.rotation ?? 0,
+      });
+    }
+  }
+  return result;
+}
+
+export function estimateLayoutObjectsBytes(objects: LayoutPageObject[]): number {
+  return objects.reduce((sum, object) => {
+    if (isLayoutImageObject(object)) {
+      return sum + estimateDataUrlBytes(object.imageSrc);
+    }
+    return sum + 80_000;
+  }, 0);
 }

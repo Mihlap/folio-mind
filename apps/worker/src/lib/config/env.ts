@@ -4,6 +4,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string(),
   GOTENBERG_URL: z.string().default('http://127.0.0.1:3003'),
   PDF_TO_DOCX_URL: z.string().default('http://127.0.0.1:8080'),
+  PDF_TO_DOCX_TIMEOUT_MS: z.coerce.number().int().min(30_000).default(600_000),
+  PRECONVERT_MAX_PDF_MB: z.coerce.number().int().min(0).default(45),
   JODCONVERTER_URL: z.string().optional(),
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),

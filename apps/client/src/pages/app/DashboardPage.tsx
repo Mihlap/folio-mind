@@ -295,9 +295,7 @@ export function DashboardPage() {
         <p className="mx-auto mt-4 max-w-md text-center text-xs leading-relaxed text-slate-400">
           {active
             ? 'Загрузка продолжается в фоне — можно открыть другой документ.'
-            : uploadState.active
-              ? 'Идёт фоновая загрузка — см. полосу прогресса вверху страницы.'
-              : pendingPdf && pendingDocx
+            : pendingPdf && pendingDocx
               ? 'Оба файла готовы — нажмите «Загрузить PDF + DOCX» или добавьте второй файл в любой момент.'
               : pendingPdf
                 ? 'PDF выбран — добавьте DOCX или нажмите «Загрузить PDF» без Word.'

@@ -1,4 +1,4 @@
-const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp|tiff?|jfif|svg)$/i;
 
 export function isImageFile(file: File): boolean {
   if (file.type.startsWith('image/')) return true;

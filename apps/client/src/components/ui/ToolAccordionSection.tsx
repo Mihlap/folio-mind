@@ -8,6 +8,7 @@ export type ToolSectionId =
   | 'annotations'
   | 'edits'
   | 'diff'
+  | 'media'
   | 'layout'
   | 'share';
 
@@ -15,6 +16,7 @@ export const TOOL_SECTION_IDS: ToolSectionId[] = [
   'optimize',
   'split',
   'merge',
+  'media',
   'layout',
   'share',
   'annotations',
@@ -29,6 +31,7 @@ type Props = {
   helpContent?: ReactNode;
   isOpen: boolean;
   onToggle: () => void;
+  keepMounted?: boolean;
   children: ReactNode;
 };
 
@@ -39,6 +42,7 @@ export function ToolAccordionSection({
   helpContent,
   isOpen,
   onToggle,
+  keepMounted = false,
   children,
 }: Props) {
   return (
@@ -66,7 +70,13 @@ export function ToolAccordionSection({
           </FeatureHelpButton>
         )}
       </div>
-      {isOpen && <div className="border-t border-slate-100 px-3 pb-3 pt-2">{children}</div>}
+      {keepMounted ? (
+        <div className={isOpen ? 'border-t border-slate-100 px-3 pb-3 pt-2' : 'hidden'}>
+          {children}
+        </div>
+      ) : (
+        isOpen && <div className="border-t border-slate-100 px-3 pb-3 pt-2">{children}</div>
+      )}
     </div>
   );
 }

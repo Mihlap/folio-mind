@@ -19,6 +19,7 @@ const nav: Array<{
   disabled?: boolean;
 }> = [
   { to: '/app', label: 'Документы', end: true, icon: '📄' },
+  { to: '/app/media', label: 'Медиатека', end: true, icon: '🖼' },
   { to: '/app/regulations', label: 'Регламенты', end: true, icon: '📋' },
   { to: '/app', label: 'ИИ-проверка', end: false, disabled: true, icon: '🤖' },
 ];

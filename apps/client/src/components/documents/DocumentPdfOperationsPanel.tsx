@@ -30,7 +30,9 @@ import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
+import { MediaLibraryPanel } from './MediaLibraryPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
+import { DocumentGuestCommentsPanel } from './DocumentGuestCommentsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 import { useDocumentAnnotationsPanel } from './useDocumentAnnotationsPanel.js';
@@ -77,6 +79,7 @@ type Props = {
   onSelectVersion: (versionId: string) => void;
   onGoToPage: (page: number, annotationId?: string) => void;
   focusedAnnotationId?: string | null;
+  focusedGuestCommentId?: string | null;
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
   editTextInjection?: EditTextInjection | null;
@@ -100,6 +103,7 @@ export function DocumentPdfOperationsPanel({
   onSelectVersion,
   onGoToPage,
   focusedAnnotationId = null,
+  focusedGuestCommentId = null,
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
   editTextInjection = null,
@@ -691,6 +695,40 @@ export function DocumentPdfOperationsPanel({
           </div>
         </ToolAccordionSection>
 
+        <ToolAccordionSection
+          title="Медиатека"
+          subtitle="Загруженные изображения аккаунта и этого документа"
+          isOpen={isSectionOpen('media')}
+          onToggle={() => toggleSection('media')}
+          keepMounted
+          helpTitle="Медиатека"
+          helpContent={
+            <>
+              <p>
+                Храните логотипы, рендеры и фото один раз — используйте в макете разных документов.
+              </p>
+              <p>
+                Сетка показывает все готовые файлы: привязанные к документу и общие для аккаунта.
+                Клик по превью — просмотр в полном размере.
+              </p>
+            </>
+          }
+        >
+          <MediaLibraryPanel
+            documentId={documentId}
+            versionReady={versionReady}
+            onInsertAsset={
+              layout
+                ? async (_asset, dataUrl) => {
+                    if (!layout.enabled) layout.setEnabled(true);
+                    await layout.addImageFromDataUrl(dataUrl, viewerPage);
+                    if (!isSectionOpen('layout')) toggleSection('layout');
+                  }
+                : undefined
+            }
+          />
+        </ToolAccordionSection>
+
         {layout && (
           <ToolAccordionSection
             title="Макет"
@@ -741,6 +779,19 @@ export function DocumentPdfOperationsPanel({
             activeVersion={activeVersion}
             versionReady={versionReady}
           />
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <p className="mb-2 text-xs font-medium text-slate-700">Замечания заказчика</p>
+            <DocumentGuestCommentsPanel
+              documentId={documentId}
+              versionId={activeVersion?.id ?? ''}
+              versionReady={versionReady}
+              focusedCommentId={focusedGuestCommentId}
+              onGoToComment={(page, commentId) => {
+                if (!isSectionOpen('share')) toggleSection('share');
+                onGoToPage(page, commentId);
+              }}
+            />
+          </div>
         </ToolAccordionSection>
 
         <DocumentAnnotationsControllerProvider value={annotationsController}>

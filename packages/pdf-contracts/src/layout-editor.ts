@@ -7,6 +7,7 @@ export type LayoutRect = {
 };
 
 export type LayoutImageObject = {
+  kind?: 'image';
   id: string;
   page: number;
   rect: LayoutRect;
@@ -15,6 +16,43 @@ export type LayoutImageObject = {
   rotation: number;
   /** Доля исходного изображения (0..1), видимая в рамке на листе. */
   crop?: LayoutRect;
+};
+
+export type LayoutFill =
+  | { type: 'solid'; color: string }
+  | { type: 'linear'; angleDeg: number; stops: { offset: number; color: string }[] };
+
+export type LayoutShapeObject = {
+  kind: 'shape';
+  id: string;
+  page: number;
+  rect: LayoutRect;
+  rotation?: number;
+  fill: LayoutFill;
+};
+
+export type LayoutPageObject = LayoutImageObject | LayoutShapeObject;
+
+export function isLayoutImageObject(object: LayoutPageObject): object is LayoutImageObject {
+  return object.kind !== 'shape';
+}
+
+export function isLayoutShapeObject(object: LayoutPageObject): object is LayoutShapeObject {
+  return object.kind === 'shape';
+}
+
+export const DEFAULT_LAYOUT_SOLID_FILL: LayoutFill = {
+  type: 'solid',
+  color: '#e2e8f0',
+};
+
+export const DEFAULT_LAYOUT_GRADIENT_FILL: LayoutFill = {
+  type: 'linear',
+  angleDeg: 135,
+  stops: [
+    { offset: 0, color: '#f8fafc' },
+    { offset: 1, color: '#94a3b8' },
+  ],
 };
 
 export const PDF_POINT_TO_MM = 25.4 / 72;
@@ -124,4 +162,24 @@ export function rotateLayoutObject(object: LayoutImageObject, deltaDeg: number):
     ...object,
     rotation: normalizeLayoutRotation((object.rotation ?? 0) + deltaDeg),
   };
+}
+
+export function rotateLayoutPageObject(object: LayoutPageObject, deltaDeg: number): LayoutPageObject {
+  if (isLayoutShapeObject(object)) {
+    return {
+      ...object,
+      rotation: normalizeLayoutRotation((object.rotation ?? 0) + deltaDeg),
+    };
+  }
+  return rotateLayoutObject(object, deltaDeg);
+}
+
+export function layoutFillToCss(fill: LayoutFill): string {
+  if (fill.type === 'solid') {
+    return fill.color;
+  }
+  const stops = fill.stops
+    .map((stop) => `${stop.color} ${Math.round(stop.offset * 100)}%`)
+    .join(', ');
+  return `linear-gradient(${fill.angleDeg}deg, ${stops})`;
 }

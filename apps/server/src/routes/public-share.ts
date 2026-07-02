@@ -3,6 +3,11 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { fetchVersionPreviews } from '../lib/documents/fetch-version-previews.js';
+import {
+  createGuestShareCommentSchema,
+  guestShareCommentSchema,
+  serializeGuestShareComment,
+} from '../lib/share/guest-comment.js';
 import { guestPreviewPageUrl } from '../lib/share/guest-preview-url.js';
 import {
   hashShareToken,
@@ -15,6 +20,11 @@ import { errorBody } from './documents/schemas.js';
 
 export const PUBLIC_SHARE_RATE_LIMIT = {
   max: 60,
+  timeWindow: '1 minute',
+} as const;
+
+export const PUBLIC_SHARE_COMMENT_RATE_LIMIT = {
+  max: 20,
   timeWindow: '1 minute',
 } as const;
 
@@ -149,6 +159,104 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
           url: guestPreviewPageUrl({ env, request, token, page: item.page }),
         })),
       };
+    },
+  );
+
+  r.get(
+    '/public/share/:token/comments',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          200: z.object({ items: z.array(guestShareCommentSchema) }),
+          404: errorBody,
+          410: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Просмотр временно недоступен' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+
+      const items = await app.prisma.guestShareComment.findMany({
+        where: {
+          documentId: resolved.document.id,
+          versionId: resolved.version.id,
+        },
+        orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
+      });
+
+      return { items: items.map(serializeGuestShareComment) };
+    },
+  );
+
+  r.post(
+    '/public/share/:token/comments',
+    {
+      config: { rateLimit: PUBLIC_SHARE_COMMENT_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        body: createGuestShareCommentSchema,
+        response: {
+          201: guestShareCommentSchema,
+          400: errorBody,
+          404: errorBody,
+          410: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Просмотр временно недоступен' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+
+      const maxPage = resolved.version.pageCount ?? 0;
+      if (maxPage > 0 && request.body.page > maxPage) {
+        return reply.code(400).send({ error: `Страница ${request.body.page} не существует` });
+      }
+
+      const created = await app.prisma.guestShareComment.create({
+        data: {
+          shareLinkId: resolved.link.id,
+          documentId: resolved.document.id,
+          versionId: resolved.version.id,
+          page: request.body.page,
+          content: request.body.content.trim(),
+          authorName: request.body.authorName?.trim() || null,
+          x: request.body.x ?? null,
+          y: request.body.y ?? null,
+        },
+      });
+
+      void app.prisma.auditLog.create({
+        data: {
+          action: 'document.guest_comment_created',
+          tenantId: resolved.document.tenantId,
+          documentId: resolved.document.id,
+          meta: {
+            commentId: created.id,
+            shareLinkId: resolved.link.id,
+            versionId: resolved.version.id,
+            page: created.page,
+          },
+        },
+      });
+
+      return reply.status(201).send(serializeGuestShareComment(created));
     },
   );
 

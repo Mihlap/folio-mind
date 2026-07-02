@@ -19,6 +19,7 @@ type Props = {
   onSelectVersion: (versionId: string) => void;
   onGoToPage: (page: number, annotationId?: string) => void;
   focusedAnnotationId?: string | null;
+  focusedGuestCommentId?: string | null;
   onOpenAcceptedEdit: (page: number, annotationId: string) => void;
   onOpenAllAcceptedEdits: () => void;
   editTextInjection?: EditTextInjection | null;
@@ -60,6 +61,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   onSelectVersion,
   onGoToPage,
   focusedAnnotationId = null,
+  focusedGuestCommentId = null,
   onOpenAcceptedEdit,
   onOpenAllAcceptedEdits,
   editTextInjection = null,
@@ -176,6 +178,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             onSelectVersion={onSelectVersion}
             onGoToPage={onGoToPage}
             focusedAnnotationId={focusedAnnotationId}
+            focusedGuestCommentId={focusedGuestCommentId}
             onOpenAcceptedEdit={onOpenAcceptedEdit}
             onOpenAllAcceptedEdits={onOpenAllAcceptedEdits}
             editTextInjection={editTextInjection}

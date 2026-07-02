@@ -3,27 +3,60 @@ import { markerKindClass, type PdfPageMarker } from '../pdf-page-markers.js';
 type PageMarkersOverlayProps = {
   pageNumber: number;
   markers: PdfPageMarker[];
+  pageWidthPx?: number;
+  pageHeightPx?: number;
   activeMarkerId?: string | null;
   onMarkerClick?: (marker: PdfPageMarker) => void;
   onOverflowClick?: (page: number) => void;
 };
 
+function resolveMarkerPx(
+  marker: PdfPageMarker,
+  pageWidthPx: number,
+  pageHeightPx: number,
+): { x: number; y: number } | null {
+  if (marker.x != null && marker.y != null) {
+    return { x: marker.x, y: marker.y };
+  }
+  if (
+    marker.xNorm != null &&
+    marker.yNorm != null &&
+    pageWidthPx > 0 &&
+    pageHeightPx > 0
+  ) {
+    return {
+      x: marker.xNorm * pageWidthPx,
+      y: marker.yNorm * pageHeightPx,
+    };
+  }
+  return null;
+}
+
 export function PageMarkersOverlay({
   pageNumber,
   markers,
+  pageWidthPx = 0,
+  pageHeightPx = 0,
   activeMarkerId,
   onMarkerClick,
   onOverflowClick,
 }: PageMarkersOverlayProps) {
   const maxVisible = 3;
-  const positioned = markers.filter((m) => m.x != null && m.y != null);
-  const unpositioned = markers.filter((m) => m.x == null || m.y == null);
+  const positioned = markers
+    .map((marker) => {
+      const point = resolveMarkerPx(marker, pageWidthPx, pageHeightPx);
+      return point ? { marker, point } : null;
+    })
+    .filter((item): item is { marker: PdfPageMarker; point: { x: number; y: number } } => item != null);
+  const unpositioned = markers.filter(
+    (marker) => resolveMarkerPx(marker, pageWidthPx, pageHeightPx) == null,
+  );
   const visible = unpositioned.slice(0, maxVisible);
   const overflow = markers.length - visible.length - positioned.length;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" aria-label="Заметки на странице">
-      {positioned.map((marker) => {
+      {positioned.map(({ marker, point }) => {
         const active = marker.id === activeMarkerId;
         return (
           <button
@@ -36,7 +69,7 @@ export function PageMarkersOverlay({
               markerKindClass(marker.kind),
               active ? 'scale-110 ring-2 ring-white animate-pulse z-20' : 'ring-transparent z-10',
             ].join(' ')}
-            style={{ left: `${marker.x!}px`, top: `${marker.y!}px` }}
+            style={{ left: `${point.x}px`, top: `${point.y}px` }}
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-white/90" aria-hidden />
           </button>

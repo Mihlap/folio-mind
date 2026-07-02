@@ -26,6 +26,7 @@ export async function processPreConvertPdfJob(
     console.warn('[pre-convert] PDF→DOCX service не настроен (PDF_TO_DOCX_URL)');
     return;
   }
+  const maxPreconvertMb = env.PRECONVERT_MAX_PDF_MB;
   const prisma = getPrisma();
   try {
     const version = await prisma.documentVersion.findUnique({
@@ -38,6 +39,15 @@ export async function processPreConvertPdfJob(
     }
     const docxS3Key = preConvertedDocxKey(documentId, versionId);
     const pdfBuffer = await getObjectBuffer(s3Key);
+    const sizeMb = pdfBuffer.length / (1024 * 1024);
+    if (maxPreconvertMb > 0 && sizeMb > maxPreconvertMb) {
+      console.warn(
+        `[pre-convert] skip PDF→DOCX for version ${versionId}: ${sizeMb.toFixed(1)} MB > limit ${maxPreconvertMb} MB (фоновый pre-convert). ` +
+          'Для «Применить правки» загрузите исходный DOCX или конвертация пойдёт по запросу.',
+      );
+      return;
+    }
+    console.log(`[pre-convert] PDF→DOCX start for version ${versionId} (${sizeMb.toFixed(1)} MB)`);
     const docxBuffer = await convertPdfToDocx(pdfBuffer);
     if (!isDocxBuffer(docxBuffer)) {
       throw new Error('JODConverter вернул не DOCX');

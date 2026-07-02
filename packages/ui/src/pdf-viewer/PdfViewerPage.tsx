@@ -10,13 +10,14 @@ import { PdfLayoutPageShell } from '../layout-editor/PdfLayoutPageShell.js';
 import { PdfLayoutGrid } from '../layout-editor/PdfLayoutGrid.js';
 import { PdfLayoutMarginsOverlay } from '../layout-editor/PdfLayoutMarginsOverlay.js';
 import { PdfLayoutObjectsOverlay } from '../layout-editor/PdfLayoutObjectsOverlay.js';
-import type { LayoutImageObject, LayoutMarginPresetId, LayoutRect } from '@folio-mind/pdf-contracts';
+import { PdfLayoutShapesOverlay } from '../layout-editor/PdfLayoutShapesOverlay.js';
+import type { LayoutImageObject, LayoutMarginPresetId, LayoutPageObject, LayoutRect } from '@folio-mind/pdf-contracts';
 import { highlightTextLayer, isRenderCancelled } from './utils.js';
-import { pdfPointsToMm, layoutStepFraction, layoutGuidesForPreset } from '@folio-mind/pdf-contracts';
+import { pdfPointsToMm, layoutStepFraction, layoutGuidesForPreset, isLayoutImageObject, isLayoutShapeObject } from '@folio-mind/pdf-contracts';
 
 export type PdfViewerLayoutProps = {
   enabled?: boolean;
-  objects?: LayoutImageObject[];
+  objects?: LayoutPageObject[];
   selectedObjectId?: string | null;
   showGrid?: boolean;
   showRulers?: boolean;
@@ -235,6 +236,9 @@ export function PdfViewerPage({
     if (files.length > 0) onLayoutFilesDrop(files, pageNumber);
   }
 
+  const layoutImages = layoutObjects.filter(isLayoutImageObject);
+  const layoutShapes = layoutObjects.filter(isLayoutShapeObject);
+
   const quoteSelectMode = Boolean(enableTextSelection && showTextLayer && !searchQuery.trim());
   const pageBody = (
     <div
@@ -300,6 +304,8 @@ export function PdfViewerPage({
             <PageMarkersOverlay
               pageNumber={pageNumber}
               markers={markersOnPage}
+              pageWidthPx={pageMetrics.widthPx}
+              pageHeightPx={pageMetrics.heightPx}
               activeMarkerId={activeMarkerId}
               onMarkerClick={onMarkerClick}
               onOverflowClick={onMarkersOverflowClick}
@@ -326,12 +332,23 @@ export function PdfViewerPage({
               pageHeightMm={pageHeightMm}
             />
           )}
+          <PdfLayoutShapesOverlay
+            key={`shapes-${pageNumber}`}
+            pageNumber={pageNumber}
+            pageWidthPx={pageMetrics.widthPx}
+            pageHeightPx={pageMetrics.heightPx}
+            shapes={layoutShapes}
+            selectedId={selectedObjectId}
+            snapStep={snapStep}
+            onSelect={onLayoutObjectSelect ?? (() => {})}
+            onShapeChange={onLayoutObjectChange ?? (() => {})}
+          />
           <PdfLayoutObjectsOverlay
             key={pageNumber}
             pageNumber={pageNumber}
             pageWidthPx={pageMetrics.widthPx}
             pageHeightPx={pageMetrics.heightPx}
-            objects={layoutObjects}
+            objects={layoutImages}
             selectedId={selectedObjectId}
             cropMode={cropMode}
             snapStep={snapStep}

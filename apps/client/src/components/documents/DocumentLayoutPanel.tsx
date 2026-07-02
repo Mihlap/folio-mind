@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS } from '@folio-mind/store';
+import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS, isLayoutImageObject, isLayoutShapeObject, DEFAULT_LAYOUT_SOLID_FILL, DEFAULT_LAYOUT_GRADIENT_FILL } from '@folio-mind/store';
 import { normalizeLayoutObjectsForPdf, estimateLayoutObjectsBytes } from '../../lib/layout/normalizeLayoutImage.js';
 import {
   FeatureHelpActionButton,
@@ -138,6 +138,8 @@ export function DocumentLayoutPanel({
   }
 
   const selectedObject = layout.objects.find((object) => object.id === layout.selectedId);
+  const selectedImage = selectedObject && isLayoutImageObject(selectedObject) ? selectedObject : null;
+  const selectedShape = selectedObject && isLayoutShapeObject(selectedObject) ? selectedObject : null;
 
   async function handleSaveLayout() {
     if (!versionId || layout.totalObjectCount === 0) return;
@@ -145,7 +147,11 @@ export function DocumentLayoutPanel({
     setStatusHint(null);
     try {
       setStatusHint('Подготовка изображений…');
-      const objects = await normalizeLayoutObjectsForPdf(layout.objects);
+      const objects = await normalizeLayoutObjectsForPdf(
+        layout.objects,
+        layout.pageWidthPt,
+        layout.pageHeightPt,
+      );
       const totalBytes = estimateLayoutObjectsBytes(objects);
       const maxBytes = 12 * 1024 * 1024;
       if (totalBytes > maxBytes) {
@@ -286,6 +292,7 @@ export function DocumentLayoutPanel({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
           <span className="text-xs text-slate-600">
             Выбрано · стр. {selectedObject.page} · {selectedObject.rotation ?? 0}°
+            {selectedShape ? ' · подложка' : ''}
           </span>
           <button
             type="button"
@@ -303,37 +310,77 @@ export function DocumentLayoutPanel({
           >
             90° ↻
           </button>
-          <button
-            type="button"
-            disabled={savePending || !layout.pageGuides}
-            onClick={() => layout.fitSelectedToSafeArea()}
-            className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-          >
-            Вписать в поля
-          </button>
-          <button
-            type="button"
-            disabled={savePending}
-            onClick={() => layout.setCropMode(!layout.cropMode)}
-            className={[
-              'cursor-pointer rounded-md border px-2 py-1 text-xs disabled:opacity-40',
-              layout.cropMode
-                ? 'border-amber-300 bg-amber-50 text-amber-900'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-            ].join(' ')}
-          >
-            {layout.cropMode ? 'Обрезка вкл.' : 'Обрезка'}
-          </button>
-          <button
-            type="button"
-            disabled={savePending}
-            onClick={() => layout.resetSelectedCrop()}
-            className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-          >
-            Сбросить обрезку
-          </button>
+          {selectedImage && (
+            <>
+              <button
+                type="button"
+                disabled={savePending || !layout.pageGuides}
+                onClick={() => layout.fitSelectedToSafeArea()}
+                className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Вписать в поля
+              </button>
+              <button
+                type="button"
+                disabled={savePending}
+                onClick={() => layout.setCropMode(!layout.cropMode)}
+                className={[
+                  'cursor-pointer rounded-md border px-2 py-1 text-xs disabled:opacity-40',
+                  layout.cropMode
+                    ? 'border-amber-300 bg-amber-50 text-amber-900'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                ].join(' ')}
+              >
+                {layout.cropMode ? 'Обрезка вкл.' : 'Обрезка'}
+              </button>
+              <button
+                type="button"
+                disabled={savePending}
+                onClick={() => layout.resetSelectedCrop()}
+                className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Сбросить обрезку
+              </button>
+            </>
+          )}
+          {selectedShape && selectedShape.fill.type === 'solid' && (
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              Цвет
+              <input
+                type="color"
+                value={selectedShape.fill.color}
+                disabled={savePending}
+                onChange={(e) => layout.updateShapeFill(selectedShape.id, { type: 'solid', color: e.target.value })}
+                className="h-7 w-10 cursor-pointer rounded border border-slate-200"
+              />
+            </label>
+          )}
         </div>
       )}
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={!versionReady || savePending}
+          onClick={() => layout.addShape(DEFAULT_LAYOUT_SOLID_FILL, viewerPage)}
+          className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+        >
+          + Заливка
+        </button>
+        <button
+          type="button"
+          disabled={!versionReady || savePending}
+          onClick={() => layout.addShape(DEFAULT_LAYOUT_GRADIENT_FILL, viewerPage)}
+          className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+        >
+          + Градиент
+        </button>
+      </div>
+
+      <p className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-600">
+        Изображения из медиатеки — в разделе <strong>«Медиатека»</strong> выше в списке инструментов.
+        Кнопка «В макет» вставит файл на стр. {viewerPage}.
+      </p>
 
       <div className={reportActionsColumnClass}>
         <FeatureHelpActionButton

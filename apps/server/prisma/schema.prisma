@@ -14,6 +14,7 @@ model Tenant {
   users     User[]
   documents Document[]
   ragSources RagSource[]
+  mediaAssets MediaAsset[]
 }
 
 model User {
@@ -112,6 +113,7 @@ model Document {
   updatedAt DateTime          @updatedAt
   versions  DocumentVersion[]
   shareLinks DocumentShareLink[]
+  mediaAssets MediaAsset[]
 
   @@index([tenantId, updatedAt])
 }
@@ -128,9 +130,51 @@ model DocumentShareLink {
   revokedAt     DateTime?
   allowDownload Boolean   @default(false)
   createdAt     DateTime  @default(now())
+  guestComments GuestShareComment[]
 
   @@index([documentId, createdAt])
   @@index([expiresAt])
+}
+
+model GuestShareComment {
+  id          String            @id @default(cuid())
+  shareLinkId String
+  shareLink   DocumentShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  documentId  String
+  versionId   String
+  page        Int
+  content     String
+  authorName  String?
+  x           Float?
+  y           Float?
+  status      String            @default("open")
+  resolvedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([documentId, versionId, createdAt])
+  @@index([shareLinkId, createdAt])
+}
+
+model MediaAsset {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  title      String
+  s3Key      String
+  fileName   String
+  mimeType   String
+  size       BigInt    @default(0)
+  width      Int?
+  height     Int?
+  status     String    @default("pending_upload")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([documentId, createdAt])
 }
 
 model DocumentVersion {
