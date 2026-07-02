@@ -24,6 +24,7 @@ const envSchema = z.object({
   YANDEX_MODEL: z.string().default('yandexgpt/latest'),
   PREVIEW_INITIAL_PAGES: z.coerce.number().int().min(1).default(15),
   PREVIEW_MAX_PAGES: z.coerce.number().int().min(1).default(200),
+  PREVIEW_VIEW_WIDTH: z.coerce.number().int().min(400).max(4096).default(1440),
   PREVIEW_JOB_TIMEOUT_MS: z.coerce.number().int().min(10000).default(300000),
   PREVIEW_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(2),
   OPTIMIZE_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(1),

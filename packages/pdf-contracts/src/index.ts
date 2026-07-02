@@ -10,9 +10,22 @@ export {
   preConvertedDocxKey,
   appliedDocxKey,
   previewPageKey,
+  previewPageThumbKey,
+  previewPageViewKey,
+  previewPageKeyForVariant,
+  type PreviewPageVariant,
   resolveS3Key,
   type S3PrefixKey,
 } from './s3-paths.js';
+export {
+  SHARE_LINK_TTL_PRESETS,
+  SHARE_LINK_TTL_PRESET_IDS,
+  DEFAULT_SHARE_LINK_TTL_PRESET,
+  shareLinkTtlMs,
+  shareLinkTtlLabel,
+  isShareLinkTtlPresetId,
+  type ShareLinkTtlPresetId,
+} from './share-link-ttl.js';
 export { isDocxBuffer, isUserUploadedSourceDocxKey } from './docx.js';
 export {
   getRootVersionFromChain,
@@ -94,6 +107,19 @@ export {
   type LayoutRect,
   type LayoutImageDrawParams,
 } from './layout-editor.js';
+export {
+  FULL_LAYOUT_CROP,
+  LAYOUT_MARGIN_PRESETS,
+  getLayoutMarginPreset,
+  isFullLayoutCrop,
+  layoutGuidesForPreset,
+  layoutGuidesFromMargins,
+  normalizeLayoutCrop,
+  type LayoutMarginPreset,
+  type LayoutMarginPresetId,
+  type LayoutMarginsMm,
+  type LayoutPageGuides,
+} from './layout-page-template.js';
 export { UPLOAD_NETWORK_ERROR_MESSAGE } from './user-messages.js';
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';

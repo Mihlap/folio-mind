@@ -5,6 +5,7 @@ import { registerDeleteRoutes } from './register-delete.routes.js';
 import { registerOperationsRoutes } from './register-operations.routes.js';
 import { registerReadRoutes } from './register-read.routes.js';
 import { registerVersionsRoutes } from './register-versions.routes.js';
+import { registerShareRoutes } from './register-share.routes.js';
 export { hashBuffer } from './helpers.js';
 export const documentRoutes: FastifyPluginAsync<{
   env: Env;
@@ -13,5 +14,6 @@ export const documentRoutes: FastifyPluginAsync<{
   await app.register(registerOperationsRoutes, opts);
   await app.register(registerVersionsRoutes, opts);
   await app.register(registerReadRoutes, opts);
+  await app.register(registerShareRoutes, opts);
   await app.register(registerDeleteRoutes, opts);
 };

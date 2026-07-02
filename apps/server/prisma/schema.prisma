@@ -34,6 +34,7 @@ model User {
   magicLinkTokens   MagicLinkToken[]
   oauthAccounts     OAuthAccount[]
   annotations       DocumentAnnotation[]
+  shareLinks        DocumentShareLink[]
 }
 
 model SmsCode {
@@ -110,8 +111,26 @@ model Document {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
   versions  DocumentVersion[]
+  shareLinks DocumentShareLink[]
 
   @@index([tenantId, updatedAt])
+}
+
+model DocumentShareLink {
+  id            String    @id @default(cuid())
+  documentId    String
+  document      Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionId     String
+  tokenHash     String    @unique
+  createdById   String
+  createdBy     User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  allowDownload Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@index([documentId, createdAt])
+  @@index([expiresAt])
 }
 
 model DocumentVersion {

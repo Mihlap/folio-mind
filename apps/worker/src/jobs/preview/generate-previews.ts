@@ -1,4 +1,4 @@
-import { extractedTextKey, previewPageKey } from '@folio-mind/pdf-contracts';
+import { extractedTextKey, previewPageThumbKey, previewPageViewKey } from '@folio-mind/pdf-contracts';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { extractTextFromPdf } from '../../lib/pdf/pdf-text.js';
@@ -86,8 +86,13 @@ export async function processGeneratePreviewsJob(
     }
     for (const preview of previews) {
       await putObjectBuffer({
-        key: previewPageKey(documentId, versionId, preview.page),
-        body: preview.png,
+        key: previewPageThumbKey(documentId, versionId, preview.page),
+        body: preview.thumb,
+        contentType: 'image/png',
+      });
+      await putObjectBuffer({
+        key: previewPageViewKey(documentId, versionId, preview.page),
+        body: preview.view,
         contentType: 'image/png',
       });
     }
@@ -251,15 +256,27 @@ export async function processPreviewPagesJob(
     }
     let uploaded = 0;
     for (const preview of previews) {
-      const key = previewPageKey(documentId, versionId, preview.page);
-      const exists = await objectExists(key);
-      if (exists) continue;
-      await putObjectBuffer({
-        key,
-        body: preview.png,
-        contentType: 'image/png',
-      });
-      uploaded += 1;
+      const thumbKey = previewPageThumbKey(documentId, versionId, preview.page);
+      const viewKey = previewPageViewKey(documentId, versionId, preview.page);
+      const thumbExists = await objectExists(thumbKey);
+      const viewExists = await objectExists(viewKey);
+      if (thumbExists && viewExists) continue;
+      if (!viewExists) {
+        await putObjectBuffer({
+          key: viewKey,
+          body: preview.view,
+          contentType: 'image/png',
+        });
+        uploaded += 1;
+      }
+      if (!thumbExists) {
+        await putObjectBuffer({
+          key: thumbKey,
+          body: preview.thumb,
+          contentType: 'image/png',
+        });
+        uploaded += 1;
+      }
     }
     await prisma.job.update({
       where: { id: jobId },

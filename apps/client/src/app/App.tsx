@@ -17,6 +17,7 @@ import { MagicLinkPage } from '../pages/auth/MagicLinkPage.js';
 import { MagicLinkVerifyPage } from '../pages/auth/MagicLinkVerifyPage.js';
 import { OAuthCallbackPage } from '../pages/auth/OAuthCallbackPage.js';
 import { PhoneAuthPage } from '../pages/auth/PhoneAuthPage.js';
+import { GuestSharePage } from '../pages/public/GuestSharePage.js';
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAppSelector((s) => s.auth.token);
   if (!token) return <Navigate to="/login" replace />;
@@ -36,6 +37,7 @@ export function App() {
       <Route path="/magic-link/verify" element={<MagicLinkVerifyPage />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/phone-auth" element={<PhoneAuthPage />} />
+      <Route path="/share/:token" element={<GuestSharePage />} />
       <Route
         path="/app/*"
         element={

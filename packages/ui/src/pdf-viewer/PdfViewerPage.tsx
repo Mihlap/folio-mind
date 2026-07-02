@@ -8,10 +8,11 @@ import { markersForPage, type PdfPageMarker } from '../pdf-page-markers.js';
 import { PageMarkersOverlay } from './PageMarkersOverlay.js';
 import { PdfLayoutPageShell } from '../layout-editor/PdfLayoutPageShell.js';
 import { PdfLayoutGrid } from '../layout-editor/PdfLayoutGrid.js';
+import { PdfLayoutMarginsOverlay } from '../layout-editor/PdfLayoutMarginsOverlay.js';
 import { PdfLayoutObjectsOverlay } from '../layout-editor/PdfLayoutObjectsOverlay.js';
-import type { LayoutImageObject, LayoutRect } from '@folio-mind/pdf-contracts';
+import type { LayoutImageObject, LayoutMarginPresetId, LayoutRect } from '@folio-mind/pdf-contracts';
 import { highlightTextLayer, isRenderCancelled } from './utils.js';
-import { pdfPointsToMm, layoutStepFraction } from '@folio-mind/pdf-contracts';
+import { pdfPointsToMm, layoutStepFraction, layoutGuidesForPreset } from '@folio-mind/pdf-contracts';
 
 export type PdfViewerLayoutProps = {
   enabled?: boolean;
@@ -21,8 +22,12 @@ export type PdfViewerLayoutProps = {
   showRulers?: boolean;
   gridStepMm?: number;
   snapEnabled?: boolean;
+  cropMode?: boolean;
+  showPageGuides?: boolean;
+  marginPresetId?: LayoutMarginPresetId;
   onLayoutObjectSelect?: (id: string | null) => void;
   onLayoutObjectChange?: (id: string, rect: LayoutRect) => void;
+  onLayoutObjectCropChange?: (id: string, crop: LayoutRect) => void;
   onLayoutFilesDrop?: (files: File[], pageNumber: number) => void;
   pageLayoutCountByPage?: Record<number, number>;
   onPageLayoutOpen?: (page: number) => void;
@@ -78,8 +83,12 @@ export function PdfViewerPage({
   showRulers = true,
   gridStepMm = 10,
   snapEnabled = false,
+  cropMode = false,
+  showPageGuides = false,
+  marginPresetId = 'none',
   onLayoutObjectSelect,
   onLayoutObjectChange,
+  onLayoutObjectCropChange,
   onLayoutFilesDrop,
 }: PdfViewerPageProps) {
   const markersOnPage = markersForPage(pageMarkers, pageNumber).filter(
@@ -193,6 +202,10 @@ export function PdfViewerPage({
     snapEnabled && layoutMetricsReady
       ? layoutStepFraction(gridStepMm, pageWidthMm)
       : 0;
+  const pageGuides =
+    layoutEnabled && layoutMetricsReady && showPageGuides
+      ? layoutGuidesForPreset(pageWidthMm, pageHeightMm, marginPresetId)
+      : null;
 
   function handleLayoutDragOver(event: DragEvent<HTMLDivElement>) {
     if (!onLayoutFilesDrop) return;
@@ -296,6 +309,14 @@ export function PdfViewerPage({
       )}
       {layoutEnabled && layoutMetricsReady && (
         <>
+          {pageGuides && (
+            <PdfLayoutMarginsOverlay
+              pageWidthPx={pageMetrics.widthPx}
+              pageHeightPx={pageMetrics.heightPx}
+              safe={pageGuides.safe}
+              bleed={pageGuides.bleed}
+            />
+          )}
           {showGrid && (
             <PdfLayoutGrid
               pageWidthPx={pageMetrics.widthPx}
@@ -312,9 +333,11 @@ export function PdfViewerPage({
             pageHeightPx={pageMetrics.heightPx}
             objects={layoutObjects}
             selectedId={selectedObjectId}
+            cropMode={cropMode}
             snapStep={snapStep}
             onSelect={onLayoutObjectSelect ?? (() => {})}
             onObjectChange={onLayoutObjectChange ?? (() => {})}
+            onObjectCropChange={onLayoutObjectCropChange ?? (() => {})}
           />
         </>
       )}

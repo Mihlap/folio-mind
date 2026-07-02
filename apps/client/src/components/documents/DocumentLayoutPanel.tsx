@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { useApplyLayoutPdfMutation, useGetJobQuery } from '@folio-mind/store';
+import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS } from '@folio-mind/store';
 import { normalizeLayoutObjectsForPdf, estimateLayoutObjectsBytes } from '../../lib/layout/normalizeLayoutImage.js';
 import {
   FeatureHelpActionButton,
@@ -235,6 +235,32 @@ export function DocumentLayoutPanel({
       </div>
 
       <label className="block text-xs text-slate-600">
+        Поля листа (A4 / A3)
+        <select
+          value={layout.marginPresetId}
+          onChange={(e) => layout.setMarginPresetId(e.target.value as typeof layout.marginPresetId)}
+          className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+        >
+          {LAYOUT_MARGIN_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+        <input
+          type="checkbox"
+          checked={layout.showPageGuides}
+          disabled={layout.marginPresetId === 'none'}
+          onChange={(e) => layout.setShowPageGuides(e.target.checked)}
+          className="rounded border-slate-300"
+        />
+        Показать направляющие (зелёное — безопасное поле, розовое — вылет)
+      </label>
+
+      <label className="block text-xs text-slate-600">
         Шаг сетки (мм)
         <input
           type="number"
@@ -276,6 +302,35 @@ export function DocumentLayoutPanel({
             className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
             90° ↻
+          </button>
+          <button
+            type="button"
+            disabled={savePending || !layout.pageGuides}
+            onClick={() => layout.fitSelectedToSafeArea()}
+            className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+          >
+            Вписать в поля
+          </button>
+          <button
+            type="button"
+            disabled={savePending}
+            onClick={() => layout.setCropMode(!layout.cropMode)}
+            className={[
+              'cursor-pointer rounded-md border px-2 py-1 text-xs disabled:opacity-40',
+              layout.cropMode
+                ? 'border-amber-300 bg-amber-50 text-amber-900'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+            ].join(' ')}
+          >
+            {layout.cropMode ? 'Обрезка вкл.' : 'Обрезка'}
+          </button>
+          <button
+            type="button"
+            disabled={savePending}
+            onClick={() => layout.resetSelectedCrop()}
+            className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+          >
+            Сбросить обрезку
           </button>
         </div>
       )}

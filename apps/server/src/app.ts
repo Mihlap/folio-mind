@@ -17,6 +17,7 @@ import { annotationRoutes } from './routes/annotations.js';
 import { authRoutes } from './routes/auth.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { documentRoutes } from './routes/documents.js';
+import { publicShareRoutes } from './routes/public-share.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { ragRoutes } from './routes/rag.js';
@@ -66,6 +67,7 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(oauthRoutes, { env: options.env });
     await app.register(meRoutes);
     await app.register(documentRoutes, { env: options.env });
+    await app.register(publicShareRoutes, { env: options.env });
     await app.register(annotationRoutes);
     await app.register(aiRoutes, { env: options.env });
     await app.register(ragRoutes, { env: options.env });

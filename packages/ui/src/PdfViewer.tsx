@@ -13,10 +13,6 @@ import {
   type PdfSelectionPrompt,
 } from './pdf-viewer/usePdfTextSelection.js';
 import { clamp, scrollPageWithinContainer } from './pdf-viewer/utils.js';
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
 export type { PdfSearchMatch };
 export type PdfViewerDisplayMode = 'single' | 'continuous';
 export type PdfViewerZoomMode = 'fit-width' | 'custom';
@@ -82,8 +78,12 @@ export function PdfViewer({
   showRulers = true,
   gridStepMm = 10,
   snapEnabled = false,
+  cropMode = false,
+  showPageGuides = false,
+  marginPresetId = 'none',
   onLayoutObjectSelect,
   onLayoutObjectChange,
+  onLayoutObjectCropChange,
   onLayoutFilesDrop,
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -316,8 +316,12 @@ export function PdfViewer({
     showRulers,
     gridStepMm,
     snapEnabled,
+    cropMode,
+    showPageGuides,
+    marginPresetId,
     onLayoutObjectSelect,
     onLayoutObjectChange,
+    onLayoutObjectCropChange,
     onLayoutFilesDrop,
   };
   return (

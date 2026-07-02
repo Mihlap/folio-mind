@@ -9,7 +9,12 @@ export {
   layoutStepFraction,
   pdfPointsToMm,
   rotateLayoutObject,
+  LAYOUT_MARGIN_PRESETS,
+  layoutGuidesForPreset,
+  normalizeLayoutCrop,
+  isFullLayoutCrop,
   type LayoutImageObject,
+  type LayoutMarginPresetId,
   type LayoutRect,
   type OptimizeSizeEstimate,
 } from '@folio-mind/pdf-contracts';
@@ -134,3 +139,20 @@ export {
   useDeleteRagSourceMutation,
   useQueryRagMutation,
 } from './api/ragApi.js';
+export {
+  shareApi,
+  useListShareLinksQuery,
+  useCreateShareLinkMutation,
+  useRevokeShareLinkMutation,
+  fetchGuestShareMeta,
+  fetchGuestSharePreviews,
+  type ShareLinkItem,
+  type ShareLinkTtlPresetId,
+  type CreateShareLinkBody,
+  type GuestShareMeta,
+  type GuestSharePreviews,
+  SHARE_LINK_TTL_PRESETS,
+  SHARE_LINK_TTL_PRESET_IDS,
+  DEFAULT_SHARE_LINK_TTL_PRESET,
+  shareLinkTtlLabel,
+} from './api/shareApi.js';

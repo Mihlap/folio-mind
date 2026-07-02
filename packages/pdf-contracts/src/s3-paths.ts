@@ -15,6 +15,25 @@ export function resolveS3Key(prefix: S3PrefixKey, fileName: string): string {
 export function previewPageKey(documentId: string, versionId: string, page: number): string {
   return resolveS3Key('previews', `${documentId}/${versionId}/page-${page}.png`);
 }
+
+export function previewPageThumbKey(documentId: string, versionId: string, page: number): string {
+  return previewPageKey(documentId, versionId, page);
+}
+
+export function previewPageViewKey(documentId: string, versionId: string, page: number): string {
+  return resolveS3Key('previews', `${documentId}/${versionId}/page-${page}-view.png`);
+}
+export type PreviewPageVariant = 'thumb' | 'view';
+export function previewPageKeyForVariant(
+  documentId: string,
+  versionId: string,
+  page: number,
+  variant: PreviewPageVariant,
+): string {
+  return variant === 'view'
+    ? previewPageViewKey(documentId, versionId, page)
+    : previewPageThumbKey(documentId, versionId, page);
+}
 export function extractedTextKey(documentId: string, versionId: string): string {
   return resolveS3Key('processing', `${documentId}/${versionId}/text.json`);
 }

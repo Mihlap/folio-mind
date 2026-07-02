@@ -1,4 +1,4 @@
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, type Canvas } from '@napi-rs/canvas';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,9 +9,11 @@ GlobalWorkerOptions.workerSrc = pathToFileURL(
   join(pdfjsPkgDir, 'legacy/build/pdf.worker.mjs'),
 ).href;
 const THUMB_WIDTH = 160;
+const DEFAULT_VIEW_WIDTH = 1440;
 const PIXEL_DIFF_WIDTH = 200;
 const DEFAULT_INITIAL_PAGES = 15;
 const DEFAULT_MAX_PREVIEW_PAGES = 200;
+
 function resolveInitialPages(): number {
   const raw = process.env.PREVIEW_INITIAL_PAGES;
   if (!raw) return DEFAULT_INITIAL_PAGES;
@@ -24,14 +26,23 @@ function resolveMaxPreviewPages(): number {
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_MAX_PREVIEW_PAGES;
 }
+function resolveViewWidth(): number {
+  const raw = process.env.PREVIEW_VIEW_WIDTH;
+  if (!raw) return DEFAULT_VIEW_WIDTH;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 400 ? Math.floor(n) : DEFAULT_VIEW_WIDTH;
+}
+
 export type PreviewRenderResult = {
   pageCount: number;
   previews: Array<{
     page: number;
-    png: Buffer;
+    thumb: Buffer;
+    view: Buffer;
   }>;
   initialPages: number;
 };
+
 async function openPdf(buffer: Buffer) {
   const task = getDocument({
     data: new Uint8Array(buffer),
@@ -42,12 +53,14 @@ async function openPdf(buffer: Buffer) {
   });
   return task.promise;
 }
+
 export async function countPdfPages(buffer: Buffer): Promise<number> {
   const pdf = await openPdf(buffer);
   const pageCount = pdf.numPages;
   await pdf.destroy();
   return pageCount;
 }
+
 export type PageRgbaBitmap = {
   page: number;
   width: number;
@@ -55,11 +68,11 @@ export type PageRgbaBitmap = {
   data: Uint8ClampedArray;
 };
 
-async function renderPageRgba(
+async function renderPageCanvas(
   pdf: Awaited<ReturnType<typeof openPdf>>,
   pageNum: number,
   targetWidth: number,
-): Promise<PageRgbaBitmap> {
+): Promise<Canvas> {
   const page = await pdf.getPage(pageNum);
   const baseViewport = page.getViewport({ scale: 1 });
   const scale = targetWidth / baseViewport.width;
@@ -72,6 +85,28 @@ async function renderPageRgba(
     viewport,
     canvas,
   } as Parameters<typeof page.render>[0]).promise;
+  return canvas;
+}
+
+function downscaleToThumb(source: Canvas): Buffer {
+  const targetWidth = THUMB_WIDTH;
+  const scale = targetWidth / source.width;
+  const targetHeight = Math.max(1, Math.ceil(source.height * scale));
+  const thumbCanvas = createCanvas(targetWidth, targetHeight);
+  const context = thumbCanvas.getContext('2d');
+  if (!context) throw new Error('Canvas 2d context unavailable');
+  context.drawImage(source, 0, 0, targetWidth, targetHeight);
+  return thumbCanvas.toBuffer('image/png');
+}
+
+async function renderPageRgba(
+  pdf: Awaited<ReturnType<typeof openPdf>>,
+  pageNum: number,
+  targetWidth: number,
+): Promise<PageRgbaBitmap> {
+  const canvas = await renderPageCanvas(pdf, pageNum, targetWidth);
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas 2d context unavailable');
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
   return {
     page: pageNum,
@@ -113,18 +148,7 @@ export async function renderPdfPagesImage(
     .sort((a, b) => a - b);
   const results: Array<{ page: number; image: Buffer }> = [];
   for (const pageNum of uniquePages) {
-    const page = await pdf.getPage(pageNum);
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scale = targetWidth / baseViewport.width;
-    const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Canvas 2d context unavailable');
-    await page.render({
-      canvasContext: context,
-      viewport,
-      canvas,
-    } as Parameters<typeof page.render>[0]).promise;
+    const canvas = await renderPageCanvas(pdf, pageNum, targetWidth);
     const image =
       format === 'jpeg'
         ? canvas.toBuffer('image/jpeg', jpegQuality)
@@ -152,16 +176,7 @@ export async function renderPdfPagesAtDpi(
     const page = await pdf.getPage(pageNum);
     const baseViewport = page.getViewport({ scale: 1 });
     const targetWidth = Math.max(1, Math.round((baseViewport.width / 72) * dpi));
-    const scale = targetWidth / baseViewport.width;
-    const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Canvas 2d context unavailable');
-    await page.render({
-      canvasContext: context,
-      viewport,
-      canvas,
-    } as Parameters<typeof page.render>[0]).promise;
+    const canvas = await renderPageCanvas(pdf, pageNum, targetWidth);
     const image =
       format === 'jpeg'
         ? canvas.toBuffer('image/jpeg', jpegQuality)
@@ -179,34 +194,27 @@ export async function renderPdfPageRange(
 ): Promise<
   Array<{
     page: number;
-    png: Buffer;
+    thumb: Buffer;
+    view: Buffer;
   }>
 > {
   const pdf = await openPdf(buffer);
   const start = Math.max(1, fromPage);
   const end = Math.min(pdf.numPages, toPage);
-  const previews: Array<{
-    page: number;
-    png: Buffer;
-  }> = [];
+  const viewWidth = resolveViewWidth();
+  const previews: Array<{ page: number; thumb: Buffer; view: Buffer }> = [];
   for (let pageNum = start; pageNum <= end; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scale = THUMB_WIDTH / baseViewport.width;
-    const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Canvas 2d context unavailable');
-    await page.render({
-      canvasContext: context,
-      viewport,
-      canvas,
-    } as Parameters<typeof page.render>[0]).promise;
-    previews.push({ page: pageNum, png: canvas.toBuffer('image/png') });
+    const viewCanvas = await renderPageCanvas(pdf, pageNum, viewWidth);
+    previews.push({
+      page: pageNum,
+      view: viewCanvas.toBuffer('image/png'),
+      thumb: downscaleToThumb(viewCanvas),
+    });
   }
   await pdf.destroy();
   return previews;
 }
+
 export async function renderPdfPreviews(buffer: Buffer): Promise<PreviewRenderResult> {
   const pdf = await openPdf(buffer);
   const pageCount = pdf.numPages;
@@ -215,9 +223,12 @@ export async function renderPdfPreviews(buffer: Buffer): Promise<PreviewRenderRe
   const previews = initialPages > 0 ? await renderPdfPageRange(buffer, 1, initialPages) : [];
   return { pageCount, previews, initialPages };
 }
+
 export function getPreviewLimits() {
   return {
     initialPages: resolveInitialPages(),
     maxPages: resolveMaxPreviewPages(),
+    viewWidth: resolveViewWidth(),
+    thumbWidth: THUMB_WIDTH,
   };
 }

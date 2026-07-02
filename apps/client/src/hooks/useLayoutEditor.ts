@@ -3,7 +3,10 @@ import {
   layoutStepFraction,
   pdfPointsToMm,
   rotateLayoutObject,
+  layoutGuidesForPreset,
+  normalizeLayoutCrop,
   type LayoutImageObject,
+  type LayoutMarginPresetId,
   type LayoutRect,
 } from '@folio-mind/store';
 import { filterImageFiles, isImageFile } from '../lib/layout/isImageFile.js';
@@ -61,9 +64,17 @@ export function useLayoutEditor({
   const [gridStepMm, setGridStepMm] = useState(10);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [distributeAcrossPages, setDistributeAcrossPages] = useState(false);
+  const [marginPresetId, setMarginPresetId] = useState<LayoutMarginPresetId>('a4-safe');
+  const [showPageGuides, setShowPageGuides] = useState(true);
+  const [cropMode, setCropMode] = useState(false);
   const skipSaveRef = useRef(true);
 
   const pageWidthMm = pdfPointsToMm(pageWidthPt);
+  const pageHeightMm = pdfPointsToMm(pageHeightPt);
+  const pageGuides = useMemo(
+    () => layoutGuidesForPreset(pageWidthMm, pageHeightMm, marginPresetId),
+    [marginPresetId, pageHeightMm, pageWidthMm],
+  );
   const snapStep = snapEnabled ? layoutStepFraction(gridStepMm, pageWidthMm) : 0;
 
   useEffect(() => {
@@ -165,6 +176,27 @@ export function useLayoutEditor({
     setObjects((prev) => prev.map((item) => (item.id === id ? { ...item, rect } : item)));
   }, []);
 
+  const updateObjectCrop = useCallback((id: string, crop: LayoutRect) => {
+    setObjects((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, crop: normalizeLayoutCrop(crop) } : item)),
+    );
+  }, []);
+
+  const resetSelectedCrop = useCallback(() => {
+    if (!selectedId) return;
+    setObjects((prev) =>
+      prev.map((item) => (item.id === selectedId ? { ...item, crop: undefined } : item)),
+    );
+  }, [selectedId]);
+
+  const fitSelectedToSafeArea = useCallback(() => {
+    if (!selectedId || !pageGuides) return;
+    const safe = pageGuides.safe;
+    setObjects((prev) =>
+      prev.map((item) => (item.id === selectedId ? { ...item, rect: { ...safe } } : item)),
+    );
+  }, [pageGuides, selectedId]);
+
   const rotateSelected = useCallback(
     (deltaDeg: number) => {
       if (!selectedId) return;
@@ -209,10 +241,20 @@ export function useLayoutEditor({
     setSnapEnabled,
     distributeAcrossPages,
     setDistributeAcrossPages,
+    marginPresetId,
+    setMarginPresetId,
+    showPageGuides,
+    setShowPageGuides,
+    pageGuides,
+    cropMode,
+    setCropMode,
     snapStep,
     addImageFromFile,
     addImagesFromFiles,
     updateObjectRect,
+    updateObjectCrop,
+    resetSelectedCrop,
+    fitSelectedToSafeArea,
     rotateSelected,
     removeSelected,
     pageObjectCount,

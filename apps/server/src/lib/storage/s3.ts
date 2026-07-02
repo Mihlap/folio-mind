@@ -24,7 +24,9 @@ import {
   exportReportWordKey,
   extractedTextKey,
   preConvertedDocxKey,
+  previewPageKeyForVariant,
   resolveS3Key,
+  type PreviewPageVariant,
   type S3PrefixKey,
 } from '@folio-mind/pdf-contracts';
 import type { Env } from '../config/env.js';
@@ -610,13 +612,14 @@ export async function listPreviewPagesInRange(
   versionId: string,
   fromPage: number,
   toPage: number,
+  variant: PreviewPageVariant = 'thumb',
 ): Promise<Set<number>> {
   if (!client || toPage < fromPage) return new Set();
   const found = new Set<number>();
   const pages = Array.from({ length: toPage - fromPage + 1 }, (_, index) => fromPage + index);
   await Promise.all(
     pages.map(async (page) => {
-      const key = resolveS3Key('previews', `${documentId}/${versionId}/page-${page}.png`);
+      const key = previewPageKeyForVariant(documentId, versionId, page, variant);
       if (await headObjectExists(key, 6_000)) {
         found.add(page);
       }

@@ -631,8 +631,12 @@ export function DocumentPage() {
                         showRulers={layout.showRulers}
                         gridStepMm={layout.gridStepMm}
                         snapEnabled={layout.snapEnabled}
+                        cropMode={layout.cropMode}
+                        showPageGuides={layout.showPageGuides}
+                        marginPresetId={layout.marginPresetId}
                         onLayoutObjectSelect={layout.setSelectedId}
                         onLayoutObjectChange={layout.updateObjectRect}
+                        onLayoutObjectCropChange={layout.updateObjectCrop}
                         onLayoutFilesDrop={handleLayoutFilesDrop}
                         pageLayoutCountByPage={layout.objectCountByPage}
                         onPageLayoutOpen={handlePageLayoutOpen}

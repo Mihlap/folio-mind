@@ -8,13 +8,15 @@ export type ToolSectionId =
   | 'annotations'
   | 'edits'
   | 'diff'
-  | 'layout';
+  | 'layout'
+  | 'share';
 
 export const TOOL_SECTION_IDS: ToolSectionId[] = [
   'optimize',
   'split',
   'merge',
   'layout',
+  'share',
   'annotations',
   'edits',
   'diff',

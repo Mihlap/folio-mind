@@ -13,6 +13,8 @@ export type LayoutImageObject = {
   /** data: URL изображения (сессия / черновик). */
   imageSrc: string;
   rotation: number;
+  /** Доля исходного изображения (0..1), видимая в рамке на листе. */
+  crop?: LayoutRect;
 };
 
 export const PDF_POINT_TO_MM = 25.4 / 72;

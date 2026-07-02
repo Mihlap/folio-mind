@@ -30,6 +30,7 @@ import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
+import { DocumentSharePanel } from './DocumentSharePanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 import { useDocumentAnnotationsPanel } from './useDocumentAnnotationsPanel.js';
@@ -718,6 +719,29 @@ export function DocumentPdfOperationsPanel({
             />
           </ToolAccordionSection>
         )}
+
+        <ToolAccordionSection
+          title="Ссылка для заказчика"
+          subtitle="Гостевой просмотр превью без скачивания"
+          isOpen={isSectionOpen('share')}
+          onToggle={() => toggleSection('share')}
+          helpTitle="Гостевой просмотр"
+          helpContent={
+            <>
+              <p>
+                Создайте ссылку с ограниченным сроком действия. Заказчик видит превью страниц в
+                браузере — без доступа к исходному PDF.
+              </p>
+              <p>Ссылку можно отозвать в любой момент.</p>
+            </>
+          }
+        >
+          <DocumentSharePanel
+            documentId={documentId}
+            activeVersion={activeVersion}
+            versionReady={versionReady}
+          />
+        </ToolAccordionSection>
 
         <DocumentAnnotationsControllerProvider value={annotationsController}>
           <ToolAccordionSection
