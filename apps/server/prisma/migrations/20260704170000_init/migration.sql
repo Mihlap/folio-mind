@@ -1,6 +1,9 @@
 -- Enable pgvector extension for embeddings
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateTable
 CREATE TABLE "Tenant" (
     "id" TEXT NOT NULL,
@@ -8,6 +11,20 @@ CREATE TABLE "Tenant" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Tenant_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "LayoutTemplate" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "category" TEXT NOT NULL DEFAULT 'custom',
+    "objects" JSONB NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "LayoutTemplate_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -85,15 +102,82 @@ CREATE TABLE "PasswordResetToken" (
 );
 
 -- CreateTable
+CREATE TABLE "Project" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Document" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "ownerId" TEXT NOT NULL,
+    "projectId" TEXT,
+    "reviewStatus" TEXT NOT NULL DEFAULT 'draft',
+    "reviewStatusChangedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Document_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "DocumentShareLink" (
+    "id" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "versionId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "createdById" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "revokedAt" TIMESTAMP(3),
+    "allowDownload" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "DocumentShareLink_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "GuestShareComment" (
+    "id" TEXT NOT NULL,
+    "shareLinkId" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "versionId" TEXT NOT NULL,
+    "page" INTEGER NOT NULL,
+    "content" TEXT NOT NULL,
+    "authorName" TEXT,
+    "x" DOUBLE PRECISION,
+    "y" DOUBLE PRECISION,
+    "status" TEXT NOT NULL DEFAULT 'open',
+    "resolvedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "GuestShareComment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "MediaAsset" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "documentId" TEXT,
+    "title" TEXT NOT NULL,
+    "s3Key" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "mimeType" TEXT NOT NULL,
+    "size" BIGINT NOT NULL DEFAULT 0,
+    "width" INTEGER,
+    "height" INTEGER,
+    "status" TEXT NOT NULL DEFAULT 'pending_upload',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "MediaAsset_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -107,11 +191,18 @@ CREATE TABLE "DocumentVersion" (
     "mimeType" TEXT NOT NULL DEFAULT 'application/pdf',
     "status" TEXT NOT NULL DEFAULT 'pending',
     "pageCount" INTEGER,
+    "sourceDocxKey" TEXT,
+    "sourceVersionId" TEXT,
     "integrityStatus" TEXT,
     "integrityScore" INTEGER,
     "integritySummary" TEXT,
     "integrityDetails" JSONB,
     "integrityAnalyzedAt" TIMESTAMP(3),
+    "confidenceLevel" TEXT,
+    "confidenceScore" INTEGER,
+    "confidenceSummary" TEXT,
+    "confidenceDetails" JSONB,
+    "confidenceAnalyzedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "DocumentVersion_pkey" PRIMARY KEY ("id")
@@ -208,6 +299,9 @@ CREATE TABLE "RagChunk" (
 );
 
 -- CreateIndex
+CREATE INDEX "LayoutTemplate_tenantId_updatedAt_idx" ON "LayoutTemplate"("tenantId", "updatedAt");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
@@ -253,7 +347,37 @@ CREATE INDEX "PasswordResetToken_expiresAt_idx" ON "PasswordResetToken"("expires
 CREATE UNIQUE INDEX "PasswordResetToken_tokenHash_key" ON "PasswordResetToken"("tokenHash");
 
 -- CreateIndex
+CREATE INDEX "Project_tenantId_updatedAt_idx" ON "Project"("tenantId", "updatedAt");
+
+-- CreateIndex
 CREATE INDEX "Document_tenantId_updatedAt_idx" ON "Document"("tenantId", "updatedAt");
+
+-- CreateIndex
+CREATE INDEX "Document_tenantId_reviewStatus_idx" ON "Document"("tenantId", "reviewStatus");
+
+-- CreateIndex
+CREATE INDEX "Document_tenantId_projectId_updatedAt_idx" ON "Document"("tenantId", "projectId", "updatedAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DocumentShareLink_tokenHash_key" ON "DocumentShareLink"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "DocumentShareLink_documentId_createdAt_idx" ON "DocumentShareLink"("documentId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "DocumentShareLink_expiresAt_idx" ON "DocumentShareLink"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "GuestShareComment_documentId_versionId_createdAt_idx" ON "GuestShareComment"("documentId", "versionId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "GuestShareComment_shareLinkId_createdAt_idx" ON "GuestShareComment"("shareLinkId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "MediaAsset_tenantId_createdAt_idx" ON "MediaAsset"("tenantId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "MediaAsset_documentId_createdAt_idx" ON "MediaAsset"("documentId", "createdAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "DocumentVersion_documentId_version_key" ON "DocumentVersion"("documentId", "version");
@@ -280,6 +404,9 @@ CREATE INDEX "RagChunk_sourceId_idx" ON "RagChunk"("sourceId");
 CREATE INDEX "RagChunk_tenantId_idx" ON "RagChunk"("tenantId");
 
 -- AddForeignKey
+ALTER TABLE "LayoutTemplate" ADD CONSTRAINT "LayoutTemplate_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -295,13 +422,37 @@ ALTER TABLE "OAuthAccount" ADD CONSTRAINT "OAuthAccount_userId_fkey" FOREIGN KEY
 ALTER TABLE "PasswordResetToken" ADD CONSTRAINT "PasswordResetToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Project" ADD CONSTRAINT "Project_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Document" ADD CONSTRAINT "Document_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Document" ADD CONSTRAINT "Document_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Document" ADD CONSTRAINT "Document_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentShareLink" ADD CONSTRAINT "DocumentShareLink_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentShareLink" ADD CONSTRAINT "DocumentShareLink_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "GuestShareComment" ADD CONSTRAINT "GuestShareComment_shareLinkId_fkey" FOREIGN KEY ("shareLinkId") REFERENCES "DocumentShareLink"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "MediaAsset" ADD CONSTRAINT "MediaAsset_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "MediaAsset" ADD CONSTRAINT "MediaAsset_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "DocumentVersion" ADD CONSTRAINT "DocumentVersion_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentVersion" ADD CONSTRAINT "DocumentVersion_sourceVersionId_fkey" FOREIGN KEY ("sourceVersionId") REFERENCES "DocumentVersion"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
