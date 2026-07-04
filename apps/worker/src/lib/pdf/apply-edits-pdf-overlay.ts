@@ -8,6 +8,7 @@ export type PdfOverlayEdit = {
   page: number;
   originalText: string;
   suggestion: string;
+  anchor?: { xNorm: number; yNorm: number };
 };
 export async function applyEditsViaPdfOverlay(
   sourceS3Key: string,

@@ -6,6 +6,7 @@ import {
   isTextLayerSelectable,
   pageNumberFromPageRoot,
   pageNumberFromSelection,
+  pdfPageRootFromSelection,
   pdfPageRootFromTextLayer,
   readPdfTextSelection,
   type PdfTextSelectionDrag,
@@ -17,6 +18,8 @@ export type PdfSelectionPrompt = {
   page: number;
   x: number;
   y: number;
+  pageWidthPx: number;
+  pageHeightPx: number;
   highlightRects: PdfSelectionHighlightRect[];
 };
 
@@ -85,6 +88,9 @@ export function usePdfTextSelection({
         const pageNum =
           (drag ? pageNumberFromPageRoot(drag.pageRoot) : null) ?? pageNumberFromSelection(root);
         if (!pageNum) return;
+        const pageRect = (drag?.pageRoot ?? pdfPageRootFromSelection(root))?.getBoundingClientRect();
+        const pageWidthPx = pageRect?.width ?? 0;
+        const pageHeightPx = pageRect?.height ?? 0;
         const anchorX = snap.rect.width > 0 || snap.rect.left > 0 ? snap.rect.left : endX;
         const anchorY =
           snap.rect.height > 0 || snap.rect.bottom > 0 ? snap.rect.bottom + 6 : endY + 6;
@@ -94,6 +100,8 @@ export function usePdfTextSelection({
           page: pageNum,
           x: anchorX,
           y: anchorY,
+          pageWidthPx: pageWidthPx > 0 ? pageWidthPx : 1,
+          pageHeightPx: pageHeightPx > 0 ? pageHeightPx : 1,
           highlightRects: snap.highlightRects,
         });
       });

@@ -9,6 +9,7 @@ import { DocumentReportPanel } from './DocumentReportPanel.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import type { ToolSectionId } from '../ui/ToolAccordionSection.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
+import type { DocumentReviewStatus } from '@folio-mind/store';
 export type DocumentRightTab = 'chat' | 'tools' | 'report';
 type Props = {
   documentId: string;
@@ -32,6 +33,8 @@ type Props = {
     files: File[],
     options?: { distributeAcrossPages?: boolean; startPage?: number },
   ) => Promise<void>;
+  reviewStatus?: DocumentReviewStatus;
+  reviewStatusChangedAt?: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -71,6 +74,8 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   layoutAddNotice = null,
   layoutPageCount = 0,
   onAddLayoutImages,
+  reviewStatus = 'draft',
+  reviewStatusChangedAt = null,
   collapsed,
   onToggleCollapsed,
   onExpand,
@@ -189,6 +194,8 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             layoutAddNotice={layoutAddNotice}
             layoutPageCount={layoutPageCount}
             onAddLayoutImages={onAddLayoutImages}
+            reviewStatus={reviewStatus}
+            reviewStatusChangedAt={reviewStatusChangedAt}
           />
         </div>
         <div className={activeTab === 'chat' ? 'block' : 'hidden'}>

@@ -1,6 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useDeleteDocumentMutation, useListDocumentsQuery } from '@folio-mind/store';
+import {
+  useDeleteDocumentMutation,
+  useListDocumentsQuery,
+  useListProjectsQuery,
+  isDocumentReviewStatus,
+} from '@folio-mind/store';
+import { DocumentReviewStatusBadge } from '../../components/documents/DocumentReviewStatusControl.js';
 import { useAppSelector } from '../../hooks/index.js';
 import { useBackgroundUpload } from '../../context/background-upload-provider.js';
 import { DeleteDocumentButton } from '../../components/documents/DeleteDocumentButton.js';
@@ -31,7 +37,12 @@ export function DashboardPage() {
   const progress = active ? uploadState.progress : 0;
   const showDone = active && uploadState.showDone;
   const uploadError = active ? uploadState.error : null;
-  const { data: list, refetch } = useListDocumentsQuery({ limit: 20 });
+  const [filterProjectId, setFilterProjectId] = useState<string>('');
+  const { data: list, refetch } = useListDocumentsQuery({
+    limit: 20,
+    ...(filterProjectId ? { projectId: filterProjectId } : {}),
+  });
+  const { data: projects } = useListProjectsQuery();
   const [deleteDocument] = useDeleteDocumentMutation();
 
   const error = localError ?? uploadError;
@@ -82,7 +93,32 @@ export function DashboardPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Документы</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Документы</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <span className="sr-only sm:not-sr-only">Проект</span>
+            <select
+              value={filterProjectId}
+              onChange={(e) => setFilterProjectId(e.target.value)}
+              className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+            >
+              <option value="">Все документы</option>
+              {projects?.items.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Link
+            to="/app/projects"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Проекты
+          </Link>
+        </div>
+      </div>
 
       <div
         className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-5 sm:mt-8 sm:p-8 lg:p-10"
@@ -339,6 +375,19 @@ export function DashboardPage() {
                   >
                     + DOCX
                   </span>
+                )}
+                {isDocumentReviewStatus(doc.reviewStatus) && doc.reviewStatus !== 'draft' && (
+                  <DocumentReviewStatusBadge status={doc.reviewStatus} />
+                )}
+                {doc.projectName && (
+                  <Link
+                    to={doc.projectId ? `/app/projects/${doc.projectId}` : '/app/projects'}
+                    className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200/80 hover:bg-slate-200/80"
+                    title={`Проект: ${doc.projectName}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {doc.projectName}
+                  </Link>
                 )}
               </div>
               {doc.latestVersion && (

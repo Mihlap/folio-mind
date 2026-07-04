@@ -21,6 +21,8 @@ export type EditTextInjection = {
   coords?: {
     x?: number;
     y?: number;
+    pageWidthPx?: number;
+    pageHeightPx?: number;
   };
 };
 
@@ -80,6 +82,8 @@ export function useDocumentAnnotationsPanel({
   const pendingCoordsRef = useRef<{
     x?: number;
     y?: number;
+    pageWidthPx?: number;
+    pageHeightPx?: number;
   } | null>(null);
   const { data: applyJob } = useGetJobQuery(applyJobId!, {
     skip: !applyJobId,

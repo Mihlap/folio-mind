@@ -5,8 +5,8 @@ import {
   useListGuestCommentsQuery,
   useListShareLinksQuery,
   useUpdateGuestCommentStatusMutation,
-  type GuestShareComment,
 } from '@folio-mind/store';
+import { GuestCommentCard } from './GuestCommentCard.js';
 
 type Props = {
   documentId: string;
@@ -60,7 +60,7 @@ export function DocumentGuestCommentsPanel({
 
   const grouped = useMemo(() => {
     const items = data?.items ?? [];
-    const byPage = new Map<number, GuestShareComment[]>();
+    const byPage = new Map<number, typeof items>();
     for (const item of items) {
       const list = byPage.get(item.page) ?? [];
       list.push(item);
@@ -122,82 +122,39 @@ export function DocumentGuestCommentsPanel({
           <li key={page} className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
             <p className="mb-2 text-xs font-medium text-slate-800">Стр. {page}</p>
             <ul className="space-y-2">
-              {comments.map((comment) => {
-                const focused = focusedCommentId === comment.id;
-                return (
-                  <li
-                    key={comment.id}
-                    ref={(el) => {
-                      if (el) itemRefs.current.set(comment.id, el);
-                      else itemRefs.current.delete(comment.id);
-                    }}
-                    className={[
-                      'rounded-md border px-2.5 py-2 text-sm',
-                      comment.status === 'resolved'
-                        ? 'border-emerald-200 bg-emerald-50/60 text-slate-700'
-                        : 'border-amber-200 bg-white text-slate-800',
-                      focused ? 'ring-2 ring-sky-300' : '',
-                    ].join(' ')}
-                  >
-                    <p className="whitespace-pre-wrap">{comment.content}</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                      <span>{comment.authorName?.trim() || 'Заказчик'}</span>
-                      <span>·</span>
-                      <span>{formatWhen(comment.createdAt)}</span>
-                      {comment.x != null && comment.y != null && (
-                        <>
-                          <span>·</span>
-                          <span>метка на странице</span>
-                        </>
-                      )}
-                      <span>·</span>
-                      <span>{comment.status === 'resolved' ? 'Решено' : 'Открыто'}</span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {onGoToComment && (
-                        <button
-                          type="button"
-                          className="cursor-pointer rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-folio-700 hover:bg-folio-50"
-                          onClick={() => onGoToComment(comment.page, comment.id)}
-                        >
-                          Перейти к замечанию
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={updating}
-                        onClick={() =>
-                          void updateStatus({
+              {comments.map((comment) => (
+                <GuestCommentCard
+                  key={comment.id}
+                  comment={comment}
+                  focused={focusedCommentId === comment.id}
+                  formatWhen={formatWhen}
+                  itemRef={(el) => {
+                    if (el) itemRefs.current.set(comment.id, el);
+                    else itemRefs.current.delete(comment.id);
+                  }}
+                  onGoToComment={onGoToComment}
+                  onToggleStatus={() =>
+                    void updateStatus({
+                      documentId,
+                      versionId,
+                      commentId: comment.id,
+                      status: comment.status === 'resolved' ? 'open' : 'resolved',
+                    })
+                  }
+                  onDelete={
+                    canDelete
+                      ? () =>
+                          void deleteComment({
                             documentId,
                             versionId,
                             commentId: comment.id,
-                            status: comment.status === 'resolved' ? 'open' : 'resolved',
                           })
-                        }
-                        className="cursor-pointer rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {comment.status === 'resolved' ? 'Вернуть в работу' : 'Отметить решённым'}
-                      </button>
-                      {canDelete && (
-                        <button
-                          type="button"
-                          disabled={deletingOne}
-                          onClick={() =>
-                            void deleteComment({
-                              documentId,
-                              versionId,
-                              commentId: comment.id,
-                            })
-                          }
-                          className="cursor-pointer rounded border border-rose-200 bg-white px-2 py-0.5 text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                        >
-                          Удалить
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
+                      : undefined
+                  }
+                  updating={updating}
+                  deleting={deletingOne}
+                />
+              ))}
             </ul>
           </li>
         ))}

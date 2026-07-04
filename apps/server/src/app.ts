@@ -21,7 +21,9 @@ import { publicShareRoutes } from './routes/public-share.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { ragRoutes } from './routes/rag.js';
+import { layoutTemplateRoutes } from './routes/layout-templates.js';
 import { mediaRoutes } from './routes/media.js';
+import { projectRoutes } from './routes/projects.js';
 export type BuildAppOptions = {
   env: Env;
   skipDatabase?: boolean;
@@ -73,6 +75,8 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(aiRoutes, { env: options.env });
     await app.register(ragRoutes, { env: options.env });
     await app.register(mediaRoutes);
+    await app.register(layoutTemplateRoutes);
+    await app.register(projectRoutes);
   } else if (options.skipDatabase) {
     await app.register(healthRoutes, { env: options.env });
   }

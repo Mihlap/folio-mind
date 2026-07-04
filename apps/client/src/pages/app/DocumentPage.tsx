@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PdfViewer, PdfViewerToolbar, type PdfPageMarker } from '@folio-mind/ui';
 import {
   useDeleteAnnotationMutation,
@@ -8,6 +8,7 @@ import {
   useGetVersionPreviewsQuery,
   useListAnnotationsQuery,
   useListGuestCommentsQuery,
+  fetchMediaAssetDataUrl,
   clearSearch,
   nextSearchMatch,
   prevSearchMatch,
@@ -25,6 +26,7 @@ import {
   DocumentPageHeader,
   formatVersionStatusLabel,
 } from '../../components/documents/DocumentPageHeader.js';
+import { isDocumentReviewStatus } from '@folio-mind/store';
 import {
   DocumentRightPanel,
   type DocumentRightTab,
@@ -60,6 +62,7 @@ type MobileSheet = null | 'versions' | 'panel';
 export function DocumentPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { setWorkspace } = useDocumentWorkspace();
   const { id } = useParams<{
     id: string;
@@ -95,6 +98,9 @@ export function DocumentPage() {
     ...RIGHT_PANEL,
   });
   const versions = useMemo(() => doc?.versions ?? [], [doc?.versions]);
+  const reviewStatus =
+    doc && isDocumentReviewStatus(doc.reviewStatus) ? doc.reviewStatus : ('draft' as const);
+  const reviewStatusChangedAt = doc?.reviewStatusChangedAt ?? null;
   const latest = versions[0];
   const activeVersion = versions.find((v) => v.id === selectedVersionId) ?? latest;
   const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
@@ -235,6 +241,32 @@ export function DocumentPage() {
     setFocusedAnnotationId(annotationId ?? null);
     setPageNavTick((t) => t + 1);
   }, []);
+
+  useEffect(() => {
+    const versionId = searchParams.get('versionId');
+    if (!versionId || !versions.some((v) => v.id === versionId)) return;
+    setSelectedVersionId(versionId);
+  }, [searchParams, versions]);
+
+  useEffect(() => {
+    const commentId = searchParams.get('guestComment');
+    if (!commentId) return;
+    const comment = guestCommentsData?.items?.find((item) => item.id === commentId);
+    if (!comment) return;
+    setRightTab('tools');
+    setToolsFocusSection('share');
+    handleGoToPage(comment.page, comment.id);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('guestComment');
+        next.delete('versionId');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [guestCommentsData?.items, searchParams, handleGoToPage, setSearchParams]);
+
   const layoutActionsRef = useRef({
     enabled: layout.enabled,
     setEnabled: layout.setEnabled,
@@ -304,6 +336,20 @@ export function DocumentPage() {
     },
     [handleLayoutAddImages],
   );
+  const handleLayoutMediaAssetDrop = useCallback(
+    async (assetId: string, targetPage: number) => {
+      try {
+        const dataUrl = await fetchMediaAssetDataUrl(assetId, token);
+        if (!layout.enabled) layout.setEnabled(true);
+        await layout.addImageFromDataUrl(dataUrl, targetPage);
+      } catch (err) {
+        setLayoutAddNotice(
+          err instanceof Error ? err.message : 'Не удалось вставить из медиатеки',
+        );
+      }
+    },
+    [layout, token],
+  );
   const handlePageLayoutOpen = useCallback(
     (page: number) => {
       if (!layout.enabled) layout.setEnabled(true);
@@ -336,12 +382,29 @@ export function DocumentPage() {
     [handleGoToPage, openAcceptedEditsModal],
   );
   const handleTextQuoteForEdit = useCallback(
-    ({ text, page, x, y }: { text: string; page: number; x?: number; y?: number }) => {
+    ({
+      text,
+      page,
+      x,
+      y,
+      pageWidthPx,
+      pageHeightPx,
+    }: {
+      text: string;
+      page: number;
+      x?: number;
+      y?: number;
+      pageWidthPx?: number;
+      pageHeightPx?: number;
+    }) => {
       editInjectionKeyRef.current += 1;
       setEditTextInjection({
         key: editInjectionKeyRef.current,
         text,
-        coords: x != null || y != null ? { x, y } : undefined,
+        coords:
+          x != null || y != null
+            ? { x, y, pageWidthPx, pageHeightPx }
+            : undefined,
       });
       setRightTab('tools');
       handleGoToPage(page);
@@ -473,7 +536,11 @@ export function DocumentPage() {
       />
 
       <DocumentPageHeader
+        documentId={doc.id}
         title={doc.title}
+        reviewStatus={reviewStatus}
+        projectId={doc.projectId}
+        projectName={doc.projectName}
         versions={versions}
         activeVersion={activeVersion}
         latestVersionId={latest?.id}
@@ -646,6 +713,7 @@ export function DocumentPage() {
                         onLayoutObjectChange={layout.updateObjectRect}
                         onLayoutObjectCropChange={layout.updateObjectCrop}
                         onLayoutFilesDrop={handleLayoutFilesDrop}
+                        onLayoutMediaAssetDrop={handleLayoutMediaAssetDrop}
                         pageLayoutCountByPage={layout.objectCountByPage}
                         onPageLayoutOpen={handlePageLayoutOpen}
                       />
@@ -687,6 +755,8 @@ export function DocumentPage() {
           layoutAddNotice={layoutAddNotice}
           layoutPageCount={layoutPageCount}
           onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
+          reviewStatus={reviewStatus}
+          reviewStatusChangedAt={reviewStatusChangedAt}
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -811,6 +881,8 @@ export function DocumentPage() {
           layoutAddNotice={layoutAddNotice}
           layoutPageCount={layoutPageCount}
           onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
+          reviewStatus={reviewStatus}
+          reviewStatusChangedAt={reviewStatusChangedAt}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

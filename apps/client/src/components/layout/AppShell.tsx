@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import { logout, useMeQuery } from '@folio-mind/store';
 import { DocumentVersionsSidebar } from '../documents/DocumentVersionsSidebar.js';
 import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
@@ -11,24 +11,58 @@ import { shellTopHeaderClass } from './shell-chrome.js';
 import { PanelResizeHandle } from './PanelResizeHandle.js';
 import { PanelViewportToggle } from './PanelViewportToggle.js';
 import { BackgroundUploadBanner } from './BackgroundUploadBanner.js';
-const nav: Array<{
+
+type NavLinkItem = {
+  type: 'link';
   to: string;
   label: string;
   end: boolean;
   icon: string;
-  disabled?: boolean;
-}> = [
-  { to: '/app', label: 'Документы', end: true, icon: '📄' },
-  { to: '/app/media', label: 'Медиатека', end: true, icon: '🖼' },
-  { to: '/app/regulations', label: 'Регламенты', end: true, icon: '📋' },
-  { to: '/app', label: 'ИИ-проверка', end: false, disabled: true, icon: '🤖' },
+};
+
+type NavEntry = NavLinkItem | { type: 'divider' };
+
+/** Регламенты → проекты/документы → медиатека */
+const nav: NavEntry[] = [
+  { type: 'link', to: '/app/regulations', label: 'Регламенты', end: true, icon: '📋' },
+  { type: 'divider' },
+  { type: 'link', to: '/app/projects', label: 'Проекты', end: true, icon: '📁' },
+  { type: 'link', to: '/app', label: 'Документы', end: true, icon: '📄' },
+  { type: 'divider' },
+  { type: 'link', to: '/app/media', label: 'Медиатека', end: true, icon: '🖼' },
 ];
+
+const navLinks = nav.filter((item): item is NavLinkItem => item.type === 'link');
+
 const LEFT_PANEL = {
   defaultWidth: 224,
   minExpandedWidth: 168,
   collapseBelow: 152,
   maxWidth: 320,
 } as const;
+
+function NavDivider({ collapsed }: { collapsed?: boolean }) {
+  return (
+    <div
+      role="presentation"
+      className={collapsed ? 'my-1 h-px w-6 bg-slate-200' : 'my-1.5 h-px bg-slate-100'}
+      aria-hidden
+    />
+  );
+}
+
+function collapsedLinkClass(isActive: boolean) {
+  return `flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
+    isActive ? 'bg-folio-50 ring-1 ring-folio-200' : 'text-slate-500 hover:bg-slate-50'
+  }`;
+}
+
+function expandedLinkClass(isActive: boolean) {
+  return `block rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition ${
+    isActive ? 'bg-folio-50 text-folio-700' : 'text-slate-600 hover:bg-slate-50'
+  }`;
+}
+
 export function AppShell() {
   const dispatch = useAppDispatch();
   const { data: me } = useMeQuery();
@@ -68,42 +102,22 @@ export function AppShell() {
             </div>
 
             <nav className="flex flex-col items-center gap-1 p-1.5">
-              <NavLink
-                to="/app"
-                end
-                title="Документы"
-                className={({ isActive }) =>
-                  `flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
-                    isActive
-                      ? 'bg-folio-50 ring-1 ring-folio-200'
-                      : 'text-slate-500 hover:bg-slate-50'
-                  }`
-                }
-              >
-                <span aria-hidden>📄</span>
-                <span className="sr-only">Документы</span>
-              </NavLink>
-              {nav.slice(1).map((item) => (
-                <NavLink
-                  key={item.label}
-                  to={item.to}
-                  end={item.end}
-                  title={item.label}
-                  className={({ isActive }) =>
-                    `flex h-10 w-10 items-center justify-center rounded-lg text-lg transition ${
-                      item.disabled
-                        ? 'cursor-not-allowed opacity-30'
-                        : isActive
-                          ? 'bg-folio-50 ring-1 ring-folio-200'
-                          : 'text-slate-500 hover:bg-slate-50'
-                    }`
-                  }
-                  onClick={(e) => item.disabled && e.preventDefault()}
-                >
-                  <span aria-hidden>{item.icon}</span>
-                  <span className="sr-only">{item.label}</span>
-                </NavLink>
-              ))}
+              {nav.map((item, index) =>
+                item.type === 'divider' ? (
+                  <NavDivider key={`d-${index}`} collapsed />
+                ) : (
+                  <NavLink
+                    key={item.label}
+                    to={item.to}
+                    end={item.end}
+                    title={item.label}
+                    className={({ isActive }) => collapsedLinkClass(isActive)}
+                  >
+                    <span aria-hidden>{item.icon}</span>
+                    <span className="sr-only">{item.label}</span>
+                  </NavLink>
+                ),
+              )}
             </nav>
 
             {hasVersions && (
@@ -150,39 +164,20 @@ export function AppShell() {
               className={`overflow-x-auto p-1.5 md:p-2 ${hasVersions ? 'shrink-0' : 'flex-1 md:overflow-y-auto'}`}
             >
               <div className="flex min-w-max flex-col gap-1 md:min-w-0">
-                <NavLink
-                  to="/app"
-                  end
-                  className={({ isActive }) =>
-                    `block rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition ${
-                      isActive ? 'bg-folio-50 text-folio-700' : 'text-slate-600 hover:bg-slate-50'
-                    }`
-                  }
-                >
-                  Документы
-                </NavLink>
-                {nav.slice(1).map((item) => (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) =>
-                      `block rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition ${
-                        item.disabled
-                          ? 'cursor-not-allowed text-slate-300'
-                          : isActive
-                            ? 'bg-folio-50 text-folio-700'
-                            : 'text-slate-600 hover:bg-slate-50'
-                      }`
-                    }
-                    onClick={(e) => item.disabled && e.preventDefault()}
-                  >
-                    {item.label}
-                    {item.disabled && (
-                      <span className="ml-2 text-[10px] uppercase text-slate-400">скоро</span>
-                    )}
-                  </NavLink>
-                ))}
+                {nav.map((item, index) =>
+                  item.type === 'divider' ? (
+                    <NavDivider key={`d-${index}`} />
+                  ) : (
+                    <NavLink
+                      key={item.label}
+                      to={item.to}
+                      end={item.end}
+                      className={({ isActive }) => expandedLinkClass(isActive)}
+                    >
+                      {item.label}
+                    </NavLink>
+                  ),
+                )}
               </div>
             </nav>
 
@@ -214,25 +209,21 @@ export function AppShell() {
           </Button>
         </div>
         <nav className="overflow-x-auto p-1.5">
-          <div className="flex min-w-max gap-1">
-            {nav.map((item) => (
-              <NavLink
-                key={item.label}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  `block rounded-lg px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition ${
-                    item.disabled
-                      ? 'cursor-not-allowed text-slate-300'
-                      : isActive
-                        ? 'bg-folio-50 text-folio-700'
-                        : 'text-slate-600 hover:bg-slate-50'
-                  }`
-                }
-                onClick={(e) => item.disabled && e.preventDefault()}
-              >
-                {item.label}
-              </NavLink>
+          <div className="flex min-w-max items-center gap-1">
+            {navLinks.map((item, index) => (
+              <Fragment key={item.label}>
+                {index > 0 &&
+                  (item.to === '/app/projects' || item.to === '/app/media') && (
+                    <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" aria-hidden />
+                  )}
+                <NavLink
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) => expandedLinkClass(isActive)}
+                >
+                  {item.label}
+                </NavLink>
+              </Fragment>
             ))}
           </div>
         </nav>

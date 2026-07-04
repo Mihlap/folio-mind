@@ -26,6 +26,14 @@ export {
   type LayoutMarginPresetId,
   type LayoutRect,
   type OptimizeSizeEstimate,
+  DOCUMENT_REVIEW_STATUSES,
+  type DocumentReviewStatus,
+  isDocumentReviewStatus,
+  applyLayoutTemplateObjects,
+  serializePageToTemplate,
+  FOLIO_MEDIA_DRAG_MIME,
+  type LayoutTemplateStoredObject,
+  type LayoutTemplateCategory,
 } from '@folio-mind/pdf-contracts';
 export { apiBaseUrl } from './api/baseApi.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
@@ -99,6 +107,7 @@ export {
   useCompleteDocxUploadMutation,
   useUploadVersionFileMutation,
   useDeleteDocumentMutation,
+  useUpdateDocumentReviewStatusMutation,
   useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
   useLazyGetSourceDocxUrlQuery,
@@ -187,3 +196,21 @@ export {
   fetchMediaAssetDataUrl,
   type MediaAssetItem,
 } from './api/mediaApi.js';
+export {
+  projectsApi,
+  useListProjectsQuery,
+  useGetProjectQuery,
+  useCreateProjectMutation,
+  useUpdateProjectMutation,
+  useDeleteProjectMutation,
+  useUpdateDocumentProjectMutation,
+  type ProjectItem,
+} from './api/projectsApi.js';
+export {
+  layoutTemplatesApi,
+  useListLayoutTemplatesQuery,
+  useCreateLayoutTemplateMutation,
+  useUpdateLayoutTemplateMutation,
+  useDeleteLayoutTemplateMutation,
+  type LayoutTemplateItem,
+} from './api/layoutTemplatesApi.js';

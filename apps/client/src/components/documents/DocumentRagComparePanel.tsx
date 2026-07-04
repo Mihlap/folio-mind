@@ -7,6 +7,7 @@ import {
   reportActionBtnSoft,
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
+import { ReportTextBlock } from './ReportTextBlock.js';
 type Props = {
   documentId: string;
   versionId: string;
@@ -17,6 +18,7 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
   const [jobId, setJobId] = useState<string | null>(null);
   const [pollJob, setPollJob] = useState(false);
   const [report, setReport] = useState<string | null>(null);
+  const [reportDismissed, setReportDismissed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: job } = useGetJobQuery(jobId!, {
     skip: !jobId,
@@ -26,6 +28,7 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
     setJobId(null);
     setPollJob(false);
     setReport(null);
+    setReportDismissed(false);
     setError(null);
   }, [versionId]);
   useEffect(() => {
@@ -33,6 +36,7 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
     if (job.status === 'completed') {
       setPollJob(false);
       if (job.payload?.report) {
+        setReportDismissed(false);
         setReport(job.payload.report);
       }
     }
@@ -53,6 +57,7 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
   }, [job]);
   async function handleCompare() {
     setError(null);
+    setReportDismissed(false);
     setReport(null);
     try {
       const result = await requestCompare({ documentId, versionId }).unwrap();
@@ -63,6 +68,7 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
     }
   }
   const loading = requesting || pollJob;
+  const reportText = reportDismissed ? null : report;
   return (
     <div className="space-y-2.5 border-t border-slate-100 pt-3">
       <PanelSectionHeader title="Сверка с регламентом" />
@@ -80,6 +86,9 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
                 в меню.
               </p>
               <p>Ниже появится отчёт: совпадения с вашими правилами, риски и рекомендации.</p>
+              <p>
+                Отчёт можно свернуть, открыть в отдельном окне («В окне») или удалить крестиком ×.
+              </p>
               <p>Нужен хотя бы один регламент со статусом «готов к проверке».</p>
             </>
           }
@@ -108,16 +117,25 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
         </div>
       )}
 
-      {report && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-slate-600">Отчёт по сверке</p>
-          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed whitespace-pre-wrap text-slate-700">
-            {report}
-          </div>
-        </div>
+      {reportText && (
+        <ReportTextBlock
+          title="Отчёт по сверке"
+          windowTitle="Сверка с регламентом"
+          collapsible
+          onDismiss={() => {
+            setReportDismissed(true);
+            setJobId(null);
+            setPollJob(false);
+            setReport(null);
+            setError(null);
+          }}
+          dismissLabel="Закрыть и очистить отчёт"
+        >
+          {reportText}
+        </ReportTextBlock>
       )}
 
-      {!loading && !report && !error && versionReady && (
+      {!loading && !reportText && !error && versionReady && (
         <p className="text-[11px] text-slate-400">
           Нажмите «Сверить с регламентом» — ниже появится текстовый отчёт.
         </p>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_LAYOUT_GRADIENT_FILL,
   DEFAULT_LAYOUT_SOLID_FILL,
+  applyLayoutTemplateObjects,
   isLayoutImageObject,
   layoutStepFraction,
   pdfPointsToMm,
@@ -13,6 +14,7 @@ import {
   type LayoutMarginPresetId,
   type LayoutPageObject,
   type LayoutRect,
+  type LayoutTemplateStoredObject,
   type LayoutShapeObject,
 } from '@folio-mind/store';
 import { filterImageFiles, isImageFile } from '../lib/layout/isImageFile.js';
@@ -182,6 +184,17 @@ export function useLayoutEditor({
     );
   }, []);
 
+  const applyTemplate = useCallback(
+    (templateObjects: LayoutTemplateStoredObject[], targetPage = viewerPage) => {
+      const created = applyLayoutTemplateObjects(templateObjects, targetPage, pageCount);
+      if (created.length === 0) return [];
+      setObjects((prev) => [...prev, ...created]);
+      setSelectedId(created[0]!.id);
+      return created;
+    },
+    [pageCount, viewerPage],
+  );
+
   const addImagesFromFiles = useCallback(
     async (
       files: FileList | File[],
@@ -318,6 +331,7 @@ export function useLayoutEditor({
     addImagesFromFiles,
     addShape,
     updateShapeFill,
+    applyTemplate,
     updateObjectRect,
     updateObjectCrop,
     resetSelectedCrop,

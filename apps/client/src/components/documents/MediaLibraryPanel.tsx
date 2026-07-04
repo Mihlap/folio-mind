@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useId, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import {
   fetchMediaAssetDataUrl,
   formatUploadError,
@@ -10,6 +9,7 @@ import {
 } from '@folio-mind/store';
 import { filterImageFiles } from '../../lib/layout/isImageFile.js';
 import { useAppSelector } from '../../hooks/index.js';
+import { MediaAssetThumbnail } from './MediaAssetThumbnail.js';
 
 function loadImageSize(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
@@ -27,108 +27,23 @@ function loadImageSize(file: File): Promise<{ width: number; height: number }> {
   });
 }
 
-type Props = {
-  documentId?: string;
-  versionReady?: boolean;
-  onInsertAsset?: (asset: MediaAssetItem, dataUrl: string) => Promise<void>;
-  variant?: 'embedded' | 'page';
-};
-
-function MediaAssetThumbnail({
-  asset,
-  token,
-  className,
-}: {
-  asset: MediaAssetItem;
-  token: string | null;
-  className?: string;
-}) {
-  const [src, setSrc] = useState<string | null>(asset.previewUrl);
-  const [loading, setLoading] = useState(!asset.previewUrl);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSrc(asset.previewUrl);
-    setFailed(false);
-    setLoading(!asset.previewUrl);
-
-    if (asset.previewUrl) return;
-
-    void (async () => {
-      try {
-        const dataUrl = await fetchMediaAssetDataUrl(asset.id, token);
-        if (!cancelled) setSrc(dataUrl);
-      } catch {
-        if (!cancelled) setFailed(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [asset.id, asset.previewUrl, token]);
-
-  async function handleImageError() {
-    if (failed || !asset.previewUrl) return;
-    setFailed(true);
-    setLoading(true);
-    try {
-      const dataUrl = await fetchMediaAssetDataUrl(asset.id, token);
-      setSrc(dataUrl);
-    } catch {
-      setSrc(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center text-[10px] text-slate-400">Загрузка…</div>
-    );
-  }
-  if (!src) {
-    return (
-      <div className="flex h-full items-center justify-center text-[10px] text-slate-400">Нет превью</div>
-    );
-  }
-  return (
-    <img
-      src={src}
-      alt={asset.title}
-      className={className ?? 'h-full w-full object-cover'}
-      onError={() => void handleImageError()}
-    />
-  );
-}
-
 function isLowDpi(asset: MediaAssetItem): boolean {
   return asset.width != null && asset.width < 1200;
 }
 
-export function MediaLibraryPanel({
-  documentId,
-  versionReady = false,
-  onInsertAsset,
-  variant = 'embedded',
-}: Props) {
+export function MediaLibraryPanel() {
   const uploadInputId = useId();
   const token = useAppSelector((s) => s.auth.token);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [insertingId, setInsertingId] = useState<string | null>(null);
   const [previewAsset, setPreviewAsset] = useState<MediaAssetItem | null>(null);
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const listArgs = documentId ? { documentId } : undefined;
-  const { data, isLoading, refetch } = useListMediaAssetsQuery(listArgs);
+  const { data, isLoading, refetch } = useListMediaAssetsQuery(undefined);
   const [uploadMediaAsset] = useUploadMediaAssetMutation();
   const [deleteMediaAsset, { isLoading: deleting }] = useDeleteMediaAssetMutation();
 
@@ -153,12 +68,7 @@ export function MediaLibraryPanel({
           } catch {
             // размеры опциональны
           }
-          await uploadMediaAsset({
-            file,
-            documentId,
-            width,
-            height,
-          }).unwrap();
+          await uploadMediaAsset({ file, width, height }).unwrap();
         }
         await refetch();
         setSuccess(
@@ -172,7 +82,7 @@ export function MediaLibraryPanel({
         setUploading(false);
       }
     },
-    [documentId, refetch, uploadMediaAsset],
+    [refetch, uploadMediaAsset],
   );
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -189,27 +99,6 @@ export function MediaLibraryPanel({
     const list = Array.from(event.dataTransfer.files ?? []);
     if (list.length > 0) {
       void uploadFiles(list);
-    }
-  }
-
-  async function handleInsert(asset: MediaAssetItem) {
-    if (!onInsertAsset) {
-      setError('Вставка в макет доступна на странице документа');
-      return;
-    }
-    if (asset.status !== 'ready') {
-      setError('Файл ещё загружается');
-      return;
-    }
-    setInsertingId(asset.id);
-    setError(null);
-    try {
-      const dataUrl = await fetchMediaAssetDataUrl(asset.id, token);
-      await onInsertAsset(asset, dataUrl);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось вставить из медиатеки');
-    } finally {
-      setInsertingId(null);
     }
   }
 
@@ -248,39 +137,17 @@ export function MediaLibraryPanel({
   }
 
   const items = data?.items ?? [];
-  const isPage = variant === 'page';
-  const gridClass = isPage
-    ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
-    : 'grid grid-cols-2 gap-2 sm:grid-cols-3';
 
   return (
-    <div
-      className={
-        isPage
-          ? 'space-y-4'
-          : 'space-y-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3'
-      }
-    >
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className={isPage ? 'text-sm font-medium text-slate-800' : 'text-xs font-medium text-slate-700'}>
-          {isPage ? `Всего файлов: ${items.length}` : `Медиатека${items.length > 0 ? ` · ${items.length}` : ''}`}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {!isPage && (
-            <Link
-              to="/app/media"
-              className="text-[11px] font-medium text-folio-700 underline-offset-2 hover:underline"
-            >
-              Вся медиатека →
-            </Link>
-          )}
-          <label
-            htmlFor={uploadInputId}
-            className={`cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 ${uploading ? 'pointer-events-none opacity-50' : ''}`}
-          >
-            {uploading ? 'Загрузка…' : 'Добавить в медиатеку'}
-          </label>
-        </div>
+        <p className="text-sm font-medium text-slate-800">Всего файлов: {items.length}</p>
+        <label
+          htmlFor={uploadInputId}
+          className={`cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 ${uploading ? 'pointer-events-none opacity-50' : ''}`}
+        >
+          {uploading ? 'Загрузка…' : 'Добавить в медиатеку'}
+        </label>
       </div>
 
       <input
@@ -303,7 +170,6 @@ export function MediaLibraryPanel({
         className={[
           'rounded-xl border-2 border-dashed px-4 py-6 text-center transition',
           dragOver ? 'border-folio-400 bg-folio-50/80' : 'border-slate-200 bg-white',
-          isPage ? '' : 'py-4',
         ].join(' ')}
       >
         <p className="text-sm text-slate-700">
@@ -324,9 +190,8 @@ export function MediaLibraryPanel({
       )}
 
       <p className="text-[11px] text-slate-500">
-        {isPage
-          ? 'Все изображения аккаунта. Чтобы вставить в PDF, откройте документ → «Инструменты» → «Медиатека» → «В макет».'
-          : 'Файлы этого документа и общие для аккаунта. Клик по превью — просмотр. «В макет» — на текущую страницу PDF.'}
+        Все изображения аккаунта. Чтобы вставить в PDF, откройте документ → «Инструменты» → «Макет» →
+        «В макет» у нужного превью.
       </p>
 
       {isLoading && <p className="text-xs text-slate-500">Загрузка медиатеки…</p>}
@@ -335,7 +200,7 @@ export function MediaLibraryPanel({
       )}
 
       {items.length > 0 && (
-        <ul className={gridClass}>
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {items.map((asset) => (
             <li
               key={asset.id}
@@ -362,16 +227,6 @@ export function MediaLibraryPanel({
                   </p>
                 )}
                 <div className="flex flex-wrap gap-1">
-                  {onInsertAsset && (
-                    <button
-                      type="button"
-                      disabled={!versionReady || insertingId === asset.id}
-                      onClick={() => void handleInsert(asset)}
-                      className="flex-1 cursor-pointer rounded border border-folio-200 bg-folio-50 px-1.5 py-0.5 text-[10px] font-medium text-folio-800 hover:bg-folio-100 disabled:opacity-50"
-                    >
-                      {insertingId === asset.id ? '…' : 'В макет'}
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => void openPreview(asset)}

@@ -8,6 +8,8 @@ import {
   type ShareLinkTtlPresetId,
 } from '@folio-mind/store';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
+import type { DocumentReviewStatus } from '@folio-mind/store';
+import { DocumentReviewStatusControl } from './DocumentReviewStatusControl.js';
 import {
   reportActionBtnPrimary,
   reportActionsColumnClass,
@@ -17,6 +19,8 @@ type Props = {
   documentId: string;
   activeVersion: DocumentVersionItem | undefined;
   versionReady: boolean;
+  reviewStatus: DocumentReviewStatus;
+  reviewStatusChangedAt: string | null;
 };
 
 function formatExpires(iso: string): string {
@@ -40,7 +44,13 @@ function getMutationError(err: unknown): string {
   return 'Не удалось выполнить операцию';
 }
 
-export function DocumentSharePanel({ documentId, activeVersion, versionReady }: Props) {
+export function DocumentSharePanel({
+  documentId,
+  activeVersion,
+  versionReady,
+  reviewStatus,
+  reviewStatusChangedAt,
+}: Props) {
   const [ttlPreset, setTtlPreset] = useState<ShareLinkTtlPresetId>(DEFAULT_SHARE_LINK_TTL_PRESET);
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
@@ -85,6 +95,12 @@ export function DocumentSharePanel({ documentId, activeVersion, versionReady }: 
 
   return (
     <div className="space-y-3 text-sm text-slate-700">
+      <DocumentReviewStatusControl
+        documentId={documentId}
+        reviewStatus={reviewStatus}
+        reviewStatusChangedAt={reviewStatusChangedAt}
+      />
+
       <p className="text-[11px] leading-snug text-slate-400">
         Заказчик откроет страницы в браузере — без скачивания PDF. Ссылка действует выбранное время.
       </p>

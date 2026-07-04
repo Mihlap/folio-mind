@@ -16,9 +16,11 @@ import {
   listPreviewPagesInRange,
   s3ObjectExists,
 } from '../../lib/storage/s3.js';
-import { decodeCursor, encodeCursor } from './helpers.js';
+import { decodeCursor, encodeCursor, mapDocumentListItem } from './helpers.js';
+import { toDocumentReviewStatus } from '../../lib/documents/document-review-status.js';
 import {
   documentSchema,
+  documentReviewStatusSchema,
   errorBody,
   versionIntegrityResponseSchema,
   versionListItemSchema,
@@ -36,6 +38,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
         querystring: z.object({
           limit: z.coerce.number().int().min(1).max(50).default(20),
           cursor: z.string().optional(),
+          projectId: z.string().optional(),
         }),
         response: {
           200: z.object({
@@ -47,12 +50,13 @@ export const registerReadRoutes: FastifyPluginAsync<{
     },
     async (request) => {
       const user = getAuthUser(request);
-      const { limit, cursor } = request.query;
+      const { limit, cursor, projectId } = request.query;
       const decoded = cursor ? decodeCursor(cursor) : null;
       const documents = await app.prisma.document.findMany({
         where: {
           tenantId: user.tenantId,
           ownerId: user.sub,
+          ...(projectId ? { projectId } : {}),
           ...(decoded
             ? {
                 OR: [
@@ -65,6 +69,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
         take: limit + 1,
         include: {
+          project: { select: { name: true } },
           versions: { orderBy: { version: 'desc' }, take: 1 },
         },
       });
@@ -72,25 +77,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
       const page = hasMore ? documents.slice(0, limit) : documents;
       const last = page[page.length - 1];
       return {
-        items: page.map((doc) => {
-          const latest = doc.versions[0];
-          return {
-            id: doc.id,
-            title: doc.title,
-            createdAt: doc.createdAt.toISOString(),
-            updatedAt: doc.updatedAt.toISOString(),
-            latestVersion: latest
-              ? {
-                  id: latest.id,
-                  version: latest.version,
-                  status: latest.status,
-                  size: latest.size.toString(),
-                  mimeType: latest.mimeType,
-                  sourceDocxKey: latest.sourceDocxKey ?? null,
-                }
-              : null,
-          };
-        }),
+        items: page.map((doc) => mapDocumentListItem(doc, toDocumentReviewStatus)),
         nextCursor: hasMore && last ? encodeCursor(last.updatedAt, last.id) : null,
       };
     },
@@ -105,6 +92,10 @@ export const registerReadRoutes: FastifyPluginAsync<{
           200: z.object({
             id: z.string(),
             title: z.string(),
+            reviewStatus: documentReviewStatusSchema,
+            reviewStatusChangedAt: z.string().nullable(),
+            projectId: z.string().nullable(),
+            projectName: z.string().nullable(),
             versions: z.array(versionListItemSchema),
           }),
           404: errorBody,
@@ -144,6 +135,10 @@ export const registerReadRoutes: FastifyPluginAsync<{
       return {
         id: document.id,
         title: document.title,
+        reviewStatus: toDocumentReviewStatus(document.reviewStatus),
+        reviewStatusChangedAt: document.reviewStatusChangedAt?.toISOString() ?? null,
+        projectId: document.projectId ?? null,
+        projectName: document.project?.name ?? null,
         versions: document.versions.map(
           (v: {
             id: string;

@@ -41,7 +41,14 @@ type PdfViewerProps = {
   onMarkersOverflowClick?: (page: number) => void;
   pageNavTick?: number;
   enableTextSelection?: boolean;
-  onTextQuoteForEdit?: (payload: { text: string; page: number; x?: number; y?: number }) => void;
+  onTextQuoteForEdit?: (payload: {
+    text: string;
+    page: number;
+    x?: number;
+    y?: number;
+    pageWidthPx?: number;
+    pageHeightPx?: number;
+  }) => void;
 } & PdfViewerLayoutProps;
 export function PdfViewer({
   url,
@@ -85,6 +92,7 @@ export function PdfViewer({
   onLayoutObjectChange,
   onLayoutObjectCropChange,
   onLayoutFilesDrop,
+  onLayoutMediaAssetDrop,
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -323,6 +331,7 @@ export function PdfViewer({
     onLayoutObjectChange,
     onLayoutObjectCropChange,
     onLayoutFilesDrop,
+    onLayoutMediaAssetDrop,
   };
   return (
     <div
@@ -350,7 +359,14 @@ export function PdfViewer({
               x = avgLeft;
               y = avgTop;
             }
-            onTextQuoteForEdit?.({ text, page: selectionPrompt.page, x, y });
+            onTextQuoteForEdit?.({
+              text,
+              page: selectionPrompt.page,
+              x,
+              y,
+              pageWidthPx: selectionPrompt.pageWidthPx,
+              pageHeightPx: selectionPrompt.pageHeightPx,
+            });
             setSelectionPrompt(null);
             selectionQuoteRef.current = '';
             clearDocumentSelection();

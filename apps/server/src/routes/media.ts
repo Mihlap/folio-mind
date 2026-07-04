@@ -323,7 +323,7 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       preHandler: [app.authenticate],
       schema: {
         params: z.object({ assetId: z.string() }),
-        response: { 404: errorBody, 503: errorBody },
+        response: { 200: z.any(), 404: errorBody, 503: errorBody },
       },
     },
     async (request, reply) => {

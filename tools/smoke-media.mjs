@@ -74,11 +74,29 @@ async function main() {
   });
   const uploadText = await uploadRes.text();
   console.log('upload status', uploadRes.status, uploadText.slice(0, 500));
+  if (!uploadRes.ok) throw new Error(`upload failed: ${uploadRes.status}`);
+
+  let uploadJson;
+  try {
+    uploadJson = JSON.parse(uploadText);
+  } catch {
+    throw new Error('upload response is not JSON');
+  }
+  if (uploadJson.status !== 'ready') {
+    throw new Error(`expected status ready, got ${uploadJson.status}`);
+  }
+
+  const contentRes = await fetch(`${API}/media-assets/${created.id}/content`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!contentRes.ok) throw new Error(`content ${contentRes.status}`);
+  console.log('content bytes', (await contentRes.arrayBuffer()).byteLength);
 
   const list = await api('/media-assets', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  console.log('list count', list.items?.length ?? 0, list.items?.[0]?.title);
+  console.log('list count', list.items?.length ?? 0, list.items?.[0]?.title, list.items?.[0]?.status);
+  console.log('OK media smoke');
 }
 
 main().catch((err) => {

@@ -49,8 +49,8 @@ type BackgroundUploadContextValue = {
   showDone: boolean;
   error: string | null;
   clearError: () => void;
-  uploadFromDashboard: (pdfFile: File, docxFile?: File) => void;
-  uploadFromDocxOnly: (docxFile: File) => void;
+  uploadFromDashboard: (pdfFile: File, docxFile?: File, projectId?: string) => void;
+  uploadFromDocxOnly: (docxFile: File, projectId?: string) => void;
   uploadNewDocument: (pdfFile: File, onCreated?: (documentId: string) => void) => void;
   uploadDocumentVersion: (
     documentId: string,
@@ -166,7 +166,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   );
 
   const uploadFromDashboard = useCallback(
-    (pdfFile: File, docxFile?: File) => {
+    (pdfFile: File, docxFile?: File, projectId?: string) => {
       void runUpload({
         kind: 'dashboard',
         fileLabel: uploadFileLabel(pdfFile.name, docxFile?.name),
@@ -179,6 +179,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
             mimeType: pdfFile.type || 'application/pdf',
             size: pdfFile.size,
             ...(docxFileName ? { docxFileName } : {}),
+            ...(projectId ? { projectId } : {}),
           }).unwrap();
           await uploadPdfWithDocx(
             created.document.id,
@@ -195,7 +196,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   );
 
   const uploadFromDocxOnly = useCallback(
-    (docxFile: File) => {
+    (docxFile: File, projectId?: string) => {
       void runUpload({
         kind: 'dashboard',
         fileLabel: docxFile.name,
@@ -205,6 +206,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
             title,
             fileName: docxFile.name,
             size: docxFile.size,
+            ...(projectId ? { projectId } : {}),
           }).unwrap();
           onProgress(15);
           await uploadSourceDocx({

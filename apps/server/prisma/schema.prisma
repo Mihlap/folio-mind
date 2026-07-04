@@ -13,8 +13,24 @@ model Tenant {
   createdAt DateTime   @default(now())
   users     User[]
   documents Document[]
+  projects  Project[]
   ragSources RagSource[]
   mediaAssets MediaAsset[]
+  layoutTemplates LayoutTemplate[]
+}
+
+model LayoutTemplate {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  category    String   @default("custom")
+  objects     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, updatedAt])
 }
 
 model User {
@@ -102,20 +118,38 @@ model PasswordResetToken {
   @@unique([tokenHash])
 }
 
-model Document {
-  id        String            @id @default(cuid())
-  title     String
+model Project {
+  id        String     @id @default(cuid())
   tenantId  String
-  ownerId   String
-  tenant    Tenant            @relation(fields: [tenantId], references: [id])
-  owner     User              @relation(fields: [ownerId], references: [id])
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  versions  DocumentVersion[]
-  shareLinks DocumentShareLink[]
-  mediaAssets MediaAsset[]
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  documents Document[]
 
   @@index([tenantId, updatedAt])
+}
+
+model Document {
+  id                      String            @id @default(cuid())
+  title                   String
+  tenantId                String
+  ownerId                 String
+  projectId               String?
+  reviewStatus            String            @default("draft")
+  reviewStatusChangedAt   DateTime?
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id])
+  owner                   User              @relation(fields: [ownerId], references: [id])
+  project                 Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  versions                DocumentVersion[]
+  shareLinks              DocumentShareLink[]
+  mediaAssets             MediaAsset[]
+
+  @@index([tenantId, updatedAt])
+  @@index([tenantId, reviewStatus])
+  @@index([tenantId, projectId, updatedAt])
 }
 
 model DocumentShareLink {

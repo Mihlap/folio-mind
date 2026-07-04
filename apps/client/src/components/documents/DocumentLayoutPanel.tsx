@@ -8,6 +8,8 @@ import {
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
+import { MediaLibraryInsertPanel } from './MediaLibraryInsertPanel.js';
+import { DocumentLayoutTemplatesSection } from './DocumentLayoutTemplatesSection.js';
 
 type Props = {
   layout: LayoutEditorState;
@@ -377,10 +379,21 @@ export function DocumentLayoutPanel({
         </button>
       </div>
 
-      <p className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-600">
-        Изображения из медиатеки — в разделе <strong>«Медиатека»</strong> выше в списке инструментов.
-        Кнопка «В макет» вставит файл на стр. {viewerPage}.
-      </p>
+      <DocumentLayoutTemplatesSection
+        layout={layout}
+        viewerPage={viewerPage}
+        versionReady={versionReady}
+      />
+
+      <MediaLibraryInsertPanel
+        documentId={documentId}
+        versionReady={versionReady}
+        viewerPage={viewerPage}
+        onInsertAsset={async (_asset, dataUrl) => {
+          if (!layout.enabled) layout.setEnabled(true);
+          await layout.addImageFromDataUrl(dataUrl, viewerPage);
+        }}
+      />
 
       <div className={reportActionsColumnClass}>
         <FeatureHelpActionButton

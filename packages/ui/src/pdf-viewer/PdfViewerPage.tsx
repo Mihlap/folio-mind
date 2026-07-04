@@ -13,7 +13,7 @@ import { PdfLayoutObjectsOverlay } from '../layout-editor/PdfLayoutObjectsOverla
 import { PdfLayoutShapesOverlay } from '../layout-editor/PdfLayoutShapesOverlay.js';
 import type { LayoutImageObject, LayoutMarginPresetId, LayoutPageObject, LayoutRect } from '@folio-mind/pdf-contracts';
 import { highlightTextLayer, isRenderCancelled } from './utils.js';
-import { pdfPointsToMm, layoutStepFraction, layoutGuidesForPreset, isLayoutImageObject, isLayoutShapeObject } from '@folio-mind/pdf-contracts';
+import { pdfPointsToMm, layoutStepFraction, layoutGuidesForPreset, isLayoutImageObject, isLayoutShapeObject, FOLIO_MEDIA_DRAG_MIME, parseFolioMediaDragPayload } from '@folio-mind/pdf-contracts';
 
 export type PdfViewerLayoutProps = {
   enabled?: boolean;
@@ -30,6 +30,7 @@ export type PdfViewerLayoutProps = {
   onLayoutObjectChange?: (id: string, rect: LayoutRect) => void;
   onLayoutObjectCropChange?: (id: string, crop: LayoutRect) => void;
   onLayoutFilesDrop?: (files: File[], pageNumber: number) => void;
+  onLayoutMediaAssetDrop?: (assetId: string, pageNumber: number) => void;
   pageLayoutCountByPage?: Record<number, number>;
   onPageLayoutOpen?: (page: number) => void;
 };
@@ -91,6 +92,7 @@ export function PdfViewerPage({
   onLayoutObjectChange,
   onLayoutObjectCropChange,
   onLayoutFilesDrop,
+  onLayoutMediaAssetDrop,
 }: PdfViewerPageProps) {
   const markersOnPage = markersForPage(pageMarkers, pageNumber).filter(
     (m) => m.kind !== 'accepted_edit',
@@ -105,6 +107,8 @@ export function PdfViewerPage({
   const [pageMetrics, setPageMetrics] = useState(EMPTY_METRICS);
   const [dropActive, setDropActive] = useState(false);
   const [dropFileCount, setDropFileCount] = useState(0);
+  const [dropMediaTitle, setDropMediaTitle] = useState<string | null>(null);
+  const layoutDropEnabled = Boolean(onLayoutFilesDrop || onLayoutMediaAssetDrop);
 
   function layoutDropFiles(dataTransfer: DataTransfer): File[] {
     return Array.from(dataTransfer.files).filter(
@@ -209,31 +213,49 @@ export function PdfViewerPage({
       : null;
 
   function handleLayoutDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!onLayoutFilesDrop) return;
-    if (!event.dataTransfer.types.includes('Files')) return;
+    if (!layoutDropEnabled) return;
+    const hasFiles = onLayoutFilesDrop && event.dataTransfer.types.includes('Files');
+    const hasMedia = onLayoutMediaAssetDrop && event.dataTransfer.types.includes(FOLIO_MEDIA_DRAG_MIME);
+    if (!hasFiles && !hasMedia) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'copy';
-    setDropFileCount(layoutDropFiles(event.dataTransfer).length);
+    if (hasFiles) {
+      setDropFileCount(layoutDropFiles(event.dataTransfer).length);
+      setDropMediaTitle(null);
+    } else if (hasMedia) {
+      setDropFileCount(0);
+      setDropMediaTitle('из медиатеки');
+    }
     setDropActive(true);
   }
 
   function handleLayoutDragLeave(event: DragEvent<HTMLDivElement>) {
-    if (!onLayoutFilesDrop) return;
+    if (!layoutDropEnabled) return;
     const next = event.relatedTarget as Node | null;
     if (next && event.currentTarget.contains(next)) return;
     setDropActive(false);
     setDropFileCount(0);
+    setDropMediaTitle(null);
   }
 
   function handleLayoutDrop(event: DragEvent<HTMLDivElement>) {
-    if (!onLayoutFilesDrop) return;
+    if (!layoutDropEnabled) return;
     event.preventDefault();
     event.stopPropagation();
     setDropActive(false);
     setDropFileCount(0);
-    const files = layoutDropFiles(event.dataTransfer);
-    if (files.length > 0) onLayoutFilesDrop(files, pageNumber);
+    setDropMediaTitle(null);
+    if (onLayoutFilesDrop && event.dataTransfer.types.includes('Files')) {
+      const files = layoutDropFiles(event.dataTransfer);
+      if (files.length > 0) onLayoutFilesDrop(files, pageNumber);
+      return;
+    }
+    if (onLayoutMediaAssetDrop && event.dataTransfer.types.includes(FOLIO_MEDIA_DRAG_MIME)) {
+      const raw = event.dataTransfer.getData(FOLIO_MEDIA_DRAG_MIME);
+      const payload = raw ? parseFolioMediaDragPayload(raw) : null;
+      if (payload) onLayoutMediaAssetDrop(payload.assetId, pageNumber);
+    }
   }
 
   const layoutImages = layoutObjects.filter(isLayoutImageObject);
@@ -358,12 +380,14 @@ export function PdfViewerPage({
           />
         </>
       )}
-      {dropActive && onLayoutFilesDrop && (
+      {dropActive && layoutDropEnabled && (
         <div className="pointer-events-none absolute inset-0 z-[25] flex items-center justify-center bg-folio-500/10">
           <span className="rounded-lg bg-white/95 px-3 py-2 text-sm font-medium text-folio-800 shadow">
-            {dropFileCount > 1
-              ? `Отпустите ${dropFileCount} файлов на стр. ${pageNumber}`
-              : `Отпустите, чтобы вставить на стр. ${pageNumber}`}
+            {dropMediaTitle
+              ? `Отпустите «${dropMediaTitle}» на стр. ${pageNumber}`
+              : dropFileCount > 1
+                ? `Отпустите ${dropFileCount} файлов на стр. ${pageNumber}`
+                : `Отпустите, чтобы вставить на стр. ${pageNumber}`}
           </span>
         </div>
       )}

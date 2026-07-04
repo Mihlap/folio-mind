@@ -1,6 +1,6 @@
 import type { PDFDocument } from 'pdf-lib';
 import { rgb } from 'pdf-lib';
-import { expandEraseRegion, type TextItem, type TextMatch } from './find-text-positions.js';
+import { expandEraseRegion, editPositionKey, type TextItem, type TextMatch } from './find-text-positions.js';
 import { calibrateFontSize, PdfEditFontCache } from './pdf-edit-fonts.js';
 import { splitSuggestionByOriginalLines } from './pdf-text-lines.js';
 import { expandBoxDownward, fitReplacementOnPage } from './pdf-fit-replacement-text.js';
@@ -202,6 +202,7 @@ export async function renderTextReplacements(
     page: number;
     originalText: string;
     suggestion: string;
+    anchor?: { xNorm: number; yNorm: number };
   }>,
   itemsByPage: Map<number, TextItem[]> = new Map(),
   fontBytesByName: Map<string, Uint8Array> = new Map(),
@@ -210,7 +211,7 @@ export async function renderTextReplacements(
   const pending: Array<{ pageIndex: number; draws: LineDraw[] }> = [];
   for (const edit of edits) {
     const pageMap = highlights.get(edit.page);
-    const matches = pageMap?.get(edit.originalText);
+    const matches = pageMap?.get(editPositionKey(edit));
     if (!matches?.length) continue;
     const pageIndex = edit.page - 1;
     if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) continue;

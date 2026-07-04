@@ -30,11 +30,11 @@ import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
-import { MediaLibraryPanel } from './MediaLibraryPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
 import { DocumentGuestCommentsPanel } from './DocumentGuestCommentsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
+import type { DocumentReviewStatus } from '@folio-mind/store';
 import { useDocumentAnnotationsPanel } from './useDocumentAnnotationsPanel.js';
 function parsePageNumbers(input: string, maxPage: number): number[] | string {
   const parts = input
@@ -94,6 +94,8 @@ type Props = {
     files: File[],
     options?: { distributeAcrossPages?: boolean; startPage?: number },
   ) => Promise<void>;
+  reviewStatus?: DocumentReviewStatus;
+  reviewStatusChangedAt?: string | null;
 };
 export function DocumentPdfOperationsPanel({
   documentId,
@@ -115,6 +117,8 @@ export function DocumentPdfOperationsPanel({
   layoutAddNotice = null,
   layoutPageCount = 0,
   onAddLayoutImages,
+  reviewStatus = 'draft',
+  reviewStatusChangedAt = null,
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
   const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
@@ -695,40 +699,6 @@ export function DocumentPdfOperationsPanel({
           </div>
         </ToolAccordionSection>
 
-        <ToolAccordionSection
-          title="Медиатека"
-          subtitle="Загруженные изображения аккаунта и этого документа"
-          isOpen={isSectionOpen('media')}
-          onToggle={() => toggleSection('media')}
-          keepMounted
-          helpTitle="Медиатека"
-          helpContent={
-            <>
-              <p>
-                Храните логотипы, рендеры и фото один раз — используйте в макете разных документов.
-              </p>
-              <p>
-                Сетка показывает все готовые файлы: привязанные к документу и общие для аккаунта.
-                Клик по превью — просмотр в полном размере.
-              </p>
-            </>
-          }
-        >
-          <MediaLibraryPanel
-            documentId={documentId}
-            versionReady={versionReady}
-            onInsertAsset={
-              layout
-                ? async (_asset, dataUrl) => {
-                    if (!layout.enabled) layout.setEnabled(true);
-                    await layout.addImageFromDataUrl(dataUrl, viewerPage);
-                    if (!isSectionOpen('layout')) toggleSection('layout');
-                  }
-                : undefined
-            }
-          />
-        </ToolAccordionSection>
-
         {layout && (
           <ToolAccordionSection
             title="Макет"
@@ -778,6 +748,8 @@ export function DocumentPdfOperationsPanel({
             documentId={documentId}
             activeVersion={activeVersion}
             versionReady={versionReady}
+            reviewStatus={reviewStatus}
+            reviewStatusChangedAt={reviewStatusChangedAt}
           />
           <div className="mt-4 border-t border-slate-100 pt-4">
             <p className="mb-2 text-xs font-medium text-slate-700">Замечания заказчика</p>

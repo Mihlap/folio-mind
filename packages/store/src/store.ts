@@ -7,6 +7,7 @@ import './api/ragApi.js';
 import './api/shareApi.js';
 import './api/guestCommentsApi.js';
 import './api/mediaApi.js';
+import './api/projectsApi.js';
 import { baseApi } from './api/baseApi.js';
 import { authSlice } from './slices/authSlice.js';
 import { uiSlice } from './slices/uiSlice.js';

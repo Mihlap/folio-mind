@@ -14,6 +14,8 @@ import {
   isShareLinkActive,
 } from '../lib/share/share-link.js';
 import { resolveShareLinkByToken } from '../lib/share/resolve-share-link.js';
+import { notifyGuestCommentOwner } from '../lib/share/notify-guest-comment.js';
+import { createMailer } from '../lib/email/mailer.js';
 import type { Env } from '../lib/config/env.js';
 import { getObjectWithBuffer, isS3Configured } from '../lib/storage/s3.js';
 import { errorBody } from './documents/schemas.js';
@@ -254,6 +256,28 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
             page: created.page,
           },
         },
+      });
+
+      void notifyGuestCommentOwner(
+        app.prisma,
+        env,
+        createMailer(env, request.log),
+        request.log,
+        {
+          documentId: resolved.document.id,
+          documentTitle: resolved.document.title,
+          versionId: resolved.version.id,
+          versionNumber: resolved.version.version,
+          comment: {
+            id: created.id,
+            page: created.page,
+            content: created.content,
+            authorName: created.authorName,
+            createdAt: created.createdAt,
+          },
+        },
+      ).catch((err) => {
+        request.log.warn({ err }, 'guest comment owner notification failed');
       });
 
       return reply.status(201).send(serializeGuestShareComment(created));

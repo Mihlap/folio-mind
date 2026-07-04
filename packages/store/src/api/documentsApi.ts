@@ -1,11 +1,16 @@
 import type { RootState } from '../store.js';
 import { apiBaseUrl, baseApi } from './baseApi.js';
 import { UPLOAD_NETWORK_ERROR_MESSAGE } from '../lib/formatUploadError.js';
+import type { DocumentReviewStatus } from '@folio-mind/pdf-contracts';
 export type DocumentListItem = {
   id: string;
   title: string;
   createdAt: string;
   updatedAt: string;
+  reviewStatus: DocumentReviewStatus;
+  reviewStatusChangedAt: string | null;
+  projectId: string | null;
+  projectName: string | null;
   latestVersion: {
     id: string;
     version: number;
@@ -21,6 +26,7 @@ export type CreateDocumentBody = {
   mimeType: string;
   size: number;
   docxFileName?: string;
+  projectId?: string;
 };
 export type CreateDocumentResponse = {
   document: DocumentListItem;
@@ -40,11 +46,16 @@ export const documentsApi = baseApi.injectEndpoints({
       {
         limit?: number;
         cursor?: string;
+        projectId?: string;
       }
     >({
-      query: ({ limit = 20, cursor }) => ({
+      query: ({ limit = 20, cursor, projectId }) => ({
         url: '/documents',
-        params: { limit, ...(cursor ? { cursor } : {}) },
+        params: {
+          limit,
+          ...(cursor ? { cursor } : {}),
+          ...(projectId ? { projectId } : {}),
+        },
       }),
       providesTags: [{ type: 'Documents', id: 'LIST' }],
     }),
@@ -52,6 +63,10 @@ export const documentsApi = baseApi.injectEndpoints({
       {
         id: string;
         title: string;
+        reviewStatus: DocumentReviewStatus;
+        reviewStatusChangedAt: string | null;
+        projectId: string | null;
+        projectName: string | null;
         versions: Array<{
           id: string;
           version: number;
@@ -92,6 +107,7 @@ export const documentsApi = baseApi.injectEndpoints({
         title: string;
         fileName: string;
         size: number;
+        projectId?: string;
       }
     >({
       query: (body) => ({ url: '/documents/from-docx', method: 'POST', body }),
@@ -626,6 +642,24 @@ export const documentsApi = baseApi.injectEndpoints({
         params: { baseVersionId, compareVersionId },
       }),
     }),
+    updateDocumentReviewStatus: build.mutation<
+      {
+        id: string;
+        reviewStatus: DocumentReviewStatus;
+        reviewStatusChangedAt: string | null;
+      },
+      { documentId: string; reviewStatus: DocumentReviewStatus }
+    >({
+      query: ({ documentId, reviewStatus }) => ({
+        url: `/documents/${documentId}/review-status`,
+        method: 'PATCH',
+        body: { reviewStatus },
+      }),
+      invalidatesTags: (_result, _error, { documentId }) => [
+        { type: 'Documents', id: documentId },
+        { type: 'Documents', id: 'LIST' },
+      ],
+    }),
   }),
 });
 export const {
@@ -654,4 +688,5 @@ export const {
   useExportHighlightDocxMutation,
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
+  useUpdateDocumentReviewStatusMutation,
 } = documentsApi;

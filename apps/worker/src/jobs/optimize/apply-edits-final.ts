@@ -33,7 +33,16 @@ type Edit = {
   originalText: string;
   suggestion: string;
   page: number;
+  anchor?: { xNorm: number; yNorm: number };
 };
+
+function readPageAnchor(meta: unknown): { xNorm: number; yNorm: number } | undefined {
+  if (!meta || typeof meta !== 'object') return undefined;
+  const anchor = (meta as { pageAnchor?: { xNorm?: number; yNorm?: number } }).pageAnchor;
+  if (typeof anchor?.xNorm !== 'number' || typeof anchor?.yNorm !== 'number') return undefined;
+  if (anchor.xNorm < 0 || anchor.xNorm > 1 || anchor.yNorm < 0 || anchor.yNorm > 1) return undefined;
+  return { xNorm: anchor.xNorm, yNorm: anchor.yNorm };
+}
 
 type ApplyMethod = 'docx' | 'docx-converted' | 'pdf-overlay' | 'docx-fallback-overlay';
 
@@ -302,7 +311,13 @@ export async function processApplyEditsFinalJob(
     for (const ann of sourceAnnotations) {
       const quote = ann.quote?.trim() ?? '';
       if (!quote) continue;
-      edits.push({ originalText: quote, suggestion: ann.content, page: ann.page });
+      const anchor = readPageAnchor(ann.meta);
+      edits.push({
+        originalText: quote,
+        suggestion: ann.content,
+        page: ann.page,
+        ...(anchor ? { anchor } : {}),
+      });
     }
     if (edits.length === 0) {
       throw new Error('Нет принятых правок для применения');

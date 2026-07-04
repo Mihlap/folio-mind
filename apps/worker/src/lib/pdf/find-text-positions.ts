@@ -286,6 +286,58 @@ function pickBestTextBox(boxes: TextBoxPosition[]): TextBoxPosition {
     return area > bestArea ? box : best;
   });
 }
+
+function boxCenter(box: TextBoxPosition): { x: number; y: number } {
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+function distanceSq(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+/** Нормализованная точка (0–1, origin сверху-слева) → PDF points (origin снизу-слева). */
+export function pageAnchorNormToPdfPoint(
+  anchor: { xNorm: number; yNorm: number },
+  pageWidth: number,
+  pageHeight: number,
+): { x: number; y: number } {
+  return {
+    x: anchor.xNorm * pageWidth,
+    y: pageHeight * (1 - anchor.yNorm),
+  };
+}
+
+/** При нескольких совпадениях текста — выбирает bbox ближе к якорю выделения. */
+export function pickBestTextBoxNearAnchor(
+  boxes: TextBoxPosition[],
+  anchor?: { xNorm: number; yNorm: number },
+  pageSize?: { width: number; height: number },
+): TextBoxPosition {
+  if (boxes.length === 0) {
+    throw new Error('pickBestTextBoxNearAnchor: no boxes');
+  }
+  if (boxes.length === 1 || !anchor || !pageSize) {
+    return pickBestTextBox(boxes);
+  }
+  const anchorPdf = pageAnchorNormToPdfPoint(anchor, pageSize.width, pageSize.height);
+  return boxes.reduce((best, box) => {
+    const bc = boxCenter(box);
+    const bestC = boxCenter(best);
+    return distanceSq(bc, anchorPdf) < distanceSq(bestC, anchorPdf) ? box : best;
+  });
+}
+
+export function editPositionKey(edit: {
+  originalText: string;
+  anchor?: { xNorm: number; yNorm: number };
+}): string {
+  if (edit.anchor) {
+    return `${edit.originalText}@${edit.anchor.xNorm.toFixed(4)}:${edit.anchor.yNorm.toFixed(4)}`;
+  }
+  return edit.originalText;
+}
 export function searchTextInItems(items: TextItem[], searchText: string): TextBoxPosition[] {
   const needle = norm(searchText);
   if (!needle) return [];
@@ -463,6 +515,7 @@ export async function findAllTextPositions(
     page: number;
     originalText: string;
     suggestion?: string;
+    anchor?: { xNorm: number; yNorm: number };
   }>,
 ): Promise<{
   positions: Map<number, Map<string, TextMatch[]>>;
@@ -490,14 +543,16 @@ export async function findAllTextPositions(
     for (const [pageNumber, pageEdits] of grouped) {
       if (pageNumber < 1 || pageNumber > pdf.numPages) continue;
       const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1 });
+      const pageSize = { width: viewport.width, height: viewport.height };
       const items = sortItemsReadingOrder(await collectPageTextItems(page));
       itemsByPage.set(pageNumber, items);
       const pageMap = new Map<string, TextMatch[]>();
       for (const edit of pageEdits) {
         const boxes = searchTextInItems(items, edit.originalText);
         if (boxes.length > 0) {
-          const box = pickBestTextBox(boxes);
-          pageMap.set(edit.originalText, [
+          const box = pickBestTextBoxNearAnchor(boxes, edit.anchor, pageSize);
+          pageMap.set(editPositionKey(edit), [
             toMatch(items, box, edit.originalText, edit.suggestion ?? ''),
           ]);
         }

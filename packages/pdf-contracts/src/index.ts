@@ -118,6 +118,19 @@ export {
   type LayoutImageDrawParams,
 } from './layout-editor.js';
 export {
+  BUILTIN_LAYOUT_TEMPLATES,
+  applyLayoutTemplateObjects,
+  serializePageToTemplate,
+  type LayoutTemplateCategory,
+  type LayoutTemplateDefinition,
+  type LayoutTemplateStoredObject,
+} from './layout-bureau-templates.js';
+export {
+  FOLIO_MEDIA_DRAG_MIME,
+  parseFolioMediaDragPayload,
+  type FolioMediaDragPayload,
+} from './media-drag.js';
+export {
   FULL_LAYOUT_CROP,
   LAYOUT_MARGIN_PRESETS,
   getLayoutMarginPreset,
@@ -130,6 +143,11 @@ export {
   type LayoutMarginsMm,
   type LayoutPageGuides,
 } from './layout-page-template.js';
+export {
+  DOCUMENT_REVIEW_STATUSES,
+  isDocumentReviewStatus,
+  type DocumentReviewStatus,
+} from './document-review-status.js';
 export { UPLOAD_NETWORK_ERROR_MESSAGE } from './user-messages.js';
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';

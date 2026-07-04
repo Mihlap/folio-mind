@@ -13,6 +13,7 @@ import {
   reportToolbarRowClass,
 } from '../ui/FeatureHelp.js';
 import { DocumentRagComparePanel } from './DocumentRagComparePanel.js';
+import { ReportTextBlock } from './ReportTextBlock.js';
 
 function openDownloadUrl(url: string, target: '_self' | '_blank' = '_self') {
   if (target === '_blank') {
@@ -39,7 +40,6 @@ export function DocumentReportPanel({
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportFormatLoading, setExportFormatLoading] = useState<'pdf' | 'word' | null>(null);
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
   const [storedSummary, setStoredSummary] = useState<string | null>(null);
   const [summaryDismissed, setSummaryDismissed] = useState(false);
   const { data: summaryJob } = useGetJobQuery(summaryJobId!, {
@@ -62,7 +62,6 @@ export function DocumentReportPanel({
     setSummaryError(null);
     setExportError(null);
     setExportFormatLoading(null);
-    setIsSummaryExpanded(true);
     setStoredSummary(null);
     setSummaryDismissed(false);
   }, [versionId]);
@@ -125,8 +124,8 @@ export function DocumentReportPanel({
           <FeatureHelpButton title="Пересказ и экспорт отчёта" corner>
             <p>
               <strong className="text-slate-800">Получить пересказ</strong> — ИИ читает текст этой
-              версии PDF и показывает краткое содержание договора на вкладке. Закрыть текст можно
-              крестиком × в блоке «Пересказ».
+              версии PDF и показывает краткое содержание договора на вкладке. Кнопка «В окне» или
+              клик по тексту откроют пересказ в отдельном изменяемом окне.
             </p>
             <p>
               <strong className="text-slate-800">PDF</strong> — скачивает файл отчёта с пересказом
@@ -198,41 +197,20 @@ export function DocumentReportPanel({
       {summaryError && <p className="text-sm text-red-600">{summaryError}</p>}
       {exportError && <p className="text-sm text-red-600">{exportError}</p>}
       {summaryText && (
-        <div className="rounded-xl border border-folio-100 bg-folio-50 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">Пересказ</h3>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setIsSummaryExpanded((prev) => !prev)}
-                className="cursor-pointer rounded px-2 py-0.5 text-xs text-slate-600 hover:bg-folio-100"
-              >
-                {isSummaryExpanded ? 'Свернуть' : 'Развернуть'}
-              </button>
-              <button
-                type="button"
-                title="Закрыть и очистить пересказ"
-                aria-label="Закрыть и очистить пересказ"
-                onClick={() => {
-                  setSummaryDismissed(true);
-                  setSummaryJobId(null);
-                  setPollSummary(false);
-                  setStoredSummary(null);
-                  setSummaryError(null);
-                  setIsSummaryExpanded(true);
-                }}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-lg text-slate-400 hover:bg-folio-100 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-          {isSummaryExpanded && (
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-              {summaryText}
-            </p>
-          )}
-        </div>
+        <ReportTextBlock
+          title="Пересказ"
+          collapsible
+          onDismiss={() => {
+            setSummaryDismissed(true);
+            setSummaryJobId(null);
+            setPollSummary(false);
+            setStoredSummary(null);
+            setSummaryError(null);
+          }}
+          dismissLabel="Закрыть и очистить пересказ"
+        >
+          {summaryText}
+        </ReportTextBlock>
       )}
 
       <DocumentRagComparePanel

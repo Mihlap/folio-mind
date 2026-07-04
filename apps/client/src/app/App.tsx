@@ -5,6 +5,8 @@ import { DocumentWorkspaceProvider } from '../context/document-workspace-context
 import { BackgroundUploadProvider } from '../context/background-upload-provider.js';
 import { DashboardPage } from '../pages/app/DashboardPage.js';
 import { DocumentPage } from '../pages/app/DocumentPage.js';
+import { ProjectsPage } from '../pages/app/ProjectsPage.js';
+import { ProjectDetailPage } from '../pages/app/ProjectDetailPage.js';
 import { MediaLibraryPage } from '../pages/app/MediaLibraryPage.js';
 import { RegulationsPage } from '../pages/app/RegulationsPage.js';
 import { LandingPage } from '../pages/public/LandingPage.js';
@@ -52,6 +54,8 @@ export function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="projects" element={<ProjectsPage />} />
+        <Route path="projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="media" element={<MediaLibraryPage />} />
         <Route path="regulations" element={<RegulationsPage />} />
         <Route path="documents/:id" element={<DocumentPage />} />

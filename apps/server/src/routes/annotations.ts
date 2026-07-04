@@ -22,6 +22,8 @@ const createAnnotationSchema = z
     page: z.number().int().min(1),
     x: z.number().optional(),
     y: z.number().optional(),
+    pageWidthPx: z.number().positive().optional(),
+    pageHeightPx: z.number().positive().optional(),
     content: z.string().min(1).max(8000),
     kind: z.enum(['comment', 'highlight', 'accepted_edit']).default('comment'),
     quote: z.string().max(4000).optional(),
@@ -119,17 +121,28 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!version || version.status === 'pending_upload') {
         return reply.code(404).send({ error: 'Version not found' });
       }
+      const { pageWidthPx, pageHeightPx, x, y, ...rest } = request.body;
+      const pageAnchor =
+        x != null &&
+        y != null &&
+        pageWidthPx != null &&
+        pageHeightPx != null &&
+        pageWidthPx > 0 &&
+        pageHeightPx > 0
+          ? { xNorm: x / pageWidthPx, yNorm: y / pageHeightPx }
+          : undefined;
       const created = await app.prisma.documentAnnotation.create({
         data: {
           documentId,
           versionId,
           userId: user.sub,
-          page: request.body.page,
-          kind: request.body.kind,
-          content: request.body.content,
-          quote: request.body.quote,
-          x: request.body.x,
-          y: request.body.y,
+          page: rest.page,
+          kind: rest.kind,
+          content: rest.content,
+          quote: rest.quote,
+          x,
+          y,
+          ...(pageAnchor ? { meta: { pageAnchor } } : {}),
         },
       });
       await app.prisma.auditLog.create({

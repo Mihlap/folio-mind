@@ -1,4 +1,7 @@
 import { Link } from 'react-router-dom';
+import type { DocumentReviewStatus } from '@folio-mind/store';
+import { DocumentReviewStatusBadge } from './DocumentReviewStatusControl.js';
+import { DocumentProjectSelect } from './DocumentProjectSelect.js';
 import { shellTopHeaderClass } from '../layout/shell-chrome.js';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -16,7 +19,11 @@ type VersionOption = {
 };
 
 type DocumentPageHeaderProps = {
+  documentId: string;
   title: string;
+  reviewStatus?: DocumentReviewStatus;
+  projectId?: string | null;
+  projectName?: string | null;
   versions: VersionOption[];
   activeVersion: VersionOption | undefined;
   latestVersionId: string | undefined;
@@ -31,7 +38,11 @@ type DocumentPageHeaderProps = {
 };
 
 export function DocumentPageHeader({
+  documentId,
   title,
+  reviewStatus = 'draft',
+  projectId = null,
+  projectName = null,
   versions,
   activeVersion,
   latestVersionId,
@@ -55,6 +66,7 @@ export function DocumentPageHeader({
             <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 sm:text-lg">
               {title}
             </h1>
+            <DocumentReviewStatusBadge status={reviewStatus} className="hidden sm:inline-flex" />
           </div>
           <label className="mt-1.5 flex w-full min-w-0 items-center gap-2 md:hidden">
             <span className="sr-only">Версия</span>
@@ -72,7 +84,13 @@ export function DocumentPageHeader({
               ))}
             </select>
           </label>
-          <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 truncate text-[11px] text-slate-500 sm:text-xs">
+            <DocumentProjectSelect
+              documentId={documentId}
+              projectId={projectId}
+              projectName={projectName}
+              compact
+            />
             {activeVersion ? (
               <>
                 <span className="hidden md:inline">Просмотр: </span>v{activeVersion.version} ·{' '}

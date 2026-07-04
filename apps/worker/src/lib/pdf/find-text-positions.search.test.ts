@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { searchTextInItems, type TextItem } from './find-text-positions.js';
+import { pickBestTextBoxNearAnchor, searchTextInItems, type TextItem } from './find-text-positions.js';
 
 function item(str: string, x: number, y: number, width: number): TextItem {
   return {
@@ -62,5 +62,16 @@ describe('searchTextInItems', () => {
     const boxes = searchTextInItems(items, 'Короткая фраза');
     expect(boxes).toHaveLength(1);
     expect(boxes[0]!.x).toBe(10);
+  });
+
+  it('при дубликате текста выбирает bbox ближе к якорю (этап E)', () => {
+    const boxes = [
+      { x: 50, y: 680, width: 40, height: 16 },
+      { x: 50, y: 100, width: 40, height: 16 },
+    ];
+    const pageSize = { width: 595, height: 842 };
+    const nearTop = pickBestTextBoxNearAnchor(boxes, { xNorm: 0.15, yNorm: 0.12 }, pageSize);
+    const nearBottom = pickBestTextBoxNearAnchor(boxes, { xNorm: 0.15, yNorm: 0.88 }, pageSize);
+    expect(nearTop.y).toBeGreaterThan(nearBottom.y);
   });
 });

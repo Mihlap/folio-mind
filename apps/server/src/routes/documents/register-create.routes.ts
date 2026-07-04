@@ -2,9 +2,11 @@ import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { getAuthUser } from '../../lib/documents/document-access.js';
+import { findProjectForTenant } from '../../lib/projects/project-access.js';
 import type { Env } from '../../lib/config/env.js';
 import { getPresignedPutUrl, isS3Configured } from '../../lib/storage/s3.js';
 import { buildOriginalKey } from './helpers.js';
+import { toDocumentReviewStatus } from '../../lib/documents/document-review-status.js';
 import { documentSchema, errorBody, MAX_UPLOAD_BYTES, uploadRateLimit } from './schemas.js';
 export const registerCreateRoutes: FastifyPluginAsync<{
   env: Env;
@@ -22,6 +24,7 @@ export const registerCreateRoutes: FastifyPluginAsync<{
           mimeType: z.string().default('application/pdf'),
           size: z.number().int().positive().max(MAX_UPLOAD_BYTES),
           docxFileName: z.string().max(255).optional(),
+          projectId: z.string().optional(),
         }),
         response: {
           201: z.object({
@@ -33,6 +36,7 @@ export const registerCreateRoutes: FastifyPluginAsync<{
             docxS3Key: z.string().optional(),
           }),
           400: errorBody,
+          404: errorBody,
           503: errorBody,
         },
       },
@@ -42,15 +46,22 @@ export const registerCreateRoutes: FastifyPluginAsync<{
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
       const user = getAuthUser(request);
-      const { title, fileName, mimeType, size, docxFileName } = request.body;
+      const { title, fileName, mimeType, size, docxFileName, projectId } = request.body;
       if (mimeType !== 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
         return reply.code(400).send({ error: 'Only PDF files are supported' });
+      }
+      if (projectId) {
+        const project = await findProjectForTenant(app.prisma, projectId, user.tenantId);
+        if (!project) {
+          return reply.code(404).send({ error: 'Project not found' });
+        }
       }
       const document = await app.prisma.document.create({
         data: {
           title,
           tenantId: user.tenantId,
           ownerId: user.sub,
+          projectId: projectId ?? null,
           versions: {
             create: {
               version: 1,
@@ -61,7 +72,7 @@ export const registerCreateRoutes: FastifyPluginAsync<{
             },
           },
         },
-        include: { versions: true },
+        include: { versions: true, project: { select: { name: true } } },
       });
       const version = document.versions[0]!;
       const s3Key = buildOriginalKey(document.id, version.version, fileName);
@@ -102,6 +113,10 @@ export const registerCreateRoutes: FastifyPluginAsync<{
           title: document.title,
           createdAt: document.createdAt.toISOString(),
           updatedAt: document.updatedAt.toISOString(),
+          reviewStatus: toDocumentReviewStatus(document.reviewStatus),
+          reviewStatusChangedAt: document.reviewStatusChangedAt?.toISOString() ?? null,
+          projectId: document.projectId,
+          projectName: document.project?.name ?? null,
           latestVersion: {
             id: version.id,
             version: version.version,
@@ -129,6 +144,7 @@ export const registerCreateRoutes: FastifyPluginAsync<{
           title: z.string().min(1).max(200),
           fileName: z.string().min(1).max(255),
           size: z.number().int().positive().max(MAX_UPLOAD_BYTES),
+          projectId: z.string().optional(),
         }),
         response: {
           201: z.object({
@@ -139,6 +155,7 @@ export const registerCreateRoutes: FastifyPluginAsync<{
             pdfS3Key: z.string(),
           }),
           400: errorBody,
+          404: errorBody,
           503: errorBody,
         },
       },
@@ -153,9 +170,15 @@ export const registerCreateRoutes: FastifyPluginAsync<{
         });
       }
       const user = getAuthUser(request);
-      const { title, fileName, size } = request.body;
+      const { title, fileName, size, projectId } = request.body;
       if (!fileName.toLowerCase().endsWith('.docx')) {
         return reply.code(400).send({ error: 'Only DOCX files are supported' });
+      }
+      if (projectId) {
+        const project = await findProjectForTenant(app.prisma, projectId, user.tenantId);
+        if (!project) {
+          return reply.code(404).send({ error: 'Project not found' });
+        }
       }
       const pdfFileName = fileName.replace(/\.docx$/i, '.pdf');
       const document = await app.prisma.document.create({
@@ -163,6 +186,7 @@ export const registerCreateRoutes: FastifyPluginAsync<{
           title,
           tenantId: user.tenantId,
           ownerId: user.sub,
+          projectId: projectId ?? null,
           versions: {
             create: {
               version: 1,
@@ -173,7 +197,7 @@ export const registerCreateRoutes: FastifyPluginAsync<{
             },
           },
         },
-        include: { versions: true },
+        include: { versions: true, project: { select: { name: true } } },
       });
       const version = document.versions[0]!;
       const docxS3Key = buildOriginalKey(document.id, version.version, fileName);
@@ -201,6 +225,10 @@ export const registerCreateRoutes: FastifyPluginAsync<{
           title: document.title,
           createdAt: document.createdAt.toISOString(),
           updatedAt: document.updatedAt.toISOString(),
+          reviewStatus: toDocumentReviewStatus(document.reviewStatus),
+          reviewStatusChangedAt: document.reviewStatusChangedAt?.toISOString() ?? null,
+          projectId: document.projectId,
+          projectName: document.project?.name ?? null,
           latestVersion: {
             id: version.id,
             version: version.version,

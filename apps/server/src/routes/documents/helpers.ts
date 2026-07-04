@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
-import { isUserUploadedSourceDocxKey } from '@folio-mind/pdf-contracts';
+import { isUserUploadedSourceDocxKey, type DocumentReviewStatus } from '@folio-mind/pdf-contracts';
 import type { Env } from '../../lib/config/env.js';
 import { getAuthUser } from '../../lib/documents/document-access.js';
 import { enqueuePreConvertJob, enqueuePreviewJob } from '../../lib/queue/queue.js';
@@ -117,4 +117,50 @@ export async function clearVersionLineageRefs(
 }
 export function hashBuffer(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex');
+}
+
+type DocumentListRow = {
+  id: string;
+  title: string;
+  createdAt: Date;
+  updatedAt: Date;
+  reviewStatus: string;
+  reviewStatusChangedAt: Date | null;
+  projectId: string | null;
+  project?: { name: string } | null;
+  versions: Array<{
+    id: string;
+    version: number;
+    status: string;
+    size: bigint;
+    mimeType: string;
+    sourceDocxKey: string | null;
+  }>;
+};
+
+export function mapDocumentListItem(
+  doc: DocumentListRow,
+  toReviewStatus: (s: string) => DocumentReviewStatus,
+) {
+  const latest = doc.versions[0];
+  return {
+    id: doc.id,
+    title: doc.title,
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+    reviewStatus: toReviewStatus(doc.reviewStatus),
+    reviewStatusChangedAt: doc.reviewStatusChangedAt?.toISOString() ?? null,
+    projectId: doc.projectId,
+    projectName: doc.project?.name ?? null,
+    latestVersion: latest
+      ? {
+          id: latest.id,
+          version: latest.version,
+          status: latest.status,
+          size: latest.size.toString(),
+          mimeType: latest.mimeType,
+          sourceDocxKey: latest.sourceDocxKey ?? null,
+        }
+      : null,
+  };
 }

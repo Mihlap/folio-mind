@@ -24,6 +24,9 @@ export async function findDocumentForUser(
       tenantId: user.tenantId,
       ownerId: user.sub,
     },
-    include: { versions: { orderBy: { version: 'desc' } } },
+    include: {
+      project: { select: { name: true } },
+      versions: { orderBy: { version: 'desc' } },
+    },
   });
 }

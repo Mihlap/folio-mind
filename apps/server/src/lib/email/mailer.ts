@@ -4,6 +4,16 @@ export type Mailer = {
   sendPasswordResetEmail(params: { to: string; resetUrl: string }): Promise<void>;
   sendEmailVerification(params: { to: string; verifyUrl: string }): Promise<void>;
   sendMagicLinkEmail(params: { to: string; magicUrl: string }): Promise<void>;
+  sendGuestCommentNotification(params: {
+    to: string;
+    ownerName?: string | null;
+    documentTitle: string;
+    versionNumber: number;
+    authorName: string;
+    page: number;
+    contentPreview: string;
+    documentUrl: string;
+  }): Promise<void>;
 };
 function isSmtpConfigured(env: Env): boolean {
   const host = env.SMTP_HOST?.trim();
@@ -38,6 +48,28 @@ export function createMailer(
         logger.warn(
           { to, magicUrl },
           'SMTP is not configured; printing magic link instead of sending email',
+        );
+      },
+      async sendGuestCommentNotification({
+        to,
+        documentTitle,
+        versionNumber,
+        authorName,
+        page,
+        contentPreview,
+        documentUrl,
+      }) {
+        logger.warn(
+          {
+            to,
+            documentTitle,
+            versionNumber,
+            authorName,
+            page,
+            contentPreview,
+            documentUrl,
+          },
+          'SMTP is not configured; guest comment notification (dev log)',
         );
       },
     };
@@ -97,5 +129,44 @@ export function createMailer(
       });
       logger.info({ to }, 'magic link email sent');
     },
+    async sendGuestCommentNotification({
+      to,
+      ownerName,
+      documentTitle,
+      versionNumber,
+      authorName,
+      page,
+      contentPreview,
+      documentUrl,
+    }) {
+      const greeting = ownerName?.trim() ? `Здравствуйте, ${ownerName.trim()}!` : 'Здравствуйте!';
+      const subject = `Новое замечание: «${documentTitle}»`;
+      const text = [
+        greeting,
+        '',
+        `Заказчик (${authorName}) оставил замечание к документу «${documentTitle}», версия ${versionNumber}, стр. ${page}:`,
+        '',
+        contentPreview,
+        '',
+        `Открыть документ: ${documentUrl}`,
+      ].join('\n');
+      const html = `
+<p>${escapeHtml(greeting)}</p>
+<p>Заказчик <strong>${escapeHtml(authorName)}</strong> оставил замечание к документу «${escapeHtml(documentTitle)}» (версия ${versionNumber}, стр. ${page}):</p>
+<blockquote style="margin:12px 0;padding:12px;border-left:3px solid #cbd5e1;background:#f8fafc;color:#334155;white-space:pre-wrap;">${escapeHtml(contentPreview)}</blockquote>
+<p><a href="${escapeHtml(documentUrl)}">Открыть документ в РазУм</a></p>
+<p style="color:#64748b;font-size:12px;">Вы получили это письмо, потому что являетесь владельцем документа.</p>
+`.trim();
+      await transporter.sendMail({ from: env.SMTP_FROM, to, subject, text, html });
+      logger.info({ to, documentTitle }, 'guest comment notification sent');
+    },
   };
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

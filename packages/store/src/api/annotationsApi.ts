@@ -36,6 +36,8 @@ export const annotationsApi = baseApi.injectEndpoints({
         page: number;
         x?: number;
         y?: number;
+        pageWidthPx?: number;
+        pageHeightPx?: number;
         content: string;
         kind?: 'comment' | 'highlight' | 'accepted_edit';
         quote?: string;

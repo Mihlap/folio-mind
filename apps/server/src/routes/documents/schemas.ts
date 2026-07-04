@@ -1,14 +1,19 @@
 import { z } from 'zod';
 import { UPLOAD_RATE_LIMIT } from '../../lib/auth/rate-limits.js';
-import { OPTIMIZE_PRESETS } from '@folio-mind/pdf-contracts';
+import { OPTIMIZE_PRESETS, DOCUMENT_REVIEW_STATUSES } from '@folio-mind/pdf-contracts';
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 export const uploadRateLimit = { rateLimit: UPLOAD_RATE_LIMIT };
 export const errorBody = z.object({ error: z.string() });
+export const documentReviewStatusSchema = z.enum(DOCUMENT_REVIEW_STATUSES);
 export const documentSchema = z.object({
   id: z.string(),
   title: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  reviewStatus: documentReviewStatusSchema,
+  reviewStatusChangedAt: z.string().nullable(),
+  projectId: z.string().nullable(),
+  projectName: z.string().nullable(),
   latestVersion: z
     .object({
       id: z.string(),
