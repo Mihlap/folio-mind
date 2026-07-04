@@ -1,10 +1,19 @@
-import { mediaAssetKey, UPLOAD_NETWORK_ERROR_MESSAGE } from '@folio-mind/pdf-contracts';
+import { mediaAssetKey, mediaAssetFolderPrefix, UPLOAD_NETWORK_ERROR_MESSAGE } from '@folio-mind/pdf-contracts';
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import type { Env } from '../lib/config/env.js';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
 import {
+  assertMediaUploadAllowed,
+  buildMediaQuotaInfo,
+  getMediaTenantUsage,
+  mediaMaxFileBytes,
+  MediaLimitError,
+} from '../lib/media/media-limits.js';
+import {
   deleteObjectByKey,
+  deleteObjectsByPrefix,
   getObjectBuffer,
   getPresignedGetUrl,
   getPresignedPutUrl,
@@ -13,7 +22,8 @@ import {
   putObjectByKey,
   s3ObjectExists,
 } from '../lib/storage/s3.js';
-import { errorBody, MAX_UPLOAD_BYTES, uploadRateLimit } from './documents/schemas.js';
+import { errorBody, uploadRateLimit } from './documents/schemas.js';
+import { enqueueMediaOptimizeJob } from '../lib/queue/queue.js';
 
 const IMAGE_MIME = /^image\/(png|jpeg|jpg|webp|gif|bmp)$/i;
 
@@ -28,6 +38,7 @@ const mediaAssetSchema = z.object({
   documentId: z.string().nullable(),
   status: z.string(),
   previewUrl: z.string().nullable(),
+  thumbUrl: z.string().nullable(),
   createdAt: z.string(),
 });
 
@@ -46,8 +57,10 @@ async function serializeMediaAsset(item: {
   documentId: string | null;
   status: string;
   s3Key: string;
+  thumbS3Key?: string | null;
   createdAt: Date;
 }) {
+  const ready = item.status === 'ready' && item.s3Key !== 'pending';
   return {
     id: item.id,
     title: item.title,
@@ -58,12 +71,29 @@ async function serializeMediaAsset(item: {
     height: item.height,
     documentId: item.documentId,
     status: item.status,
-    previewUrl:
-      item.status === 'ready' && item.s3Key !== 'pending'
-        ? await getPresignedGetUrl({ key: item.s3Key, expiresInSeconds: 3600 })
+    previewUrl: ready
+      ? await getPresignedGetUrl({ key: item.s3Key, expiresInSeconds: 3600 })
+      : null,
+    thumbUrl:
+      ready && item.thumbS3Key
+        ? await getPresignedGetUrl({ key: item.thumbS3Key, expiresInSeconds: 3600 })
         : null,
     createdAt: item.createdAt.toISOString(),
   };
+}
+
+function scheduleMediaOptimize(
+  env: Env,
+  asset: { id: string; tenantId: string; s3Key: string },
+  requestId?: string,
+): void {
+  void enqueueMediaOptimizeJob(env, {
+    jobId: `media-optimize-${asset.id}`,
+    mediaAssetId: asset.id,
+    tenantId: asset.tenantId,
+    s3Key: asset.s3Key,
+    requestId,
+  }).catch(() => {});
 }
 
 async function waitForS3Object(key: string, attempts = 5, delayMs = 400): Promise<boolean> {
@@ -76,8 +106,36 @@ async function waitForS3Object(key: string, attempts = 5, delayMs = 400): Promis
   return false;
 }
 
-export const mediaRoutes: FastifyPluginAsync = async (app) => {
+export const mediaRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
+  const { env } = opts;
   const r = app.withTypeProvider<ZodTypeProvider>();
+  const maxMediaBytes = mediaMaxFileBytes(env);
+
+  const mediaQuotaSchema = z.object({
+    usedBytes: z.string(),
+    limitBytes: z.string(),
+    fileCount: z.number(),
+    maxFileBytes: z.string(),
+    maxPixelSide: z.number(),
+    storeMaxPixelSide: z.number(),
+  });
+
+  r.get(
+    '/media-assets/quota',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        response: {
+          200: mediaQuotaSchema,
+        },
+      },
+    },
+    async (request) => {
+      const user = getAuthUser(request);
+      const { usedBytes, fileCount } = await getMediaTenantUsage(app.prisma, user.tenantId);
+      return buildMediaQuotaInfo(env, usedBytes, fileCount);
+    },
+  );
 
   r.get(
     '/media-assets',
@@ -132,7 +190,7 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
           title: z.string().min(1).max(200).optional(),
           fileName: z.string().min(1).max(255),
           mimeType: z.string().min(1).max(120),
-          size: z.number().int().positive().max(MAX_UPLOAD_BYTES),
+          size: z.number().int().positive().max(maxMediaBytes),
           documentId: z.string().optional(),
           width: z.number().int().positive().max(20000).optional(),
           height: z.number().int().positive().max(20000).optional(),
@@ -166,6 +224,22 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
         if (!document) {
           return reply.code(404).send({ error: 'Document not found' });
         }
+      }
+
+      try {
+        await assertMediaUploadAllowed(
+          app.prisma,
+          env,
+          user.tenantId,
+          size,
+          width,
+          height,
+        );
+      } catch (err) {
+        if (err instanceof MediaLimitError) {
+          return reply.code(400).send({ error: err.message });
+        }
+        throw err;
       }
 
       const title = request.body.title?.trim() || fileName.replace(/\.[^.]+$/, '');
@@ -239,6 +313,12 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
         data: { status: 'ready' },
       });
 
+      scheduleMediaOptimize(env, {
+        id: updated.id,
+        tenantId: user.tenantId,
+        s3Key: updated.s3Key,
+      }, request.requestId);
+
       return serializeMediaAsset(updated);
     },
   );
@@ -287,8 +367,26 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const buffer = await file.toBuffer();
-      if (buffer.length > MAX_UPLOAD_BYTES) {
-        return reply.code(413).send({ error: 'File too large' });
+      if (buffer.length > maxMediaBytes) {
+        return reply.code(413).send({
+          error: `Файл слишком большой (макс. ${Math.round(maxMediaBytes / (1024 * 1024))} МБ для медиатеки)`,
+        });
+      }
+
+      try {
+        await assertMediaUploadAllowed(
+          app.prisma,
+          env,
+          user.tenantId,
+          buffer.length,
+          asset.width,
+          asset.height,
+        );
+      } catch (err) {
+        if (err instanceof MediaLimitError) {
+          return reply.code(400).send({ error: err.message });
+        }
+        throw err;
       }
 
       try {
@@ -306,6 +404,11 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
             fileName,
           },
         });
+        scheduleMediaOptimize(env, {
+          id: updated.id,
+          tenantId: user.tenantId,
+          s3Key: updated.s3Key,
+        }, request.requestId);
         return serializeMediaAsset(updated);
       } catch (err) {
         request.log.error({ err, assetId: asset.id }, 'Media asset proxy upload failed');
@@ -367,9 +470,24 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
 
       if (asset.s3Key && asset.s3Key !== 'pending') {
         try {
-          await deleteObjectByKey(asset.s3Key);
+          await deleteObjectsByPrefix(mediaAssetFolderPrefix(asset.tenantId, asset.id));
         } catch {
-          // best-effort: запись в БД всё равно удаляем
+          const keys = new Set<string>();
+          keys.add(asset.s3Key);
+          if (asset.thumbS3Key) keys.add(asset.thumbS3Key);
+          for (const key of keys) {
+            try {
+              await deleteObjectByKey(key);
+            } catch {
+              // best-effort
+            }
+          }
+        }
+      } else if (asset.thumbS3Key) {
+        try {
+          await deleteObjectByKey(asset.thumbS3Key);
+        } catch {
+          // best-effort
         }
       }
 

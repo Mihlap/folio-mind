@@ -62,6 +62,7 @@ export function DocumentLayoutPanel({
   onAddImages,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceImageInputRef = useRef<HTMLInputElement>(null);
   const insertStartPageRef = useRef(viewerPage);
   const [error, setError] = useState<string | null>(null);
   const [statusHint, setStatusHint] = useState<string | null>(null);
@@ -142,6 +143,7 @@ export function DocumentLayoutPanel({
   const selectedObject = layout.objects.find((object) => object.id === layout.selectedId);
   const selectedImage = selectedObject && isLayoutImageObject(selectedObject) ? selectedObject : null;
   const selectedShape = selectedObject && isLayoutShapeObject(selectedObject) ? selectedObject : null;
+  const selectedSolidFill = selectedShape?.fill.type === 'solid' ? selectedShape.fill : null;
 
   async function handleSaveLayout() {
     if (!versionId || layout.totalObjectCount === 0) return;
@@ -343,22 +345,117 @@ export function DocumentLayoutPanel({
               >
                 Сбросить обрезку
               </button>
+              <button
+                type="button"
+                disabled={savePending}
+                onClick={() => replaceImageInputRef.current?.click()}
+                className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Заменить фото
+              </button>
+              <label className="flex w-full flex-col gap-0.5 text-xs text-slate-600">
+                Подпись под рендером
+                <input
+                  type="text"
+                  value={selectedImage.caption ?? ''}
+                  disabled={savePending}
+                  onChange={(e) => layout.updateSelectedCaption(e.target.value)}
+                  placeholder="Из имени файла или вручную"
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={savePending}
+                onClick={() => layout.autoCaptionSelected()}
+                className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Из имени файла
+              </button>
             </>
           )}
-          {selectedShape && selectedShape.fill.type === 'solid' && (
-            <label className="flex items-center gap-1.5 text-xs text-slate-600">
-              Цвет
-              <input
-                type="color"
-                value={selectedShape.fill.color}
-                disabled={savePending}
-                onChange={(e) => layout.updateShapeFill(selectedShape.id, { type: 'solid', color: e.target.value })}
-                className="h-7 w-10 cursor-pointer rounded border border-slate-200"
-              />
-            </label>
+          {selectedImage && (
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  ['left', '←'],
+                  ['center', '◎'],
+                  ['right', '→'],
+                  ['top', '↑'],
+                  ['middle', '↕'],
+                  ['bottom', '↓'],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={savePending}
+                  onClick={() => layout.alignSelected(mode)}
+                  className="cursor-pointer rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedSolidFill && selectedShape && (
+            <>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                Цвет
+                <input
+                  type="color"
+                  value={selectedSolidFill.color}
+                  disabled={savePending}
+                  onChange={(e) =>
+                    layout.updateShapeFill(selectedShape.id, {
+                      type: 'solid',
+                      color: e.target.value,
+                      opacity: selectedSolidFill.opacity,
+                    })
+                  }
+                  className="h-7 w-10 cursor-pointer rounded border border-slate-200"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                Прозрачность
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={selectedSolidFill.opacity ?? 1}
+                  disabled={savePending}
+                  onChange={(e) =>
+                    layout.updateShapeFill(selectedShape.id, {
+                      type: 'solid',
+                      color: selectedSolidFill.color,
+                      opacity: Number(e.target.value),
+                    })
+                  }
+                  className="w-24"
+                />
+              </label>
+            </>
           )}
         </div>
       )}
+
+      <input
+        ref={replaceImageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            void layout.replaceSelectedImageSrc(String(reader.result));
+          };
+          reader.readAsDataURL(file);
+        }}
+      />
 
       <div className="flex flex-wrap gap-2">
         <button

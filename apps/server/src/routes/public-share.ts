@@ -1,5 +1,5 @@
-import { previewPageKeyForVariant } from '@folio-mind/pdf-contracts';
-import type { FastifyPluginAsync } from 'fastify';
+import { previewPageKeyForVariant, exportBookletZipKey } from '@folio-mind/pdf-contracts';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { fetchVersionPreviews } from '../lib/documents/fetch-version-previews.js';
@@ -17,8 +17,23 @@ import { resolveShareLinkByToken } from '../lib/share/resolve-share-link.js';
 import { notifyGuestCommentOwner } from '../lib/share/notify-guest-comment.js';
 import { createMailer } from '../lib/email/mailer.js';
 import type { Env } from '../lib/config/env.js';
-import { getObjectWithBuffer, isS3Configured } from '../lib/storage/s3.js';
+import { getObjectWithBuffer, isS3Configured, s3ObjectExists, getPresignedGetUrl } from '../lib/storage/s3.js';
+import { readSharePasswordHeader, verifySharePassword } from '../lib/share/share-password.js';
 import { errorBody } from './documents/schemas.js';
+
+async function assertSharePassword(
+  request: { headers: Record<string, string | string[] | undefined> },
+  passwordHash: string | null,
+  reply: FastifyReply,
+): Promise<boolean> {
+  if (!passwordHash) return true;
+  const ok = await verifySharePassword(readSharePasswordHeader(request.headers), passwordHash);
+  if (!ok) {
+    reply.code(401).send({ error: 'Требуется пароль', requiresPassword: true });
+    return false;
+  }
+  return true;
+}
 
 export const PUBLIC_SHARE_RATE_LIMIT = {
   max: 60,
@@ -46,6 +61,8 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
             pageCount: z.number().nullable(),
             expiresAt: z.string(),
             allowDownload: z.boolean(),
+            allowBookletZip: z.boolean(),
+            bookletZipAvailable: z.boolean(),
             previewStatus: z.enum(['processing', 'ready', 'partial', 'unavailable']),
           }),
           404: errorBody,
@@ -70,6 +87,10 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
         return reply.code(404).send({ error: 'Ссылка не найдена' });
       }
 
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
       void app.prisma.auditLog.create({
         data: {
           action: 'document.share_view',
@@ -89,12 +110,18 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
             ? ('unavailable' as const)
             : ('ready' as const);
 
+      const zipKey = exportBookletZipKey(resolved.document.id, resolved.version.id);
+      const bookletZipAvailable =
+        resolved.link.allowBookletZip && (await s3ObjectExists(zipKey));
+
       return {
         title: resolved.document.title,
         version: resolved.version.version,
         pageCount: resolved.version.pageCount,
         expiresAt: resolved.link.expiresAt.toISOString(),
         allowDownload: resolved.link.allowDownload,
+        allowBookletZip: resolved.link.allowBookletZip,
+        bookletZipAvailable,
         previewStatus,
       };
     },
@@ -136,6 +163,9 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
       }
 
       const result = await fetchVersionPreviews({
@@ -187,6 +217,9 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
       }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
 
       const items = await app.prisma.guestShareComment.findMany({
         where: {
@@ -224,6 +257,9 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
       }
 
       const maxPage = resolved.version.pageCount ?? 0;
@@ -285,6 +321,52 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
   );
 
   r.get(
+    '/public/share/:token/booklet-download',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          200: z.object({ url: z.string(), expiresInSeconds: z.number() }),
+          403: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Скачивание временно недоступно' });
+      }
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+      if (!resolved.link.allowBookletZip) {
+        return reply.code(403).send({ error: 'Скачивание пакета по этой ссылке не разрешено' });
+      }
+      const zipKey = exportBookletZipKey(resolved.document.id, resolved.version.id);
+      if (!(await s3ObjectExists(zipKey))) {
+        return reply.code(404).send({ error: 'Пакет ещё не подготовлен автором документа' });
+      }
+      const expiresInSeconds = 3600;
+      const url = await getPresignedGetUrl({ key: zipKey, expiresInSeconds });
+      void app.prisma.auditLog.create({
+        data: {
+          action: 'document.share_booklet_download',
+          tenantId: resolved.document.tenantId,
+          documentId: resolved.document.id,
+          meta: { shareLinkId: resolved.link.id, versionId: resolved.link.versionId },
+        },
+      });
+      return { url, expiresInSeconds };
+    },
+  );
+
+  r.get(
     '/public/share/:token/pages/:page',
     {
       config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
@@ -303,6 +385,9 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
       }
 
       const page = request.params.page;

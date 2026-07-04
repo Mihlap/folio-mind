@@ -1,4 +1,4 @@
-import { PDFDocument, degrees } from 'pdf-lib';
+import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 import { computeLayoutImageDrawParams, type LayoutImageObject } from '@folio-mind/pdf-contracts';
 
 export type ApplyLayoutPdfResult = {
@@ -30,6 +30,7 @@ export async function applyLayoutToPdfBuffer(
 
   const pdfDoc = await PDFDocument.load(sourceBuffer, { ignoreEncryption: true });
   const pageCount = pdfDoc.getPageCount();
+  const captionFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   let appliedCount = 0;
   let skippedCount = 0;
 
@@ -58,6 +59,26 @@ export async function applyLayoutToPdfBuffer(
       height: draw.height,
       rotate: degrees(draw.rotationDeg),
     });
+
+    const caption = object.caption?.trim();
+    if (caption) {
+      const fontSize = Math.max(7, Math.min(11, draw.width * 0.04));
+      const maxWidth = draw.width * 0.95;
+      let text = caption;
+      while (text.length > 1 && captionFont.widthOfTextAtSize(text, fontSize) > maxWidth) {
+        text = text.slice(0, -1);
+      }
+      if (text.length < caption.length) text = `${text.slice(0, Math.max(0, text.length - 1))}…`;
+      const textWidth = captionFont.widthOfTextAtSize(text, fontSize);
+      page.drawText(text, {
+        x: draw.x + (draw.width - textWidth) / 2,
+        y: Math.max(4, draw.y - fontSize - 2),
+        size: fontSize,
+        font: captionFont,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+    }
+
     appliedCount++;
   }
 

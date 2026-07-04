@@ -12,6 +12,7 @@
 | [Folio_Mind_Plan_content.md](./Folio_Mind_Plan_content.md)                 | План для заказчика (текст для Word)                                        |
 | [Folio Mind Plan [PPOS93].docx](./Folio%20Mind%20Plan%20%5BPPOS93%5D.docx) | Исходный план заказчика (Word)                                             |
 | [AUTH.md](./AUTH.md)                                                       | Регистрация/вход: телефон (SMS), Яндекс OAuth, ЕСИА, настройка провайдеров |
+| [USER_GUIDE.md](../USER_GUIDE.md)                                          | **Инструкция для пользователя** (макет, шаблоны, медиатека, проекты, ИИ-чат) |
 | [legal/](./legal/)                                                         | Privacy, DPA, субпроцессоры (черновики)                                    |
 
 Технический источник истины по архитектуре и чеклистам: [PROJECT_PLAN.md](../PROJECT_PLAN.md) (в корне репозитория).

@@ -96,6 +96,15 @@ async function main() {
     headers: { Authorization: `Bearer ${token}` },
   });
   console.log('list count', list.items?.length ?? 0, list.items?.[0]?.title, list.items?.[0]?.status);
+
+  const quota = await api('/media-assets/quota', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  console.log('quota', quota);
+  if (!quota.maxFileBytes || !quota.limitBytes) {
+    throw new Error('quota response incomplete');
+  }
+
   console.log('OK media smoke');
 }
 

@@ -108,7 +108,28 @@ const THREE_RENDERS: LayoutTemplateDefinition = {
   ],
 };
 
-export const BUILTIN_LAYOUT_TEMPLATES: LayoutTemplateDefinition[] = [COVER, SPREAD, THREE_RENDERS];
+const IMAGE_ONLY: LayoutTemplateDefinition = {
+  id: 'builtin-image-only',
+  name: 'Только картинка',
+  description: 'Одно фото на весь лист с небольшими полями',
+  category: 'custom',
+  builtin: true,
+  objects: [
+    {
+      kind: 'image-slot',
+      page: 1,
+      label: 'Фото',
+      rect: { x: 0.05, y: 0.05, width: 0.9, height: 0.9 },
+    },
+  ],
+};
+
+export const BUILTIN_LAYOUT_TEMPLATES: LayoutTemplateDefinition[] = [
+  COVER,
+  SPREAD,
+  THREE_RENDERS,
+  IMAGE_ONLY,
+];
 
 function clampPage(page: number, maxPage: number): number {
   const normalized = Math.max(1, Math.floor(page));

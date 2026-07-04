@@ -8,7 +8,9 @@ import {
   pdfPointsToMm,
   rotateLayoutPageObject,
   layoutGuidesForPreset,
+  clampLayoutRect,
   normalizeLayoutCrop,
+  captionFromFileName,
   type LayoutFill,
   type LayoutImageObject,
   type LayoutMarginPresetId,
@@ -114,7 +116,12 @@ export function useLayoutEditor({
   }, [versionId, objects]);
 
   const addImageFromDataUrl = useCallback(
-    async (dataUrl: string, page = viewerPage, stackIndex?: number) => {
+    async (
+      dataUrl: string,
+      page = viewerPage,
+      stackIndex?: number,
+      meta?: { sourceFileName?: string; caption?: string },
+    ) => {
       const targetPage = clampPage(page, pageCount);
       const index =
         stackIndex ?? objects.filter((item) => Number(item.page) === targetPage).length;
@@ -127,6 +134,7 @@ export function useLayoutEditor({
         pageWidthPt,
         pageHeightPt,
         index,
+        meta,
       );
       setObjects((prev) => [...prev, created]);
       setSelectedId(created.id);
@@ -292,6 +300,102 @@ export function useLayoutEditor({
     setSelectedId(null);
   }, [selectedId]);
 
+  const replaceSelectedImageSrc = useCallback(
+    async (dataUrl: string, meta?: { sourceFileName?: string; caption?: string }) => {
+      if (!selectedId) return;
+      const compressed = await compressLayoutImageSrcForDraft(dataUrl);
+      setObjects((prev) =>
+        prev.map((item) =>
+          item.id === selectedId && isLayoutImageObject(item)
+            ? {
+                ...item,
+                imageSrc: compressed,
+                crop: undefined,
+                ...(meta?.sourceFileName ? { sourceFileName: meta.sourceFileName } : {}),
+                ...(meta?.caption !== undefined ? { caption: meta.caption } : {}),
+              }
+            : item,
+        ),
+      );
+    },
+    [selectedId],
+  );
+
+  const updateSelectedCaption = useCallback(
+    (caption: string) => {
+      if (!selectedId) return;
+      setObjects((prev) =>
+        prev.map((item) =>
+          item.id === selectedId && isLayoutImageObject(item) ? { ...item, caption } : item,
+        ),
+      );
+    },
+    [selectedId],
+  );
+
+  const autoCaptionSelected = useCallback(() => {
+    if (!selectedId) return;
+    setObjects((prev) =>
+      prev.map((item) => {
+        if (item.id !== selectedId || !isLayoutImageObject(item)) return item;
+        const source = item.sourceFileName ?? item.caption ?? '';
+        const caption = source ? captionFromFileName(source) : '';
+        return caption ? { ...item, caption } : item;
+      }),
+    );
+  }, [selectedId]);
+
+  const autoFillCaptionsFromFilenames = useCallback(() => {
+    setObjects((prev) =>
+      prev.map((item) => {
+        if (!isLayoutImageObject(item) || item.caption?.trim()) return item;
+        const source = item.sourceFileName;
+        if (!source) return item;
+        const caption = captionFromFileName(source);
+        return caption ? { ...item, caption } : item;
+      }),
+    );
+  }, []);
+
+  const alignSelected = useCallback(
+    (mode: 'center' | 'left' | 'right' | 'top' | 'middle' | 'bottom') => {
+      if (!selectedId) return;
+      const margin = pageGuides?.safe;
+      setObjects((prev) =>
+        prev.map((item) => {
+          if (item.id !== selectedId) return item;
+          const rect = { ...item.rect };
+          const minX = margin?.x ?? 0;
+          const minY = margin?.y ?? 0;
+          const maxX = margin ? margin.x + margin.width : 1;
+          const maxY = margin ? margin.y + margin.height : 1;
+          switch (mode) {
+            case 'left':
+              rect.x = minX;
+              break;
+            case 'right':
+              rect.x = Math.max(minX, maxX - rect.width);
+              break;
+            case 'center':
+              rect.x = minX + (maxX - minX - rect.width) / 2;
+              break;
+            case 'top':
+              rect.y = minY;
+              break;
+            case 'bottom':
+              rect.y = Math.max(minY, maxY - rect.height);
+              break;
+            case 'middle':
+              rect.y = minY + (maxY - minY - rect.height) / 2;
+              break;
+          }
+          return { ...item, rect: clampLayoutRect(rect) };
+        }),
+      );
+    },
+    [pageGuides?.safe, selectedId],
+  );
+
   const pageObjectCount = objects.filter((item) => Number(item.page) === viewerPage).length;
   const objectCountByPage = useMemo(() => {
     const counts: Record<number, number> = {};
@@ -338,6 +442,11 @@ export function useLayoutEditor({
     fitSelectedToSafeArea,
     rotateSelected,
     removeSelected,
+    replaceSelectedImageSrc,
+    updateSelectedCaption,
+    autoCaptionSelected,
+    autoFillCaptionsFromFilenames,
+    alignSelected,
     pageObjectCount,
     totalObjectCount: objects.length,
     objectCountByPage,
@@ -365,7 +474,10 @@ async function buildLayoutImageObject(
   const pageAspect = pageWidthPt / pageHeightPt;
   const height = Math.min(0.55, (width / aspect) * pageAspect);
   const shift = Math.min(0.12, stackIndex * 0.035);
-  return buildLayoutImageObjectFromParts(dataUrl, page, width, height, shift);
+  return buildLayoutImageObjectFromParts(dataUrl, page, width, height, shift, {
+    sourceFileName: file.name,
+    caption: captionFromFileName(file.name) || undefined,
+  });
 }
 
 function buildLayoutImageFromDataUrl(
@@ -375,12 +487,19 @@ function buildLayoutImageFromDataUrl(
   pageWidthPt: number,
   pageHeightPt: number,
   stackIndex = 0,
+  meta?: { sourceFileName?: string; caption?: string },
 ): LayoutImageObject {
   const width = 0.4;
   const pageAspect = pageWidthPt / pageHeightPt;
   const height = Math.min(0.55, (width / aspect) * pageAspect);
   const shift = Math.min(0.12, stackIndex * 0.035);
-  return buildLayoutImageObjectFromParts(dataUrl, page, width, height, shift);
+  const caption =
+    meta?.caption ??
+    (meta?.sourceFileName ? captionFromFileName(meta.sourceFileName) : undefined);
+  return buildLayoutImageObjectFromParts(dataUrl, page, width, height, shift, {
+    sourceFileName: meta?.sourceFileName,
+    caption: caption || undefined,
+  });
 }
 
 function buildLayoutImageObjectFromParts(
@@ -389,6 +508,7 @@ function buildLayoutImageObjectFromParts(
   width: number,
   height: number,
   shift: number,
+  meta?: { sourceFileName?: string; caption?: string },
 ): LayoutImageObject {
   return {
     id: crypto.randomUUID(),
@@ -396,6 +516,8 @@ function buildLayoutImageObjectFromParts(
     page,
     imageSrc: dataUrl,
     rotation: 0,
+    sourceFileName: meta?.sourceFileName,
+    caption: meta?.caption,
     rect: {
       x: Math.min(1 - width, (1 - width) / 2 + shift),
       y: Math.min(1 - height, (1 - height) / 2 + shift),

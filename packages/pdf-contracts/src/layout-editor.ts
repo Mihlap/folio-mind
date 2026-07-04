@@ -16,11 +16,15 @@ export type LayoutImageObject = {
   rotation: number;
   /** Доля исходного изображения (0..1), видимая в рамке на листе. */
   crop?: LayoutRect;
+  /** Имя исходного файла (для автоподписи). */
+  sourceFileName?: string;
+  /** Подпись под изображением (печатается при сохранении макета). */
+  caption?: string;
 };
 
 export type LayoutFill =
-  | { type: 'solid'; color: string }
-  | { type: 'linear'; angleDeg: number; stops: { offset: number; color: string }[] };
+  | { type: 'solid'; color: string; opacity?: number }
+  | { type: 'linear'; angleDeg: number; stops: { offset: number; color: string }[]; opacity?: number };
 
 export type LayoutShapeObject = {
   kind: 'shape';
@@ -175,11 +179,22 @@ export function rotateLayoutPageObject(object: LayoutPageObject, deltaDeg: numbe
 }
 
 export function layoutFillToCss(fill: LayoutFill): string {
+  const alpha = fill.opacity != null && fill.opacity < 1 ? fill.opacity : undefined;
   if (fill.type === 'solid') {
+    if (alpha != null && /^#[0-9a-f]{6}$/i.test(fill.color)) {
+      const r = parseInt(fill.color.slice(1, 3), 16);
+      const g = parseInt(fill.color.slice(3, 5), 16);
+      const b = parseInt(fill.color.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
     return fill.color;
   }
   const stops = fill.stops
     .map((stop) => `${stop.color} ${Math.round(stop.offset * 100)}%`)
     .join(', ');
-  return `linear-gradient(${fill.angleDeg}deg, ${stops})`;
+  const gradient = `linear-gradient(${fill.angleDeg}deg, ${stops})`;
+  if (alpha != null) {
+    return `linear-gradient(${fill.angleDeg}deg, rgba(0,0,0,${alpha}), rgba(0,0,0,${alpha})), ${gradient}`;
+  }
+  return gradient;
 }

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import {
   DEFAULT_SHARE_LINK_TTL_PRESET,
+  LABEL_GUEST_BOOKLET_ZIP,
+  LABEL_GUEST_BOOKLET_ZIP_HINT,
   SHARE_LINK_TTL_PRESETS,
   useCreateShareLinkMutation,
   useListShareLinksQuery,
@@ -10,6 +12,7 @@ import {
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import type { DocumentReviewStatus } from '@folio-mind/store';
 import { DocumentReviewStatusControl } from './DocumentReviewStatusControl.js';
+import { DocumentPageReviewBar } from './DocumentPageReviewBar.js';
 import {
   reportActionBtnPrimary,
   reportActionsColumnClass,
@@ -21,6 +24,7 @@ type Props = {
   versionReady: boolean;
   reviewStatus: DocumentReviewStatus;
   reviewStatusChangedAt: string | null;
+  viewerPage: number;
 };
 
 function formatExpires(iso: string): string {
@@ -50,8 +54,11 @@ export function DocumentSharePanel({
   versionReady,
   reviewStatus,
   reviewStatusChangedAt,
+  viewerPage,
 }: Props) {
   const [ttlPreset, setTtlPreset] = useState<ShareLinkTtlPresetId>(DEFAULT_SHARE_LINK_TTL_PRESET);
+  const [sharePassword, setSharePassword] = useState('');
+  const [allowBookletZip, setAllowBookletZip] = useState(false);
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
 
@@ -65,7 +72,12 @@ export function DocumentSharePanel({
     try {
       const result = await createLink({
         documentId,
-        body: { versionId: activeVersion.id, ttl: ttlPreset },
+        body: {
+          versionId: activeVersion.id,
+          ttl: ttlPreset,
+          allowBookletZip,
+          ...(sharePassword.trim() ? { password: sharePassword.trim() } : {}),
+        },
       }).unwrap();
       setCreatedUrl(result.url);
       await navigator.clipboard.writeText(result.url);
@@ -101,6 +113,15 @@ export function DocumentSharePanel({
         reviewStatusChangedAt={reviewStatusChangedAt}
       />
 
+      {activeVersion?.id && (
+        <DocumentPageReviewBar
+          documentId={documentId}
+          versionId={activeVersion.id}
+          viewerPage={viewerPage}
+          versionReady={versionReady}
+        />
+      )}
+
       <p className="text-[11px] leading-snug text-slate-400">
         Заказчик откроет страницы в браузере — без скачивания PDF. Ссылка действует выбранное время.
       </p>
@@ -118,6 +139,33 @@ export function DocumentSharePanel({
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-slate-500">Пароль (необязательно)</span>
+        <input
+          type="password"
+          value={sharePassword}
+          onChange={(e) => setSharePassword(e.target.value)}
+          placeholder="Заказчик введёт при открытии ссылки"
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+          autoComplete="new-password"
+        />
+      </label>
+
+      <label className="flex items-start gap-2 text-xs text-slate-600">
+        <input
+          type="checkbox"
+          checked={allowBookletZip}
+          onChange={(e) => setAllowBookletZip(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="font-medium text-slate-700">{LABEL_GUEST_BOOKLET_ZIP}</span>
+          <span className="mt-0.5 block text-[11px] leading-snug text-slate-400">
+            {LABEL_GUEST_BOOKLET_ZIP_HINT}
+          </span>
+        </span>
       </label>
 
       <div className={reportActionsColumnClass}>

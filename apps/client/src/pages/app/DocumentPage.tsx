@@ -337,11 +337,13 @@ export function DocumentPage() {
     [handleLayoutAddImages],
   );
   const handleLayoutMediaAssetDrop = useCallback(
-    async (assetId: string, targetPage: number) => {
+    async (assetId: string, targetPage: number, mediaTitle?: string) => {
       try {
         const dataUrl = await fetchMediaAssetDataUrl(assetId, token);
         if (!layout.enabled) layout.setEnabled(true);
-        await layout.addImageFromDataUrl(dataUrl, targetPage);
+        await layout.addImageFromDataUrl(dataUrl, targetPage, undefined, {
+          sourceFileName: mediaTitle,
+        });
       } catch (err) {
         setLayoutAddNotice(
           err instanceof Error ? err.message : 'Не удалось вставить из медиатеки',
@@ -757,6 +759,9 @@ export function DocumentPage() {
           onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
           reviewStatus={reviewStatus}
           reviewStatusChangedAt={reviewStatusChangedAt}
+          documentTitle={doc.title}
+          projectId={doc.projectId}
+          projectName={doc.projectName}
           collapsed={rightPanel.collapsed}
           onToggleCollapsed={rightPanel.toggleCollapsed}
           onExpand={rightPanel.expand}
@@ -883,6 +888,9 @@ export function DocumentPage() {
           onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
           reviewStatus={reviewStatus}
           reviewStatusChangedAt={reviewStatusChangedAt}
+          documentTitle={doc.title}
+          projectId={doc.projectId}
+          projectName={doc.projectName}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

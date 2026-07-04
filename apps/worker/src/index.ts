@@ -4,14 +4,19 @@ import { processAiChatJob } from './jobs/ai/ai-chat.js';
 import { processAiSuggestionsJob } from './jobs/ai/ai-suggestions.js';
 import { processRagCompareJob } from './jobs/ai/rag-compare.js';
 import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
+import { processBookletTitleDraftJob } from './jobs/ai/booklet-title.js';
 import { processApplyLayoutPdfJob } from './jobs/optimize/apply-layout-pdf.js';
 import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accepted-suggestions.js';
 import { processApplyEditsFinalJob } from './jobs/optimize/apply-edits-final.js';
 import { processExportHighlightDocxJob } from './jobs/optimize/export-highlight-docx.js';
+import { processExportBookletJob } from './jobs/optimize/export-booklet-package.js';
+import { processExportPagesJob } from './jobs/optimize/export-pages-images.js';
+import { processPrintReadinessJob } from './jobs/optimize/print-readiness.js';
 import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
 import { processPreConvertPdfJob } from './jobs/optimize/pre-convert-pdf.js';
 import { processImportFromDocxJob } from './jobs/optimize/import-from-docx.js';
 import { processOptimizePdfJob } from './jobs/optimize/optimize-pdf.js';
+import { processMediaOptimizeJob } from './jobs/media/media-optimize.js';
 import { processSplitPagesJob } from './jobs/optimize/split-pages.js';
 import {
   processGeneratePreviewsJob,
@@ -99,6 +104,8 @@ function createAiWorker() {
             await processAiSuggestionsJob(env, data);
           } else if (job.name === 'rag-compare') {
             await processRagCompareJob(env, data);
+          } else if (job.name === 'booklet-title') {
+            await processBookletTitleDraftJob(env, data);
           }
           return { ok: true };
         },
@@ -133,12 +140,20 @@ function createOptimizeWorker() {
             await processApplyEditsFinalJob(env, data);
           } else if (job.name === 'export-highlight-docx') {
             await processExportHighlightDocxJob(env, data);
+          } else if (job.name === 'export-booklet') {
+            await processExportBookletJob(env, data);
+          } else if (job.name === 'export-pages') {
+            await processExportPagesJob(env, data);
+          } else if (job.name === 'print-readiness') {
+            await processPrintReadinessJob(env, data);
           } else if (job.name === 'optimize-pdf') {
             await processOptimizePdfJob(env, data);
           } else if (job.name === 'apply-layout-pdf') {
             await processApplyLayoutPdfJob(env, data);
           } else if (job.name === 'import-from-docx') {
             await processImportFromDocxJob(env, data);
+          } else if (job.name === 'media-optimize') {
+            await processMediaOptimizeJob(env, data);
           }
           return { ok: true };
         },

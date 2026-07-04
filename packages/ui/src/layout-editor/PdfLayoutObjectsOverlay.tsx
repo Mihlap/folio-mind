@@ -214,6 +214,11 @@ export function PdfLayoutObjectsOverlay({
                   style={cropFrameStyle(crop)}
                 />
               )}
+              {object.caption?.trim() && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-black/55 px-1 py-0.5 text-center text-[9px] leading-tight text-white">
+                  {object.caption}
+                </div>
+              )}
             </div>
             {selected &&
               FRAME_HANDLES.map((handle) => (

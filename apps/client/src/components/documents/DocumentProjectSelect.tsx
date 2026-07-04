@@ -23,7 +23,7 @@ export function DocumentProjectSelect({
     <label
       className={`flex items-center gap-1.5 ${compact ? 'text-xs' : 'text-sm'} text-slate-600`}
     >
-      <span className={compact ? 'sr-only' : 'shrink-0'}>Проект:</span>
+      <span className="shrink-0 text-slate-500">Проект:</span>
       <select
         value={projectId ?? ''}
         disabled={isLoading}
@@ -37,7 +37,7 @@ export function DocumentProjectSelect({
           }
         }}
         className={`min-w-0 cursor-pointer rounded-lg border border-slate-200 bg-white text-slate-800 disabled:opacity-50 ${
-          compact ? 'max-w-[9rem] px-1.5 py-0.5 text-xs' : 'max-w-[12rem] px-2 py-1 text-sm'
+          compact ? 'max-w-[11rem] px-1.5 py-0.5 text-xs' : 'max-w-[14rem] px-2 py-1 text-sm'
         }`}
         title={projectName ? `Проект: ${projectName}` : 'Без проекта'}
       >

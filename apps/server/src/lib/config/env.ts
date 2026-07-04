@@ -75,6 +75,9 @@ const envSchema = z.object({
   ESIA_CLIENT_ID: z.string().optional(),
   ESIA_CLIENT_SECRET: z.string().optional(),
   ESIA_REDIRECT_URI: z.string().optional(),
+  MEDIA_MAX_FILE_BYTES: z.coerce.number().int().positive().optional(),
+  MEDIA_TENANT_QUOTA_BYTES: z.coerce.number().int().positive().optional(),
+  MEDIA_MAX_PIXEL_SIDE: z.coerce.number().int().positive().optional(),
 });
 export type Env = z.infer<typeof envSchema>;
 export function loadEnv(): Env {

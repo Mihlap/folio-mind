@@ -7,7 +7,9 @@ export type ResolvedShareLink = {
     documentId: string;
     versionId: string;
     allowDownload: boolean;
+    allowBookletZip: boolean;
     expiresAt: Date;
+    passwordHash: string | null;
   };
   document: {
     id: string;
@@ -54,7 +56,9 @@ export async function resolveShareLinkByToken(
       documentId: link.documentId,
       versionId: link.versionId,
       allowDownload: link.allowDownload,
+      allowBookletZip: link.allowBookletZip,
       expiresAt: link.expiresAt,
+      passwordHash: link.passwordHash,
     },
     document: {
       id: link.document.id,

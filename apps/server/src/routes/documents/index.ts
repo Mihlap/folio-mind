@@ -9,12 +9,16 @@ import { registerShareRoutes } from './register-share.routes.js';
 import { registerGuestCommentsRoutes } from './register-guest-comments.routes.js';
 import { registerReviewStatusRoutes } from './register-review-status.routes.js';
 import { registerProjectRoutes } from './register-project.routes.js';
+import { registerExportRoutes } from './register-export.routes.js';
+import { registerBookletAiRoutes } from './register-booklet-ai.routes.js';
 export { hashBuffer } from './helpers.js';
 export const documentRoutes: FastifyPluginAsync<{
   env: Env;
 }> = async (app, opts) => {
   await app.register(registerCreateRoutes, opts);
   await app.register(registerOperationsRoutes, opts);
+  await app.register(registerExportRoutes, opts);
+  await app.register(registerBookletAiRoutes, opts);
   await app.register(registerVersionsRoutes, opts);
   await app.register(registerReadRoutes, opts);
   await app.register(registerShareRoutes, opts);

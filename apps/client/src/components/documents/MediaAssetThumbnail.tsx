@@ -8,17 +8,17 @@ type Props = {
 };
 
 export function MediaAssetThumbnail({ asset, token, className }: Props) {
-  const [src, setSrc] = useState<string | null>(asset.previewUrl);
-  const [loading, setLoading] = useState(!asset.previewUrl);
+  const [src, setSrc] = useState<string | null>(asset.thumbUrl ?? asset.previewUrl);
+  const [loading, setLoading] = useState(!(asset.thumbUrl ?? asset.previewUrl));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setSrc(asset.previewUrl);
+    setSrc(asset.thumbUrl ?? asset.previewUrl);
     setFailed(false);
-    setLoading(!asset.previewUrl);
+    setLoading(!(asset.thumbUrl ?? asset.previewUrl));
 
-    if (asset.previewUrl) return;
+    if (asset.thumbUrl ?? asset.previewUrl) return;
 
     void (async () => {
       try {
@@ -34,7 +34,7 @@ export function MediaAssetThumbnail({ asset, token, className }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [asset.id, asset.previewUrl, token]);
+  }, [asset.id, asset.previewUrl, asset.thumbUrl, token]);
 
   async function handleImageError() {
     if (failed || !asset.previewUrl) return;

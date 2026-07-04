@@ -14,6 +14,7 @@ import {
 } from '../../lib/share/share-link.js';
 import type { Env } from '../../lib/config/env.js';
 import { isS3Configured } from '../../lib/storage/s3.js';
+import { hashSharePassword } from '../../lib/share/share-password.js';
 import { errorBody } from './schemas.js';
 
 const shareLinkItemSchema = z.object({
@@ -23,6 +24,7 @@ const shareLinkItemSchema = z.object({
   expiresAt: z.string(),
   revokedAt: z.string().nullable(),
   allowDownload: z.boolean(),
+  allowBookletZip: z.boolean(),
   createdAt: z.string(),
   active: z.boolean(),
 });
@@ -42,6 +44,8 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
             .enum(SHARE_LINK_TTL_PRESET_IDS as [ShareLinkTtlPresetId, ...ShareLinkTtlPresetId[]])
             .default(DEFAULT_SHARE_LINK_TTL_PRESET),
           allowDownload: z.boolean().optional(),
+          allowBookletZip: z.boolean().optional(),
+          password: z.string().min(4).max(64).optional(),
         }),
         response: {
           201: z.object({
@@ -76,6 +80,9 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
       }
 
       const { token, tokenHash, expiresAt } = createShareLinkToken(request.body.ttl);
+      const passwordHash = request.body.password
+        ? await hashSharePassword(request.body.password)
+        : null;
       const link = await app.prisma.documentShareLink.create({
         data: {
           documentId: document.id,
@@ -84,6 +91,8 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
           createdById: user.sub,
           expiresAt,
           allowDownload: request.body.allowDownload ?? false,
+          allowBookletZip: request.body.allowBookletZip ?? false,
+          passwordHash,
         },
       });
 
@@ -150,6 +159,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
             expiresAt: link.expiresAt.toISOString(),
             revokedAt: link.revokedAt?.toISOString() ?? null,
             allowDownload: link.allowDownload,
+            allowBookletZip: link.allowBookletZip,
             createdAt: link.createdAt.toISOString(),
             active: isShareLinkActive(link),
           };

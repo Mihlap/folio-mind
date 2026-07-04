@@ -7,12 +7,16 @@ export {
   exportReportKey,
   exportReportWordKey,
   highlightEditsDocxKey,
+  exportBookletZipKey,
+  exportPagesZipKey,
   preConvertedDocxKey,
   appliedDocxKey,
   previewPageKey,
   previewPageThumbKey,
   previewPageViewKey,
   mediaAssetKey,
+  mediaAssetThumbKey,
+  mediaAssetFolderPrefix,
   previewPageKeyForVariant,
   type PreviewPageVariant,
   resolveS3Key,
@@ -131,6 +135,15 @@ export {
   type FolioMediaDragPayload,
 } from './media-drag.js';
 export {
+  MEDIA_MAX_FILE_BYTES,
+  MEDIA_TENANT_QUOTA_BYTES_DEFAULT,
+  MEDIA_MAX_PIXEL_SIDE,
+  MEDIA_STORE_MAX_PIXEL_SIDE,
+  MEDIA_JPEG_QUALITY,
+  formatBytesShort,
+  type MediaQuotaInfo,
+} from './media-limits.js';
+export {
   FULL_LAYOUT_CROP,
   LAYOUT_MARGIN_PRESETS,
   getLayoutMarginPreset,
@@ -155,3 +168,25 @@ export type PreviewJobPayload = {
   documentVersionId: string;
   s3Key: string;
 };
+export {
+  PRINT_MIN_DPI,
+  BOOKLET_EXPORT_DEFAULT_JPEG_DPI,
+  BOOKLET_EXPORT_MAX_PAGES,
+  type BookletExportImageFormat,
+  type PrintReadinessLevel,
+  type PrintReadinessImageFinding,
+  type PrintReadinessPageFinding,
+  type PrintReadinessReport,
+  type BookletExportJobResult,
+  type PagesExportJobResult,
+} from './booklet-export.js';
+export {
+  LABEL_ARCHIVE_PDF,
+  LABEL_ARCHIVE_PDF_HINT,
+  MSG_ARCHIVE_PDF_FALLBACK,
+  MSG_PROCESSING,
+  MSG_NETWORK_STORAGE,
+  LABEL_GUEST_BOOKLET_ZIP,
+  LABEL_GUEST_BOOKLET_ZIP_HINT,
+} from './user-labels.js';
+export { captionFromFileName } from './caption-from-filename.js';

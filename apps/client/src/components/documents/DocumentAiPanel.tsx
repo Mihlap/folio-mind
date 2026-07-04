@@ -92,6 +92,9 @@ export function DocumentAiPanel({
         {!embedded && (
           <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold text-slate-900">Чат по документу</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Можно спрашивать о тексте PDF и о работе в РазУм — шаблоны, медиатека, макет, гостевая ссылка.
+            </p>
           </div>
         )}
 
@@ -142,7 +145,7 @@ export function DocumentAiPanel({
           <textarea
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Задайте вопрос…"
+            placeholder="Спросите о тексте PDF или как пользоваться приложением (шаблоны, медиатека, макет…)"
             disabled={!versionReady || chatSending || chatPending}
             rows={3}
             className="min-h-[96px] w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-folio-400 disabled:opacity-50"

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   isDocumentReviewStatus,
@@ -37,6 +37,18 @@ export function ProjectDetailPage() {
   const { uploadFromDashboard, uploadFromDocxOnly } = useBackgroundUpload();
   const active = uploadState.active && uploadState.kind === 'dashboard';
   const progress = active ? uploadState.progress : 0;
+  const uploadWasActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (active) {
+      uploadWasActiveRef.current = true;
+      return;
+    }
+    if (uploadWasActiveRef.current) {
+      uploadWasActiveRef.current = false;
+      void refetch();
+    }
+  }, [active, refetch]);
 
   const startUpload = useCallback(
     (pdfFile: File, docxFile?: File) => {
@@ -116,6 +128,12 @@ export function ProjectDetailPage() {
         )}
         {(localError || uploadState.error) && (
           <p className="mt-2 text-sm text-red-600">{localError ?? uploadState.error}</p>
+        )}
+        {uploadState.error && (
+          <p className="mt-1 text-xs text-slate-500">
+            Если документ уже создан, он может отображаться ниже со статусом «не загружен» — откройте
+            его и загрузите файл повторно.
+          </p>
         )}
       </div>
 

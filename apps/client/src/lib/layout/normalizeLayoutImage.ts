@@ -2,6 +2,7 @@ import {
   isFullLayoutCrop,
   isLayoutImageObject,
   isLayoutShapeObject,
+  layoutFillToCss,
   normalizeLayoutCrop,
   type LayoutImageObject,
   type LayoutPageObject,
@@ -145,7 +146,7 @@ async function rasterizeLayoutShape(
   if (!ctx) throw new Error('Не удалось подготовить подложку');
 
   if (shape.fill.type === 'solid') {
-    ctx.fillStyle = shape.fill.color;
+    ctx.fillStyle = layoutFillToCss(shape.fill);
     ctx.fillRect(0, 0, width, height);
   } else {
     const angle = (shape.fill.angleDeg * Math.PI) / 180;

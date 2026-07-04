@@ -137,6 +137,8 @@ CREATE TABLE "DocumentShareLink" (
     "expiresAt" TIMESTAMP(3) NOT NULL,
     "revokedAt" TIMESTAMP(3),
     "allowDownload" BOOLEAN NOT NULL DEFAULT false,
+    "allowBookletZip" BOOLEAN NOT NULL DEFAULT false,
+    "passwordHash" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "DocumentShareLink_pkey" PRIMARY KEY ("id")
@@ -174,10 +176,24 @@ CREATE TABLE "MediaAsset" (
     "width" INTEGER,
     "height" INTEGER,
     "status" TEXT NOT NULL DEFAULT 'pending_upload',
+    "thumbS3Key" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "MediaAsset_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "DocumentPageReviewMark" (
+    "id" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "versionId" TEXT NOT NULL,
+    "page" INTEGER NOT NULL,
+    "status" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "DocumentPageReviewMark_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -378,6 +394,15 @@ CREATE INDEX "MediaAsset_tenantId_createdAt_idx" ON "MediaAsset"("tenantId", "cr
 
 -- CreateIndex
 CREATE INDEX "MediaAsset_documentId_createdAt_idx" ON "MediaAsset"("documentId", "createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DocumentPageReviewMark_documentId_versionId_page_key" ON "DocumentPageReviewMark"("documentId", "versionId", "page");
+
+-- CreateIndex
+CREATE INDEX "DocumentPageReviewMark_documentId_versionId_idx" ON "DocumentPageReviewMark"("documentId", "versionId");
+
+-- CreateIndex
+CREATE INDEX "DocumentPageReviewMark_tenantId_idx" ON "DocumentPageReviewMark"("tenantId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "DocumentVersion_documentId_version_key" ON "DocumentVersion"("documentId", "version");

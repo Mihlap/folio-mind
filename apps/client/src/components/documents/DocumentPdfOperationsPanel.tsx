@@ -31,6 +31,8 @@ import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from 
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
+import { DocumentBookletExportPanel } from './DocumentBookletExportPanel.js';
+import { DocumentBookletAiPanel } from './DocumentBookletAiPanel.js';
 import { DocumentGuestCommentsPanel } from './DocumentGuestCommentsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
@@ -96,6 +98,9 @@ type Props = {
   ) => Promise<void>;
   reviewStatus?: DocumentReviewStatus;
   reviewStatusChangedAt?: string | null;
+  documentTitle?: string;
+  projectId?: string | null;
+  projectName?: string | null;
 };
 export function DocumentPdfOperationsPanel({
   documentId,
@@ -119,6 +124,9 @@ export function DocumentPdfOperationsPanel({
   onAddLayoutImages,
   reviewStatus = 'draft',
   reviewStatusChangedAt = null,
+  documentTitle = '',
+  projectId = null,
+  projectName = null,
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
   const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
@@ -196,10 +204,16 @@ export function DocumentPdfOperationsPanel({
           typeof payload === 'object' && payload && 'outputBytes' in payload
             ? Number((payload as { outputBytes?: number }).outputBytes)
             : NaN;
+        const sourceBytes =
+          typeof payload === 'object' && payload && 'sourceBytes' in payload
+            ? Number((payload as { sourceBytes?: number }).sourceBytes)
+            : NaN;
         const sizeNote =
-          Number.isFinite(outputBytes) && outputBytes > 0
-            ? ` · ${formatFileSize(outputBytes)}`
-            : '';
+          Number.isFinite(sourceBytes) && Number.isFinite(outputBytes) && outputBytes > 0
+            ? ` · ${formatFileSize(sourceBytes)} → ${formatFileSize(outputBytes)}`
+            : Number.isFinite(outputBytes) && outputBytes > 0
+              ? ` · ${formatFileSize(outputBytes)}`
+              : '';
         const savedNote =
           Number.isFinite(savedPct) && savedPct > 0 ? ` (−${savedPct}%)` : '';
         const detail = optimizeMessage || `Версия ${targetVersion.version} собрана`;
@@ -239,7 +253,7 @@ export function DocumentPdfOperationsPanel({
       return () => clearTimeout(timer);
     }
     if (targetVersion.status === 'failed') {
-      setOperationError(`Версия ${targetVersion.version} не обработана — проверьте worker и S3`);
+      setOperationError(`Версия ${targetVersion.version} ещё обрабатывается. Подождите или обратитесь к администратору.`);
       setStatusHint(null);
       setStatusHintVersionId(null);
       setOperationJobId(null);
@@ -618,7 +632,7 @@ export function DocumentPdfOperationsPanel({
                 страницы первой версии, затем второй и т.д.
               </p>
               <p>
-                По кнопке «Объединить в новую версию» worker соберёт один PDF — новая версия появится
+                По кнопке «Объединить в новую версию» система соберёт один PDF — новая версия появится
                 в списке слева.
               </p>
             </>
@@ -729,8 +743,52 @@ export function DocumentPdfOperationsPanel({
         )}
 
         <ToolAccordionSection
+          title="ИИ для буклета"
+          subtitle="Подписи, титульник, поиск материалов"
+          isOpen={isSectionOpen('booklet-ai')}
+          onToggle={() => toggleSection('booklet-ai')}
+          helpTitle="ИИ для буклета"
+          helpContent={
+            <>
+              <p>Автоподписи к рендерам из имени файла, черновик текста титульника и поиск по проекту.</p>
+            </>
+          }
+        >
+          <DocumentBookletAiPanel
+            documentId={documentId}
+            documentTitle={documentTitle}
+            projectId={projectId}
+            projectName={projectName}
+            versionReady={versionReady}
+            layout={layout}
+          />
+        </ToolAccordionSection>
+
+        <ToolAccordionSection
+          title="Экспорт буклета"
+          subtitle="ZIP для заказчика, страницы JPG/PNG, чеклист печати"
+          isOpen={isSectionOpen('export')}
+          onToggle={() => toggleSection('export')}
+          helpTitle="Экспорт для архитекторов"
+          helpContent={
+            <>
+              <p>Пакет PDF + JPG по всем страницам — одна ссылка на скачивание ZIP.</p>
+              <p>Отдельно можно выгрузить выбранные страницы без полного PDF.</p>
+            </>
+          }
+        >
+          <DocumentBookletExportPanel
+            documentId={documentId}
+            versionId={activeVersion?.id ?? ''}
+            versionReady={versionReady}
+            pageCount={effectivePageCount}
+            viewerPage={viewerPage}
+          />
+        </ToolAccordionSection>
+
+        <ToolAccordionSection
           title="Ссылка для заказчика"
-          subtitle="Гостевой просмотр превью без скачивания"
+          subtitle="Просмотр превью и скачивание ZIP"
           isOpen={isSectionOpen('share')}
           onToggle={() => toggleSection('share')}
           helpTitle="Гостевой просмотр"
@@ -738,7 +796,7 @@ export function DocumentPdfOperationsPanel({
             <>
               <p>
                 Создайте ссылку с ограниченным сроком действия. Заказчик видит превью страниц в
-                браузере — без доступа к исходному PDF.
+                браузере. Опционально — скачивание ZIP с PDF и JPG (если пакет уже собран).
               </p>
               <p>Ссылку можно отозвать в любой момент.</p>
             </>
@@ -750,6 +808,7 @@ export function DocumentPdfOperationsPanel({
             versionReady={versionReady}
             reviewStatus={reviewStatus}
             reviewStatusChangedAt={reviewStatusChangedAt}
+            viewerPage={viewerPage}
           />
           <div className="mt-4 border-t border-slate-100 pt-4">
             <p className="mb-2 text-xs font-medium text-slate-700">Замечания заказчика</p>

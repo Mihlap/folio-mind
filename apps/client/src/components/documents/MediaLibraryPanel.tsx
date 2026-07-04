@@ -1,34 +1,62 @@
 import { useCallback, useId, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import {
   fetchMediaAssetDataUrl,
+  formatBytesShort,
   formatUploadError,
+  MEDIA_MAX_FILE_BYTES,
   useDeleteMediaAssetMutation,
+  useGetMediaQuotaQuery,
   useListMediaAssetsQuery,
   useUploadMediaAssetMutation,
   type MediaAssetItem,
 } from '@folio-mind/store';
 import { filterImageFiles } from '../../lib/layout/isImageFile.js';
+import { prepareMediaAssetFile } from '../../lib/media/prepareMediaAssetFile.js';
 import { useAppSelector } from '../../hooks/index.js';
 import { MediaAssetThumbnail } from './MediaAssetThumbnail.js';
 
-function loadImageSize(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Не удалось прочитать изображение'));
-    };
-    img.src = url;
-  });
-}
-
 function isLowDpi(asset: MediaAssetItem): boolean {
   return asset.width != null && asset.width < 1200;
+}
+
+function MediaQuotaBar() {
+  const { data: quota, isLoading } = useGetMediaQuotaQuery();
+
+  if (isLoading || !quota) {
+    return null;
+  }
+
+  const used = Number(quota.usedBytes);
+  const limit = Number(quota.limitBytes);
+  const remaining = Math.max(0, limit - used);
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  const nearFull = pct >= 90;
+
+  return (
+    <div className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-xs text-slate-600">
+        <span>
+          Квота: {formatBytesShort(used)} из {formatBytesShort(limit)}
+        </span>
+        <span className="text-slate-500">
+          {quota.fileCount} файл(ов) · осталось {formatBytesShort(remaining)}
+        </span>
+      </div>
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-slate-200"
+        role="progressbar"
+        aria-valuenow={Math.round(pct)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Использование квоты медиатеки"
+      >
+        <div
+          className={`h-full rounded-full transition-all ${nearFull ? 'bg-amber-500' : 'bg-folio-500'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function MediaLibraryPanel() {
@@ -44,8 +72,13 @@ export function MediaLibraryPanel() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useListMediaAssetsQuery(undefined);
+  const { data: quota } = useGetMediaQuotaQuery();
   const [uploadMediaAsset] = useUploadMediaAssetMutation();
   const [deleteMediaAsset, { isLoading: deleting }] = useDeleteMediaAssetMutation();
+
+  const maxFileLabel = quota
+    ? formatBytesShort(Number(quota.maxFileBytes))
+    : formatBytesShort(MEDIA_MAX_FILE_BYTES);
 
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -54,27 +87,39 @@ export function MediaLibraryPanel() {
         setError('Выберите файлы изображений (PNG, JPG, WebP, GIF)');
         return;
       }
+
+      if (quota) {
+        const used = Number(quota.usedBytes);
+        const limit = Number(quota.limitBytes);
+        if (used >= limit) {
+          setError('Квота медиатеки исчерпана. Удалите файлы или обратитесь к администратору.');
+          return;
+        }
+      }
+
       setError(null);
       setSuccess(null);
       setUploading(true);
+      let optimizedCount = 0;
       try {
-        for (const file of list) {
-          let width: number | undefined;
-          let height: number | undefined;
-          try {
-            const size = await loadImageSize(file);
-            if (size.width > 0) width = size.width;
-            if (size.height > 0) height = size.height;
-          } catch {
-            // размеры опциональны
-          }
-          await uploadMediaAsset({ file, width, height }).unwrap();
+        for (const rawFile of list) {
+          const prepared = await prepareMediaAssetFile(rawFile);
+          if (prepared.wasOptimized) optimizedCount += 1;
+          await uploadMediaAsset({
+            file: prepared.file,
+            width: prepared.width,
+            height: prepared.height,
+          }).unwrap();
         }
         await refetch();
-        setSuccess(
+        const base =
           list.length === 1
             ? `«${list[0]!.name}» добавлен в медиатеку`
-            : `Добавлено файлов: ${list.length}`,
+            : `Добавлено файлов: ${list.length}`;
+        setSuccess(
+          optimizedCount > 0
+            ? `${base}. ${optimizedCount} сжато для экономии места.`
+            : base,
         );
       } catch (err) {
         setError(formatUploadError(err, 'Не удалось загрузить в медиатеку'));
@@ -82,7 +127,7 @@ export function MediaLibraryPanel() {
         setUploading(false);
       }
     },
-    [refetch, uploadMediaAsset],
+    [quota, refetch, uploadMediaAsset],
   );
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -125,7 +170,7 @@ export function MediaLibraryPanel() {
   }
 
   async function handleDelete(asset: MediaAssetItem) {
-    const ok = window.confirm(`Удалить «${asset.title}» из медиатеки? Файл в S3 будет удалён.`);
+    const ok = window.confirm(`Удалить «${asset.title}» из медиатеки? Все файлы в хранилище будут удалены.`);
     if (!ok) return;
     setError(null);
     try {
@@ -140,6 +185,8 @@ export function MediaLibraryPanel() {
 
   return (
     <div className="space-y-4">
+      <MediaQuotaBar />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-slate-800">Всего файлов: {items.length}</p>
         <label
@@ -175,7 +222,9 @@ export function MediaLibraryPanel() {
         <p className="text-sm text-slate-700">
           Перетащите изображения сюда или нажмите «Добавить в медиатеку»
         </p>
-        <p className="mt-1 text-xs text-slate-500">PNG, JPG, WebP, GIF · до 100 МБ</p>
+        <p className="mt-1 text-xs text-slate-500">
+          PNG, JPG, WebP, GIF · до {maxFileLabel} · файлы &gt;2 МБ сжимаются автоматически
+        </p>
       </div>
 
       {error && (

@@ -5,11 +5,17 @@ import {
   fetchGuestShareComments,
   fetchGuestShareMeta,
   fetchGuestSharePreviews,
+  fetchGuestShareBookletDownload,
+  GuestSharePasswordRequiredError,
   type GuestShareComment,
 } from '@folio-mind/store';
 
 const PREVIEW_BATCH = 20;
 const AUTHOR_NAME_KEY = 'folio-guest-author-name';
+
+function sharePasswordKey(token: string): string {
+  return `folio-share-pwd:${token}`;
+}
 
 /** Миниатюры (fallback) не содержат watermark в PNG — накладываем в CSS. */
 const THUMB_WATERMARK_MAX_WIDTH = 240;
@@ -255,6 +261,15 @@ export function GuestSharePage() {
   const [error, setError] = useState<string | null>(null);
   const [previewStatus, setPreviewStatus] = useState<string | null>(null);
   const [pendingPages, setPendingPages] = useState<number[]>([]);
+  const [sharePassword, setSharePassword] = useState<string | null>(null);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordDraft, setPasswordDraft] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [unlocking, setUnlocking] = useState(false);
+  const [allowBookletZip, setAllowBookletZip] = useState(false);
+  const [bookletZipAvailable, setBookletZipAvailable] = useState(false);
+  const [bookletDownloadBusy, setBookletDownloadBusy] = useState(false);
+  const [bookletDownloadError, setBookletDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -263,6 +278,15 @@ export function GuestSharePage() {
     } catch {
     }
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    try {
+      const saved = sessionStorage.getItem(sharePasswordKey(token));
+      if (saved) setSharePassword(saved);
+    } catch {
+    }
+  }, [token]);
 
   const commentsByPage = useMemo(() => {
     const map = new Map<number, GuestShareComment[]>();
@@ -279,18 +303,21 @@ export function GuestSharePage() {
     return Math.max(...pages.map((p) => p.page));
   }, [pages]);
 
-  const loadComments = useCallback(async () => {
-    if (!token) return;
-    const items = await fetchGuestShareComments(token);
-    setComments(items);
-  }, [token]);
+  const loadComments = useCallback(
+    async (pwd?: string | null) => {
+      if (!token) return;
+      const items = await fetchGuestShareComments(token, pwd ?? sharePassword);
+      setComments(items);
+    },
+    [token, sharePassword],
+  );
 
   const loadPreviews = useCallback(
-    async (from: number, to: number) => {
+    async (from: number, to: number, pwd?: string | null) => {
       if (!token) return;
       setLoadingMore(true);
       try {
-        const result = await fetchGuestSharePreviews(token, from, to);
+        const result = await fetchGuestSharePreviews(token, from, to, pwd ?? sharePassword);
         setPageCount(result.pageCount);
         setPreviewStatus(result.status);
         setPendingPages(result.pendingPages ?? []);
@@ -302,54 +329,71 @@ export function GuestSharePage() {
           return [...byPage.values()].sort((a, b) => a.page - b.page);
         });
       } catch (err) {
+        if (err instanceof GuestSharePasswordRequiredError) {
+          setNeedsPassword(true);
+          return;
+        }
         setError(err instanceof Error ? err.message : 'Не удалось загрузить превью');
       } finally {
         setLoadingMore(false);
       }
     },
-    [token],
+    [token, sharePassword],
   );
 
-  useEffect(() => {
-    if (!token) {
-      setError('Некорректная ссылка');
-      setLoadingMeta(false);
-      return;
-    }
+  const loadShare = useCallback(
+    async (pwd?: string | null) => {
+      if (!token) {
+        setError('Некорректная ссылка');
+        setLoadingMeta(false);
+        return;
+      }
 
-    let cancelled = false;
-    void (async () => {
       setLoadingMeta(true);
       setError(null);
+      setPasswordError(null);
       try {
-        const meta = await fetchGuestShareMeta(token);
-        if (cancelled) return;
+        const meta = await fetchGuestShareMeta(token, pwd ?? sharePassword);
+        setNeedsPassword(false);
         setTitle(meta.title);
         setVersion(meta.version);
         setExpiresAt(meta.expiresAt);
+        setAllowBookletZip(meta.allowBookletZip);
+        setBookletZipAvailable(meta.bookletZipAvailable);
         setPreviewStatus(meta.previewStatus);
         const count = meta.pageCount ?? 0;
         setPageCount(count);
-        await loadComments();
+        await loadComments(pwd ?? sharePassword);
         if (count > 0) {
-          await loadPreviews(1, Math.min(PREVIEW_BATCH, count));
+          await loadPreviews(1, Math.min(PREVIEW_BATCH, count), pwd ?? sharePassword);
         }
       } catch (err) {
-        if (!cancelled) {
+        if (err instanceof GuestSharePasswordRequiredError) {
+          setNeedsPassword(true);
+          setError(null);
+        } else {
           setError(err instanceof Error ? err.message : 'Ссылка недоступна');
         }
       } finally {
-        if (!cancelled) setLoadingMeta(false);
+        setLoadingMeta(false);
       }
-    })();
+    },
+    [token, sharePassword, loadComments, loadPreviews],
+  );
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await loadShare();
+      if (cancelled) return;
+    })();
     return () => {
       cancelled = true;
     };
-  }, [token, loadPreviews, loadComments]);
+  }, [token, sharePassword, loadShare]);
 
   useEffect(() => {
-    if (!token || error) return;
+    if (!token || error || needsPassword) return;
     const shouldPoll =
       previewStatus === 'processing' ||
       previewStatus === 'partial' ||
@@ -372,6 +416,7 @@ export function GuestSharePage() {
     loadedThrough,
     pages.length,
     loadPreviews,
+    needsPassword,
   ]);
 
   function handleAuthorNameChange(value: string) {
@@ -387,13 +432,17 @@ export function GuestSharePage() {
     setSubmittingPage(page);
     try {
       const pin = pinByPage[page] ?? null;
-      const created = await createGuestShareComment(token, {
-        page,
-        content,
-        authorName: authorName.trim() || undefined,
-        x: pin?.x,
-        y: pin?.y,
-      });
+      const created = await createGuestShareComment(
+        token,
+        {
+          page,
+          content,
+          authorName: authorName.trim() || undefined,
+          x: pin?.x,
+          y: pin?.y,
+        },
+        sharePassword,
+      );
       setComments((prev) => [...prev, created].sort((a, b) => a.page - b.page || a.createdAt.localeCompare(b.createdAt)));
       setPinByPage((prev) => ({ ...prev, [page]: null }));
       setPinModePage(null);
@@ -408,6 +457,43 @@ export function GuestSharePage() {
     const to = Math.min(pageCount, from + PREVIEW_BATCH - 1);
     void loadPreviews(from, to);
   };
+
+  async function handleUnlockPassword() {
+    if (!token) return;
+    const pwd = passwordDraft.trim();
+    if (!pwd) {
+      setPasswordError('Введите пароль');
+      return;
+    }
+    setUnlocking(true);
+    setPasswordError(null);
+    try {
+      try {
+        sessionStorage.setItem(sharePasswordKey(token), pwd);
+      } catch {
+      }
+      setSharePassword(pwd);
+      await loadShare(pwd);
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Неверный пароль');
+    } finally {
+      setUnlocking(false);
+    }
+  }
+
+  async function handleDownloadBookletZip() {
+    if (!token || !bookletZipAvailable) return;
+    setBookletDownloadBusy(true);
+    setBookletDownloadError(null);
+    try {
+      const result = await fetchGuestShareBookletDownload(token, sharePassword);
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setBookletDownloadError(err instanceof Error ? err.message : 'Не удалось скачать пакет');
+    } finally {
+      setBookletDownloadBusy(false);
+    }
+  }
 
   const expiresLabel = expiresAt
     ? new Date(expiresAt).toLocaleString('ru-RU', {
@@ -438,27 +524,79 @@ export function GuestSharePage() {
                 {pageCount > 0 ? ` · ${pageCount} стр.` : ''}
                 {expiresLabel ? ` · действует до ${expiresLabel}` : ''}
               </p>
+              {allowBookletZip && (
+                <div className="mt-3">
+                  {bookletZipAvailable ? (
+                    <button
+                      type="button"
+                      disabled={bookletDownloadBusy}
+                      onClick={() => void handleDownloadBookletZip()}
+                      className="cursor-pointer rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700 disabled:opacity-60"
+                    >
+                      {bookletDownloadBusy ? 'Подготовка…' : 'Скачать пакет (ZIP)'}
+                    </button>
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      Пакет для скачивания ещё не собран — попросите отправителя подготовить ZIP в разделе «Экспорт буклета».
+                    </p>
+                  )}
+                  {bookletDownloadError && (
+                    <p className="mt-1 text-xs text-red-600">{bookletDownloadError}</p>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-        {error && (
+        {needsPassword && !error && (
+          <div className="mx-auto max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Доступ по паролю</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Владелец документа защитил ссылку паролем. Введите его, чтобы открыть превью.
+            </p>
+            <label className="mt-4 block text-xs text-slate-600">
+              Пароль
+              <input
+                type="password"
+                value={passwordDraft}
+                onChange={(e) => setPasswordDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleUnlockPassword();
+                }}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                autoFocus
+              />
+            </label>
+            {passwordError && <p className="mt-2 text-xs text-red-600">{passwordError}</p>}
+            <button
+              type="button"
+              disabled={unlocking}
+              onClick={() => void handleUnlockPassword()}
+              className="mt-4 w-full cursor-pointer rounded-lg bg-folio-600 px-3 py-2 text-sm font-medium text-white hover:bg-folio-700 disabled:opacity-60"
+            >
+              {unlocking ? 'Проверка…' : 'Открыть'}
+            </button>
+          </div>
+        )}
+
+        {error && !needsPassword && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             {error}
           </div>
         )}
 
-        {!error && previewStatus === 'processing' && pages.length === 0 && (
+        {!needsPassword && !error && previewStatus === 'processing' && pages.length === 0 && (
           <p className="text-sm text-slate-600">Документ обрабатывается, превью появятся позже.</p>
         )}
 
-        {!error && previewStatus === 'unavailable' && (
+        {!needsPassword && !error && previewStatus === 'unavailable' && (
           <p className="text-sm text-slate-600">Превью для этой версии пока недоступны.</p>
         )}
 
-        {!error && pageCount > 0 && pages.length === 0 && (
+        {!needsPassword && !error && pageCount > 0 && pages.length === 0 && (
           <p className="mb-4 text-sm text-slate-600">
             {loadingMore || previewStatus === 'partial' || previewStatus === 'processing'
               ? 'Готовим превью страниц… Обычно это занимает до минуты.'
@@ -466,18 +604,19 @@ export function GuestSharePage() {
           </p>
         )}
 
-        {!error && previewStatus === 'partial' && pages.length > 0 && pendingPages.length > 0 && (
+        {!needsPassword && !error && previewStatus === 'partial' && pages.length > 0 && pendingPages.length > 0 && (
           <p className="mb-4 text-sm text-slate-600">
             Загружаем оставшиеся страницы ({pages.length} из {pageCount})…
           </p>
         )}
 
-        {!error && pages.length > 0 && (
+        {!needsPassword && !error && pages.length > 0 && (
           <p className="mb-4 text-sm text-slate-600">
             Оставьте замечание к любой странице — автор документа увидит его в панели согласования.
           </p>
         )}
 
+        {!needsPassword && (
         <div className="space-y-6">
           {pages.map((item) => (
             <figure
@@ -515,8 +654,9 @@ export function GuestSharePage() {
             </figure>
           ))}
         </div>
+        )}
 
-        {!error && loadedThrough > 0 && pageCount > loadedThrough && (
+        {!needsPassword && !error && loadedThrough > 0 && pageCount > loadedThrough && (
           <div className="mt-6 flex justify-center">
             <button
               type="button"

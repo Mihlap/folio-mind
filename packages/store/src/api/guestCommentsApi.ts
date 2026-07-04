@@ -76,10 +76,18 @@ export const {
   useClearGuestCommentsMutation,
 } = guestCommentsApi;
 
-export async function fetchGuestShareComments(token: string): Promise<GuestShareComment[]> {
-  const res = await fetch(`${apiBaseUrl()}/public/share/${encodeURIComponent(token)}/comments`);
+export async function fetchGuestShareComments(
+  token: string,
+  sharePassword?: string | null,
+): Promise<GuestShareComment[]> {
+  const res = await fetch(`${apiBaseUrl()}/public/share/${encodeURIComponent(token)}/comments`, {
+    headers: sharePassword ? { 'X-Folio-Share-Password': sharePassword } : {},
+  });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; requiresPassword?: boolean };
+    if (res.status === 401 && body.requiresPassword) {
+      throw new Error(body.error ?? 'Требуется пароль');
+    }
     throw new Error(body.error ?? `Ошибка ${res.status}`);
   }
   const data = (await res.json()) as { items: GuestShareComment[] };
@@ -89,10 +97,14 @@ export async function fetchGuestShareComments(token: string): Promise<GuestShare
 export async function createGuestShareComment(
   token: string,
   body: CreateGuestShareCommentBody,
+  sharePassword?: string | null,
 ): Promise<GuestShareComment> {
   const res = await fetch(`${apiBaseUrl()}/public/share/${encodeURIComponent(token)}/comments`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(sharePassword ? { 'X-Folio-Share-Password': sharePassword } : {}),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

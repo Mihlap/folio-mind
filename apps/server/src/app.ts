@@ -24,6 +24,7 @@ import { ragRoutes } from './routes/rag.js';
 import { layoutTemplateRoutes } from './routes/layout-templates.js';
 import { mediaRoutes } from './routes/media.js';
 import { projectRoutes } from './routes/projects.js';
+import { pageReviewRoutes } from './routes/page-review.js';
 export type BuildAppOptions = {
   env: Env;
   skipDatabase?: boolean;
@@ -40,6 +41,7 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(cors, {
     origin: options.env.CORS_ORIGIN,
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Folio-Share-Password'],
   });
   await app.register(cookie);
   await app.register(jwt, { secret: options.env.JWT_SECRET });
@@ -74,9 +76,10 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(annotationRoutes);
     await app.register(aiRoutes, { env: options.env });
     await app.register(ragRoutes, { env: options.env });
-    await app.register(mediaRoutes);
+    await app.register(mediaRoutes, { env: options.env });
     await app.register(layoutTemplateRoutes);
     await app.register(projectRoutes);
+    await app.register(pageReviewRoutes);
   } else if (options.skipDatabase) {
     await app.register(healthRoutes, { env: options.env });
   }

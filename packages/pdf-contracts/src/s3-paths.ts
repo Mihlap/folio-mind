@@ -55,9 +55,25 @@ export function exportReportPdfKey(documentId: string, versionId: string): strin
 export function highlightEditsDocxKey(documentId: string, versionId: string): string {
   return resolveS3Key('exports', `${documentId}/${versionId}/edits-highlight.docx`);
 }
+
+export function exportBookletZipKey(documentId: string, versionId: string): string {
+  return resolveS3Key('exports', `${documentId}/${versionId}/booklet.zip`);
+}
+
+export function exportPagesZipKey(documentId: string, versionId: string): string {
+  return resolveS3Key('exports', `${documentId}/${versionId}/pages-export.zip`);
+}
 export function mediaAssetKey(tenantId: string, assetId: string, fileName: string): string {
   const safeName = fileName.replace(/^\/+/, '').replace(/\.\./g, '');
   return resolveS3Key('media', `${tenantId}/${assetId}/${safeName}`);
+}
+
+export function mediaAssetThumbKey(tenantId: string, assetId: string): string {
+  return resolveS3Key('media', `${tenantId}/${assetId}/thumb.webp`);
+}
+
+export function mediaAssetFolderPrefix(tenantId: string, assetId: string): string {
+  return resolveS3Key('media', `${tenantId}/${assetId}`);
 }
 export function assertS3KeyUnderFilesRoot(key: string): void {
   const normalized = key.replace(/^\/+/, '');

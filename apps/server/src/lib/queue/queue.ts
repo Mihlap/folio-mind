@@ -126,7 +126,7 @@ export async function enqueueAiJob(
     documentId: string;
     versionId: string;
     tenantId: string;
-    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare';
+    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare' | 'booklet-title';
     prompt?: string;
     requestId?: string;
   },
@@ -222,6 +222,60 @@ export async function enqueueExportHighlightDocxJob(
   await optimizeQueue.add('export-highlight-docx', payload, { jobId: payload.jobId });
 }
 
+export async function enqueueExportBookletJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    title: string;
+    jpegDpi: number;
+    pdfA: boolean;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('export-booklet', payload, { jobId: payload.jobId });
+}
+
+export async function enqueueExportPagesJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    pages: number[];
+    format: 'jpeg' | 'png';
+    dpi: number;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('export-pages', payload, { jobId: payload.jobId });
+}
+
+export async function enqueuePrintReadinessJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('print-readiness', payload, { jobId: payload.jobId });
+}
+
 export async function enqueueApplyLayoutPdfJob(
   env: Env,
   payload: {
@@ -295,6 +349,20 @@ export async function enqueueImportFromDocxJob(
 ): Promise<void> {
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('import-from-docx', payload, { jobId: payload.jobId });
+}
+
+export async function enqueueMediaOptimizeJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    mediaAssetId: string;
+    tenantId: string;
+    s3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('media-optimize', payload, { jobId: payload.jobId });
 }
 export async function enqueueMergeVersionsJob(
   env: Env,

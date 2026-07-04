@@ -163,6 +163,8 @@ model DocumentShareLink {
   expiresAt     DateTime
   revokedAt     DateTime?
   allowDownload Boolean   @default(false)
+  allowBookletZip Boolean @default(false)
+  passwordHash  String?
   createdAt     DateTime  @default(now())
   guestComments GuestShareComment[]
 
@@ -204,11 +206,26 @@ model MediaAsset {
   width      Int?
   height     Int?
   status     String    @default("pending_upload")
+  thumbS3Key String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
   @@index([tenantId, createdAt])
   @@index([documentId, createdAt])
+}
+
+model DocumentPageReviewMark {
+  id         String   @id @default(cuid())
+  documentId String
+  versionId  String
+  page       Int
+  status     String
+  tenantId   String
+  updatedAt  DateTime @updatedAt
+
+  @@unique([documentId, versionId, page])
+  @@index([documentId, versionId])
+  @@index([tenantId])
 }
 
 model DocumentVersion {

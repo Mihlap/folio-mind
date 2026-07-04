@@ -62,9 +62,10 @@ export function DashboardPage() {
       }
       setLocalError(null);
       clearPending();
-      uploadFromDashboard(pdfFile, docxFile);
+      const projectId = filterProjectId || undefined;
+      uploadFromDashboard(pdfFile, docxFile, projectId);
     },
-    [clearPending, uploadFromDashboard],
+    [filterProjectId, clearPending, uploadFromDashboard],
   );
 
   const attachPdf = useCallback(
@@ -96,7 +97,7 @@ export function DashboardPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Документы</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-slate-600">
+          <label className="flex items-center gap-2 text-sm text-slate-600" title="Фильтр списка и проект для новых загрузок">
             <span className="sr-only sm:not-sr-only">Проект</span>
             <select
               value={filterProjectId}
@@ -290,7 +291,8 @@ export function DashboardPage() {
             disabled={active}
             onClick={() => {
               if (pendingDocx && !pendingPdf) {
-                uploadFromDocxOnly(pendingDocx);
+                const projectId = filterProjectId || undefined;
+                uploadFromDocxOnly(pendingDocx, projectId);
                 clearPending();
                 return;
               }

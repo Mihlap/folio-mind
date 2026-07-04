@@ -17,6 +17,7 @@ export {
   DEFAULT_LAYOUT_GRADIENT_FILL,
   LAYOUT_MARGIN_PRESETS,
   layoutGuidesForPreset,
+  clampLayoutRect,
   normalizeLayoutCrop,
   isFullLayoutCrop,
   type LayoutImageObject,
@@ -34,6 +35,23 @@ export {
   FOLIO_MEDIA_DRAG_MIME,
   type LayoutTemplateStoredObject,
   type LayoutTemplateCategory,
+  MEDIA_MAX_FILE_BYTES,
+  MEDIA_TENANT_QUOTA_BYTES_DEFAULT,
+  MEDIA_MAX_PIXEL_SIDE,
+  MEDIA_STORE_MAX_PIXEL_SIDE,
+  MEDIA_JPEG_QUALITY,
+  formatBytesShort,
+  type MediaQuotaInfo,
+  BOOKLET_EXPORT_DEFAULT_JPEG_DPI,
+  PRINT_MIN_DPI,
+  type PrintReadinessReport,
+  type PrintReadinessLevel,
+  captionFromFileName,
+  LABEL_ARCHIVE_PDF,
+  LABEL_ARCHIVE_PDF_HINT,
+  MSG_ARCHIVE_PDF_FALLBACK,
+  LABEL_GUEST_BOOKLET_ZIP,
+  LABEL_GUEST_BOOKLET_ZIP_HINT,
 } from '@folio-mind/pdf-contracts';
 export { apiBaseUrl } from './api/baseApi.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
@@ -119,6 +137,11 @@ export {
   useApplyLayoutPdfMutation,
   useApplyEditsFinalMutation,
   useExportHighlightDocxMutation,
+  useExportBookletMutation,
+  useExportPagesMutation,
+  usePrintReadinessMutation,
+  useLazyGetBookletExportUrlQuery,
+  useLazyGetPagesExportUrlQuery,
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useCompareVersionIntegrityQuery,
@@ -164,6 +187,8 @@ export {
   useRevokeShareLinkMutation,
   fetchGuestShareMeta,
   fetchGuestSharePreviews,
+  fetchGuestShareBookletDownload,
+  GuestSharePasswordRequiredError,
   type ShareLinkItem,
   type ShareLinkTtlPresetId,
   type CreateShareLinkBody,
@@ -187,6 +212,7 @@ export {
 } from './api/guestCommentsApi.js';
 export {
   mediaApi,
+  useGetMediaQuotaQuery,
   useListMediaAssetsQuery,
   useCreateMediaAssetMutation,
   useUploadMediaAssetMutation,
@@ -196,6 +222,13 @@ export {
   fetchMediaAssetDataUrl,
   type MediaAssetItem,
 } from './api/mediaApi.js';
+export {
+  pageReviewApi,
+  useListPageReviewMarksQuery,
+  useSetPageReviewMarkMutation,
+  type PageReviewMark,
+  type PageReviewMarkStatus,
+} from './api/pageReviewApi.js';
 export {
   projectsApi,
   useListProjectsQuery,
@@ -214,3 +247,9 @@ export {
   useDeleteLayoutTemplateMutation,
   type LayoutTemplateItem,
 } from './api/layoutTemplatesApi.js';
+export {
+  useRequestBookletTitleDraftMutation,
+  useLazySearchProjectMaterialsQuery,
+  type BookletTitleDraftResult,
+  type ProjectMaterialsSearchResult,
+} from './api/bookletAiApi.js';

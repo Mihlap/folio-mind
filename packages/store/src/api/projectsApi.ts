@@ -53,6 +53,7 @@ export const projectsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: documentId },
         { type: 'Documents', id: 'LIST' },
         { type: 'Projects', id: 'LIST' },
+        { type: 'Projects' },
       ],
     }),
   }),

@@ -9,13 +9,17 @@ export type ToolSectionId =
   | 'edits'
   | 'diff'
   | 'layout'
-  | 'share';
+  | 'booklet-ai'
+  | 'share'
+  | 'export';
 
 export const TOOL_SECTION_IDS: ToolSectionId[] = [
   'optimize',
   'split',
   'merge',
   'layout',
+  'booklet-ai',
+  'export',
   'share',
   'annotations',
   'edits',

@@ -93,7 +93,11 @@ export const documentsApi = baseApi.injectEndpoints({
     }),
     createDocument: build.mutation<CreateDocumentResponse, CreateDocumentBody>({
       query: (body) => ({ url: '/documents', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Projects', id: 'LIST' },
+        { type: 'Projects' },
+      ],
     }),
     createDocumentFromDocx: build.mutation<
       {
@@ -111,7 +115,11 @@ export const documentsApi = baseApi.injectEndpoints({
       }
     >({
       query: (body) => ({ url: '/documents/from-docx', method: 'POST', body }),
-      invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Projects', id: 'LIST' },
+        { type: 'Projects' },
+      ],
     }),
     importFromDocx: build.mutation<
       {
@@ -290,7 +298,11 @@ export const documentsApi = baseApi.injectEndpoints({
         url: `/documents/${documentId}`,
         method: 'DELETE',
       }),
-      invalidatesTags: [{ type: 'Documents', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Projects', id: 'LIST' },
+        { type: 'Projects' },
+      ],
     }),
     deleteDocumentVersion: build.mutation<
       void,
@@ -576,6 +588,55 @@ export const documentsApi = baseApi.injectEndpoints({
         method: 'POST',
       }),
     }),
+    exportBooklet: build.mutation<
+      { operationJobId: string; status: 'processing' },
+      { documentId: string; versionId: string; jpegDpi?: number; pdfA?: boolean }
+    >({
+      query: ({ documentId, versionId, jpegDpi, pdfA }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/export-booklet`,
+        method: 'POST',
+        body: { jpegDpi, pdfA },
+      }),
+    }),
+    exportPages: build.mutation<
+      { operationJobId: string; status: 'processing' },
+      {
+        documentId: string;
+        versionId: string;
+        pages: number[];
+        format?: 'jpeg' | 'png';
+        dpi?: number;
+      }
+    >({
+      query: ({ documentId, versionId, pages, format, dpi }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/export-pages`,
+        method: 'POST',
+        body: { pages, format, dpi },
+      }),
+    }),
+    printReadiness: build.mutation<
+      { operationJobId: string; status: 'processing' },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/print-readiness`,
+        method: 'POST',
+      }),
+    }),
+    getBookletExportUrl: build.query<
+      { url: string; expiresInSeconds: number },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) =>
+        `/documents/${documentId}/versions/${versionId}/booklet-export-url`,
+    }),
+    getPagesExportUrl: build.query<
+      { url: string; expiresInSeconds: number },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) =>
+        `/documents/${documentId}/versions/${versionId}/pages-export-url`,
+    }),
     getHighlightDocxUrl: build.query<
       { url: string; expiresInSeconds: number },
       { documentId: string; versionId: string }
@@ -686,6 +747,11 @@ export const {
   useApplyLayoutPdfMutation,
   useApplyEditsFinalMutation,
   useExportHighlightDocxMutation,
+  useExportBookletMutation,
+  useExportPagesMutation,
+  usePrintReadinessMutation,
+  useLazyGetBookletExportUrlQuery,
+  useLazyGetPagesExportUrlQuery,
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useUpdateDocumentReviewStatusMutation,

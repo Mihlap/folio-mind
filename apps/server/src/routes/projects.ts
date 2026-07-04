@@ -109,7 +109,6 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         include: {
           _count: { select: { documents: true } },
           documents: {
-            where: { ownerId: user.sub },
             orderBy: { updatedAt: 'desc' },
             take: 100,
             include: {

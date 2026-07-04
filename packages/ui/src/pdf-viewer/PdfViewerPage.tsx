@@ -13,6 +13,7 @@ import { PdfLayoutObjectsOverlay } from '../layout-editor/PdfLayoutObjectsOverla
 import { PdfLayoutShapesOverlay } from '../layout-editor/PdfLayoutShapesOverlay.js';
 import type { LayoutImageObject, LayoutMarginPresetId, LayoutPageObject, LayoutRect } from '@folio-mind/pdf-contracts';
 import { highlightTextLayer, isRenderCancelled } from './utils.js';
+import { collectImageFilesFromDataTransfer } from '../layout/collectDropImageFiles.js';
 import { pdfPointsToMm, layoutStepFraction, layoutGuidesForPreset, isLayoutImageObject, isLayoutShapeObject, FOLIO_MEDIA_DRAG_MIME, parseFolioMediaDragPayload } from '@folio-mind/pdf-contracts';
 
 export type PdfViewerLayoutProps = {
@@ -30,7 +31,7 @@ export type PdfViewerLayoutProps = {
   onLayoutObjectChange?: (id: string, rect: LayoutRect) => void;
   onLayoutObjectCropChange?: (id: string, crop: LayoutRect) => void;
   onLayoutFilesDrop?: (files: File[], pageNumber: number) => void;
-  onLayoutMediaAssetDrop?: (assetId: string, pageNumber: number) => void;
+  onLayoutMediaAssetDrop?: (assetId: string, pageNumber: number, mediaTitle?: string) => void;
   pageLayoutCountByPage?: Record<number, number>;
   onPageLayoutOpen?: (page: number) => void;
 };
@@ -247,14 +248,15 @@ export function PdfViewerPage({
     setDropFileCount(0);
     setDropMediaTitle(null);
     if (onLayoutFilesDrop && event.dataTransfer.types.includes('Files')) {
-      const files = layoutDropFiles(event.dataTransfer);
-      if (files.length > 0) onLayoutFilesDrop(files, pageNumber);
+      void collectImageFilesFromDataTransfer(event.dataTransfer).then((files) => {
+        if (files.length > 0) onLayoutFilesDrop(files, pageNumber);
+      });
       return;
     }
     if (onLayoutMediaAssetDrop && event.dataTransfer.types.includes(FOLIO_MEDIA_DRAG_MIME)) {
       const raw = event.dataTransfer.getData(FOLIO_MEDIA_DRAG_MIME);
       const payload = raw ? parseFolioMediaDragPayload(raw) : null;
-      if (payload) onLayoutMediaAssetDrop(payload.assetId, pageNumber);
+      if (payload) onLayoutMediaAssetDrop(payload.assetId, pageNumber, payload.title || undefined);
     }
   }
 

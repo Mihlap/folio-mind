@@ -35,6 +35,9 @@ type Props = {
   ) => Promise<void>;
   reviewStatus?: DocumentReviewStatus;
   reviewStatusChangedAt?: string | null;
+  documentTitle?: string;
+  projectId?: string | null;
+  projectName?: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -76,6 +79,9 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   onAddLayoutImages,
   reviewStatus = 'draft',
   reviewStatusChangedAt = null,
+  documentTitle = '',
+  projectId = null,
+  projectName = null,
   collapsed,
   onToggleCollapsed,
   onExpand,
@@ -196,6 +202,9 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             onAddLayoutImages={onAddLayoutImages}
             reviewStatus={reviewStatus}
             reviewStatusChangedAt={reviewStatusChangedAt}
+            documentTitle={documentTitle}
+            projectId={projectId}
+            projectName={projectName}
           />
         </div>
         <div className={activeTab === 'chat' ? 'block' : 'hidden'}>

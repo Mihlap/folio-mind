@@ -1,3 +1,4 @@
+import type { MediaQuotaInfo } from '@folio-mind/pdf-contracts';
 import type { RootState } from '../store.js';
 import { UPLOAD_NETWORK_ERROR_MESSAGE } from '../lib/formatUploadError.js';
 import { uploadMediaAssetFile } from '../lib/uploadMediaAsset.js';
@@ -14,11 +15,16 @@ export type MediaAssetItem = {
   documentId: string | null;
   status: string;
   previewUrl: string | null;
+  thumbUrl: string | null;
   createdAt: string;
 };
 
 export const mediaApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
+    getMediaQuota: build.query<MediaQuotaInfo, void>({
+      query: () => '/media-assets/quota',
+      providesTags: [{ type: 'MediaAssets', id: 'QUOTA' }],
+    }),
     listMediaAssets: build.query<{ items: MediaAssetItem[] }, { documentId?: string } | void>({
       query: (params) => {
         const documentId = params && 'documentId' in params ? params.documentId : undefined;
@@ -78,26 +84,36 @@ export const mediaApi = baseApi.injectEndpoints({
           };
         }
       },
-      invalidatesTags: [{ type: 'MediaAssets', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'MediaAssets', id: 'LIST' },
+        { type: 'MediaAssets', id: 'QUOTA' },
+      ],
     }),
     completeMediaAsset: build.mutation<MediaAssetItem, { assetId: string }>({
       query: ({ assetId }) => ({
         url: `/media-assets/${assetId}/complete`,
         method: 'POST',
       }),
-      invalidatesTags: [{ type: 'MediaAssets', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'MediaAssets', id: 'LIST' },
+        { type: 'MediaAssets', id: 'QUOTA' },
+      ],
     }),
     deleteMediaAsset: build.mutation<void, { assetId: string }>({
       query: ({ assetId }) => ({
         url: `/media-assets/${assetId}`,
         method: 'DELETE',
       }),
-      invalidatesTags: [{ type: 'MediaAssets', id: 'LIST' }],
+      invalidatesTags: [
+        { type: 'MediaAssets', id: 'LIST' },
+        { type: 'MediaAssets', id: 'QUOTA' },
+      ],
     }),
   }),
 });
 
 export const {
+  useGetMediaQuotaQuery,
   useListMediaAssetsQuery,
   useCreateMediaAssetMutation,
   useUploadMediaAssetMutation,

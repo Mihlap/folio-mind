@@ -17,6 +17,10 @@ const CATEGORY_LABELS: Record<LayoutTemplateCategory, string> = {
   custom: 'Свой',
 };
 
+function defaultSaveName(viewerPage: number): string {
+  return `Макет стр. ${viewerPage}`;
+}
+
 type Props = {
   layout: LayoutEditorState;
   viewerPage: number;
@@ -30,158 +34,194 @@ export function DocumentLayoutTemplatesSection({ layout, viewerPage, versionRead
   const [selectedId, setSelectedId] = useState('');
   const [saveName, setSaveName] = useState('');
   const [showSaveForm, setShowSaveForm] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const items = data?.items ?? [];
   const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
 
+  function openSaveForm() {
+    setSaveError(null);
+    setApplyError(null);
+    setStatus(null);
+    setSaveName(defaultSaveName(viewerPage));
+    setShowSaveForm(true);
+  }
+
+  function closeSaveForm() {
+    setShowSaveForm(false);
+    setSaveError(null);
+    setSaveName('');
+  }
+
   async function handleApply(template: LayoutTemplateItem) {
     if (!versionReady) return;
-    setError(null);
+    setApplyError(null);
+    setSaveError(null);
     setStatus(null);
+    closeSaveForm();
     try {
       if (!layout.enabled) layout.setEnabled(true);
       const objects = template.objects as LayoutTemplateStoredObject[];
       const created = layout.applyTemplate(objects, viewerPage);
       if (created.length === 0) {
-        setError('Шаблон пуст');
+        setApplyError('Шаблон пуст');
         return;
       }
-      setStatus(`Шаблон «${template.name}» на стр. ${viewerPage}`);
+      setStatus(
+        `Шаблон «${template.name}» на стр. ${viewerPage}. Серые блоки — слоты под фото; перетащите изображение из медиатеки.`,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось применить шаблон');
+      setApplyError(err instanceof Error ? err.message : 'Не удалось применить шаблон');
     }
   }
 
   async function handleSavePage() {
-    const name = saveName.trim();
-    if (!name) {
-      setError('Укажите название шаблона');
-      return;
-    }
+    const name = saveName.trim() || defaultSaveName(viewerPage);
     const objects = serializePageToTemplate(layout.objects, viewerPage);
     if (objects.length === 0) {
-      setError(`На стр. ${viewerPage} нет объектов макета`);
+      setSaveError(`На стр. ${viewerPage} нет объектов макета — сначала добавьте фигуры или фото`);
       return;
     }
-    setError(null);
+    setSaveError(null);
+    setApplyError(null);
     try {
       await createTemplate({ name, category: 'custom', objects }).unwrap();
-      setSaveName('');
-      setShowSaveForm(false);
+      closeSaveForm();
       setStatus(`Шаблон «${name}» сохранён`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось сохранить шаблон');
+      setSaveError(err instanceof Error ? err.message : 'Не удалось сохранить шаблон');
     }
   }
 
   async function handleDelete(template: LayoutTemplateItem) {
     if (template.builtin) return;
     if (!window.confirm(`Удалить шаблон «${template.name}»?`)) return;
-    setError(null);
+    setApplyError(null);
+    setSaveError(null);
     try {
       await deleteTemplate(template.id).unwrap();
       if (selectedId === template.id) setSelectedId('');
       setStatus('Шаблон удалён');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось удалить');
+      setApplyError(err instanceof Error ? err.message : 'Не удалось удалить');
     }
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-      <p className="text-xs font-medium text-slate-700">Шаблоны бюро</p>
-      <p className="text-[11px] text-slate-500">
-        Встроенные макеты и сохранённые шаблоны tenant. Слоты под фото — серые блоки; перетащите
-        изображение из медиатеки или с рабочего стола.
-      </p>
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+      <div>
+        <p className="text-xs font-medium text-slate-700">Шаблоны бюро</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">
+          Выберите макет и нажмите «Применить» — объекты появятся на PDF (нужен режим макета).
+        </p>
+      </div>
 
       {isLoading && <p className="text-xs text-slate-500">Загрузка…</p>}
 
+      {!isLoading && items.length === 0 && (
+        <p className="text-xs text-slate-500">Шаблоны недоступны — проверьте подключение к API.</p>
+      )}
+
       {!isLoading && items.length > 0 && (
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-[10px] text-slate-500">Шаблон</span>
+        <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2.5">
+          <label className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[10px] font-medium text-slate-600">Применить шаблон</span>
             <select
               value={selected?.id ?? ''}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800"
+              onChange={(e) => {
+                setSelectedId(e.target.value);
+                setApplyError(null);
+              }}
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800"
             >
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.builtin ? '★ ' : ''}
-                  {item.name} ({CATEGORY_LABELS[item.category] ?? item.category})
+                  {item.name}
+                  {item.category !== 'custom' ? ` · ${CATEGORY_LABELS[item.category]}` : ''}
                 </option>
               ))}
             </select>
           </label>
-          <button
-            type="button"
-            disabled={!versionReady || !selected}
-            onClick={() => selected && void handleApply(selected)}
-            className="shrink-0 rounded border border-folio-200 bg-folio-50 px-2 py-1 text-[11px] font-medium text-folio-800 hover:bg-folio-100 disabled:opacity-50"
-          >
-            На стр. {viewerPage}
-          </button>
-          {selected && !selected.builtin && (
+
+          {selected?.description && (
+            <p className="text-[11px] text-slate-500">{selected.description}</p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void handleDelete(selected)}
-              className="shrink-0 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+              disabled={!versionReady || !selected}
+              onClick={() => selected && void handleApply(selected)}
+              className="rounded border border-folio-300 bg-folio-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-folio-700 disabled:opacity-50"
             >
-              Удалить
+              Применить на стр. {viewerPage}
             </button>
-          )}
+            {selected && !selected.builtin && (
+              <button
+                type="button"
+                onClick={() => void handleDelete(selected)}
+                className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-600 hover:bg-slate-50"
+              >
+                Удалить шаблон
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {selected?.description && (
-        <p className="text-[11px] text-slate-500">{selected.description}</p>
-      )}
-
-      {!showSaveForm ? (
-        <button
-          type="button"
-          disabled={!versionReady}
-          onClick={() => setShowSaveForm(true)}
-          className="text-[11px] font-medium text-folio-700 underline-offset-2 hover:underline disabled:opacity-50"
-        >
-          Сохранить текущую страницу как шаблон…
-        </button>
-      ) : (
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-[10px] text-slate-500">Название</span>
-            <input
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              placeholder={`Стр. ${viewerPage}`}
-              className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
-            />
-          </label>
+      <div className="border-t border-slate-200 pt-2">
+        {!showSaveForm ? (
           <button
             type="button"
-            disabled={saving}
-            onClick={() => void handleSavePage()}
-            className="rounded border border-folio-200 bg-folio-50 px-2 py-1 text-[11px] font-medium text-folio-800 disabled:opacity-50"
+            disabled={!versionReady}
+            onClick={openSaveForm}
+            className="text-[11px] font-medium text-folio-700 underline-offset-2 hover:underline disabled:opacity-50"
           >
-            {saving ? '…' : 'Сохранить'}
+            Сохранить текущую страницу как свой шаблон…
           </button>
-          <button
-            type="button"
-            onClick={() => setShowSaveForm(false)}
-            className="text-[11px] text-slate-500 hover:text-slate-700"
-          >
-            Отмена
-          </button>
-        </div>
-      )}
+        ) : (
+          <div className="space-y-2 rounded-md border border-dashed border-slate-300 bg-white p-2.5">
+            <p className="text-[10px] font-medium text-slate-600">Сохранить макет стр. {viewerPage}</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-[10px] text-slate-500">Название шаблона</span>
+                <input
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleSavePage();
+                  }}
+                  className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void handleSavePage()}
+                className="rounded border border-folio-200 bg-folio-50 px-3 py-1.5 text-[11px] font-medium text-folio-800 disabled:opacity-50"
+              >
+                {saving ? '…' : 'Сохранить'}
+              </button>
+              <button type="button" onClick={closeSaveForm} className="text-[11px] text-slate-500 hover:text-slate-700">
+                Отмена
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {status && <p className="text-[11px] text-emerald-700">{status}</p>}
-      {error && (
+      {applyError && (
         <p className="rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700" role="alert">
-          {error}
+          {applyError}
+        </p>
+      )}
+      {saveError && (
+        <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900" role="alert">
+          {saveError}
         </p>
       )}
     </div>
