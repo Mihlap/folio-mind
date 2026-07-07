@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { OptimizePreset } from '@folio-mind/pdf-contracts';
+import { resolveGhostscriptBin, resolveQpdfBin } from './pdf-binary-paths.js';
 import { readOutputIfExists, withPdfTempFiles } from './pdf-temp-files.js';
+
+export { resolveGhostscriptBin, resolveQpdfBin } from './pdf-binary-paths.js';
 
 const execFileAsync = promisify(execFile);
 const BASE_TIMEOUT_MS = 120_000;
@@ -17,46 +18,16 @@ function optimizeTimeoutMs(sourceBytes: number): number {
   return BASE_TIMEOUT_MS;
 }
 
-function discoverBinaryOnWindows(dirPrefix: string, binName: string): string | null {
-  const programFiles = process.env['ProgramFiles'] ?? 'C:\\Program Files';
-  try {
-    for (const entry of readdirSync(programFiles)) {
-      if (!entry.toLowerCase().startsWith(dirPrefix.toLowerCase())) continue;
-      const candidate = join(programFiles, entry, 'bin', binName);
-      if (existsSync(candidate)) return candidate;
-    }
-    const gsRoot = join(programFiles, 'gs');
-    if (existsSync(gsRoot)) {
-      for (const entry of readdirSync(gsRoot)) {
-        const candidate = join(gsRoot, entry, 'bin', binName);
-        if (existsSync(candidate)) return candidate;
-      }
-    }
-  } catch {
-  }
-  return null;
-}
-
-function resolveQpdfBin(): string {
-  if (process.env.QPDF_BIN?.trim()) return process.env.QPDF_BIN.trim();
-  if (process.platform === 'win32') {
-    return discoverBinaryOnWindows('qpdf', 'qpdf.exe') ?? 'qpdf';
-  }
-  return 'qpdf';
-}
-
-function resolveGhostscriptBin(): string {
-  if (process.env.GHOSTSCRIPT_BIN?.trim()) return process.env.GHOSTSCRIPT_BIN.trim();
-  if (process.platform === 'win32') {
-    return discoverBinaryOnWindows('gs', 'gswin64c.exe') ?? 'gswin64c';
-  }
-  return 'gs';
-}
-
 type GhostscriptProfile = {
   id: string;
   pdfSettings?: string;
   extraArgs?: string[];
+};
+
+export type GhostscriptOptimizeOptions = {
+  earlyExitBelowBytes?: number | null;
+  maxProfiles?: number;
+  onProfileDone?: (step: number, total: number) => void | Promise<void>;
 };
 
 function ghostscriptProfilesForPreset(preset: OptimizePreset): GhostscriptProfile[] {
@@ -181,19 +152,39 @@ async function runGhostscriptProfile(
 export async function tryGhostscriptOptimize(
   sourceBuffer: Buffer,
   preset: OptimizePreset,
+  options: GhostscriptOptimizeOptions = {},
 ): Promise<{ buffer: Buffer; profile: string } | null> {
   const profiles = ghostscriptProfilesForPreset(preset);
   if (profiles.length === 0) return null;
 
+  const limit = options.maxProfiles ? Math.min(options.maxProfiles, profiles.length) : profiles.length;
   let best: { buffer: Buffer; profile: string } | null = null;
-  for (const profile of profiles) {
+  for (let index = 0; index < limit; index += 1) {
+    const profile = profiles[index]!;
     const buffer = await runGhostscriptProfile(sourceBuffer, profile);
+    await options.onProfileDone?.(index + 1, limit);
     if (!buffer) continue;
     if (!best || buffer.length < best.buffer.length) {
       best = { buffer, profile: profile.id };
     }
+    if (
+      options.earlyExitBelowBytes &&
+      best &&
+      best.buffer.length <= options.earlyExitBelowBytes
+    ) {
+      break;
+    }
   }
   return best;
+}
+
+export function optimizeEarlyExitTargetBytes(
+  sourceBytes: number,
+  preset: OptimizePreset,
+): number | null {
+  if (preset === 'none' || preset === 'print') return null;
+  const ratio = preset === 'email' ? 0.35 : 0.55;
+  return Math.floor(sourceBytes * ratio);
 }
 
 export async function getOptimizeToolAvailability(): Promise<{

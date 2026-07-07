@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import type { Env } from '../../lib/config/env.js';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
 import { isShareLinkActive } from '../../lib/share/share-link.js';
 import {
@@ -9,6 +10,8 @@ import {
   serializeGuestShareComment,
   updateGuestShareCommentStatusSchema,
 } from '../../lib/share/guest-comment.js';
+import { createMailer } from '../../lib/email/mailer.js';
+import { notifyGuestCommentResolvedGuest } from '../../lib/share/notify-guest-comment.js';
 import { errorBody } from './schemas.js';
 
 async function assertGuestCommentsDeletable(
@@ -25,7 +28,7 @@ async function assertGuestCommentsDeletable(
   }
 }
 
-export const registerGuestCommentsRoutes: FastifyPluginAsync = async (app) => {
+export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { env }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.get(
@@ -88,17 +91,36 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync = async (app) => {
 
       const comment = await app.prisma.guestShareComment.findFirst({
         where: { id: commentId, documentId },
+        select: {
+          id: true,
+          page: true,
+          status: true,
+          versionId: true,
+          authorEmail: true,
+          authorName: true,
+          shareLink: {
+            select: {
+              document: { select: { id: true, title: true } },
+              versionId: true,
+            },
+          },
+        },
       });
       if (!comment) {
         return reply.code(404).send({ error: 'Comment not found' });
       }
 
       const resolved = request.body.status === 'resolved';
+      const authorReplyText =
+        resolved && request.body.authorReply?.trim()
+          ? request.body.authorReply.trim()
+          : null;
       const updated = await app.prisma.guestShareComment.update({
         where: { id: commentId },
         data: {
           status: request.body.status,
           resolvedAt: resolved ? new Date() : null,
+          authorReply: resolved ? authorReplyText : null,
         },
       });
 
@@ -111,6 +133,35 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync = async (app) => {
           meta: { commentId, versionId: comment.versionId, page: comment.page },
         },
       });
+
+      if (resolved && comment.authorEmail && authorReplyText) {
+        const version = await app.prisma.documentVersion.findUnique({
+          where: { id: comment.versionId },
+          select: { version: true },
+        });
+        if (version) {
+          void notifyGuestCommentResolvedGuest(
+            env,
+            createMailer(env, request.log),
+            request.log,
+            {
+              guestEmail: comment.authorEmail,
+              guestName: comment.authorName ?? null,
+              documentId: comment.shareLink.document.id,
+              documentTitle: comment.shareLink.document.title,
+              versionId: comment.versionId,
+              versionNumber: version.version,
+              comment: {
+                id: comment.id,
+                page: comment.page,
+                authorReply: authorReplyText,
+              },
+            },
+          ).catch((err) => {
+            request.log.warn({ err }, 'guest comment resolved notification failed');
+          });
+        }
+      }
 
       return serializeGuestShareComment(updated);
     },

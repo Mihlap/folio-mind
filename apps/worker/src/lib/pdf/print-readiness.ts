@@ -55,12 +55,14 @@ export async function analyzePrintReadiness(pdfBuffer: Buffer): Promise<PrintRea
     embeddedFonts > 0 ? 'ok' : pageCount > 0 ? 'warning' : 'ok';
   const fontNote =
     embeddedFonts > 0
-      ? `Найдено ${embeddedFonts} встроенных объектов шрифта.`
-      : 'Явно встроенных шрифтов не найдено — для печати может потребоваться подстановка.';
+      ? `Шрифты встроены в файл (${embeddedFonts} объектов) — вид при печати будет предсказуемым.`
+      : 'Шрифты не встроены в PDF — на другом компьютере текст может выглядеть иначе.';
 
   const warnings: string[] = [];
   if (embeddedFonts === 0) {
-    warnings.push('Шрифты: не обнаружены встроенные FontFile — проверьте PDF в Acrobat перед тиражом.');
+    warnings.push(
+      'Шрифты не встроены — перед тиражом откройте PDF на том компьютере, где будут печатать, и проверьте вид текста.',
+    );
   }
 
   const imagesPerPage = Math.max(1, Math.ceil(rawImages.length / Math.max(pageCount, 1)));
@@ -79,8 +81,8 @@ export async function analyzePrintReadiness(pdfBuffer: Buffer): Promise<PrintRea
         level,
         note:
           estimatedDpi >= PRINT_MIN_DPI
-            ? 'Достаточно для печати (оценка при полной ширине листа).'
-            : `Ниже ${PRINT_MIN_DPI} dpi — возможна пикселизация.`,
+            ? 'Достаточно для печати A4 (оценка).'
+            : `Ниже ${PRINT_MIN_DPI} dpi — на печати возможна заметная пикселизация.`,
       };
     });
     const minEstimatedDpi =
@@ -92,7 +94,9 @@ export async function analyzePrintReadiness(pdfBuffer: Buffer): Promise<PrintRea
       pageLevel = maxLevel(pageLevel, finding.level);
     }
     if (imageFindings.length === 0) {
-      warnings.push(`Стр. ${page}: растровые изображения не найдены в слое PDF (вектор/текст или flatten).`);
+      warnings.push(
+        `Стр. ${page}: отдельные картинки в PDF не видны (текст, вектор или «сплющенный» файл). Если рендеры вставлены через «Макет», откройте лист и проверьте глазами.`,
+      );
     }
     return {
       page,
@@ -110,7 +114,9 @@ export async function analyzePrintReadiness(pdfBuffer: Buffer): Promise<PrintRea
 
   const lowDpiPages = pages.filter((p) => p.level === 'issue').length;
   if (lowDpiPages > 0) {
-    warnings.push(`${lowDpiPages} стр. с оценкой DPI ниже ${PRINT_MIN_DPI} — проверьте исходники в медиатеке.`);
+    warnings.push(
+      `${lowDpiPages} стр. с низкой оценкой DPI (ниже ${PRINT_MIN_DPI}) — проверьте исходные картинки в медиатеке или увеличьте их перед вставкой в макет.`,
+    );
   }
 
   return {

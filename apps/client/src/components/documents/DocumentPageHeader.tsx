@@ -3,6 +3,7 @@ import type { DocumentReviewStatus } from '@folio-mind/store';
 import { DocumentReviewStatusBadge } from './DocumentReviewStatusControl.js';
 import { DocumentProjectSelect } from './DocumentProjectSelect.js';
 import { shellTopHeaderClass } from '../layout/shell-chrome.js';
+import { isDocumentVersionSelectable } from '../../lib/documents/versionSelection.js';
 
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'не загружен',
@@ -14,8 +15,15 @@ const STATUS_LABEL: Record<string, string> = {
 type VersionOption = {
   id: string;
   version: number;
+  versionLabel: 'draft' | 'in_review' | 'final' | null;
   status: string;
   pageCount: number | null;
+  size?: string | null;
+};
+const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
+  draft: 'Черновик',
+  in_review: 'На согласовании',
+  final: 'Финал',
 };
 
 type DocumentPageHeaderProps = {
@@ -76,8 +84,13 @@ export function DocumentPageHeader({
               className="min-w-0 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
             >
               {versions.map((v) => (
-                <option key={v.id} value={v.id} disabled={v.status === 'pending_upload'}>
+                <option
+                  key={v.id}
+                  value={v.id}
+                  disabled={!isDocumentVersionSelectable(v)}
+                >
                   v{v.version}
+                  {v.versionLabel ? ` · ${VERSION_LABEL_TITLE[v.versionLabel]}` : ''}
                   {v.pageCount ? ` · ${v.pageCount} стр.` : ''}
                   {v.id === latestVersionId ? ' (нов.)' : ''}
                 </option>
@@ -94,6 +107,9 @@ export function DocumentPageHeader({
             {activeVersion ? (
               <>
                 <span className="hidden md:inline">Просмотр: </span>v{activeVersion.version} ·{' '}
+                {activeVersion.versionLabel
+                  ? `${VERSION_LABEL_TITLE[activeVersion.versionLabel]} · `
+                  : ''}
                 {statusLabel}
                 {sizeLabel ? ` · ${sizeLabel}` : ''}
                 {activeVersion.pageCount ? ` · ${activeVersion.pageCount} стр.` : ''}

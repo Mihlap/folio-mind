@@ -1,4 +1,10 @@
 import type { OptimizePreset } from '@folio-mind/pdf-contracts';
+import {
+  MSG_OPTIMIZE_ASSEMBLED,
+  MSG_OPTIMIZE_NO_CHANGE,
+  MSG_OPTIMIZE_NO_TOOLS,
+  MSG_OPTIMIZE_SAVED,
+} from '@folio-mind/pdf-contracts';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
@@ -7,6 +13,7 @@ import {
   finalizeOptimizeVersion,
 } from '../../lib/pdf/finalize-optimize-version.js';
 import { optimizePdfBuffer } from '../../lib/pdf/optimize-pdf.js';
+import { reportOptimizeProgress } from '../../lib/pdf/optimize-progress.js';
 import {
   deleteObjectByKey,
   getObjectBuffer,
@@ -49,6 +56,7 @@ export async function processOptimizePdfJob(env: WorkerEnv, data: OptimizePdfPay
 
   const prisma = getPrisma();
   await prisma.job.update({ where: { id: operationJobId }, data: { status: 'processing' } });
+  await reportOptimizeProgress(operationJobId, 'Загружаем файл');
 
   try {
     if (!isWorkerS3Configured()) {
@@ -67,7 +75,16 @@ export async function processOptimizePdfJob(env: WorkerEnv, data: OptimizePdfPay
     }
 
     const sourceBuffer = await getObjectBuffer(sourceS3Key);
-    const optimized = await optimizePdfBuffer(sourceBuffer, preset);
+    const optimized = await optimizePdfBuffer(sourceBuffer, preset, async (update) => {
+      await reportOptimizeProgress(
+        operationJobId,
+        update.label,
+        update.step,
+        update.total,
+      );
+    });
+
+    await reportOptimizeProgress(operationJobId, 'Сохраняем новую версию');
 
     const existsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },
@@ -134,12 +151,12 @@ export async function processOptimizePdfJob(env: WorkerEnv, data: OptimizePdfPay
           savedPercent: savedPct,
           previewJobId,
           message: noCompression && noExternalTools
-            ? 'Размер не изменился — установите qpdf и Ghostscript на машине worker (см. README)'
+            ? MSG_OPTIMIZE_NO_TOOLS
             : noCompression
-              ? 'Файл уже оптимален — заметного сжатия без потери качества нет'
+              ? MSG_OPTIMIZE_NO_CHANGE
               : savedPct > 0
-                ? `Размер уменьшен примерно на ${savedPct}% (${optimized.method})`
-                : 'Новая версия собрана без уменьшения размера',
+                ? MSG_OPTIMIZE_SAVED(savedPct)
+                : MSG_OPTIMIZE_ASSEMBLED,
         },
       },
     });

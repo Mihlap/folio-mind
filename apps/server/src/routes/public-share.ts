@@ -195,6 +195,53 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
   );
 
   r.get(
+    '/public/share/:token/page-review-marks',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          200: z.object({
+            items: z.array(
+              z.object({
+                page: z.number(),
+                status: z.enum(['ok', 'needs_fix']),
+              }),
+            ),
+          }),
+          404: errorBody,
+          410: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
+      const items = await app.prisma.documentPageReviewMark.findMany({
+        where: {
+          documentId: resolved.document.id,
+          versionId: resolved.version.id,
+          tenantId: resolved.document.tenantId,
+        },
+        orderBy: { page: 'asc' },
+      });
+
+      return {
+        items: items.map((item) => ({
+          page: item.page,
+          status: item.status as 'ok' | 'needs_fix',
+        })),
+      };
+    },
+  );
+
+  r.get(
     '/public/share/:token/comments',
     {
       config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
@@ -275,6 +322,7 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
           page: request.body.page,
           content: request.body.content.trim(),
           authorName: request.body.authorName?.trim() || null,
+          authorEmail: request.body.authorEmail?.trim().toLowerCase() || null,
           x: request.body.x ?? null,
           y: request.body.y ?? null,
         },

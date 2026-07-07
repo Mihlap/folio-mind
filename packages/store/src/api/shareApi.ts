@@ -88,6 +88,15 @@ export type GuestSharePreviews = {
   pendingPages?: number[];
 };
 
+export type GuestSharePageReviewMark = {
+  page: number;
+  status: 'ok' | 'needs_fix';
+};
+
+export type GuestSharePageReviewMarks = {
+  items: GuestSharePageReviewMark[];
+};
+
 export class GuestSharePasswordRequiredError extends Error {
   readonly requiresPassword = true;
 
@@ -129,6 +138,18 @@ export async function fetchGuestSharePreviews(
   );
   if (!res.ok) await parseGuestShareError(res);
   return res.json() as Promise<GuestSharePreviews>;
+}
+
+export async function fetchGuestSharePageReviewMarks(
+  token: string,
+  sharePassword?: string | null,
+): Promise<GuestSharePageReviewMarks> {
+  const res = await fetch(
+    `${apiBaseUrl()}/public/share/${encodeURIComponent(token)}/page-review-marks`,
+    { headers: sharePassword ? { 'X-Folio-Share-Password': sharePassword } : {} },
+  );
+  if (!res.ok) await parseGuestShareError(res);
+  return res.json() as Promise<GuestSharePageReviewMarks>;
 }
 
 export async function fetchGuestShareBookletDownload(

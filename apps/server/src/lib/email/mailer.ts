@@ -14,6 +14,14 @@ export type Mailer = {
     contentPreview: string;
     documentUrl: string;
   }): Promise<void>;
+  sendGuestCommentResolvedNotification(params: {
+    to: string;
+    guestName?: string | null;
+    documentTitle: string;
+    versionNumber: number;
+    page: number;
+    authorReply: string;
+  }): Promise<void>;
 };
 function isSmtpConfigured(env: Env): boolean {
   const host = env.SMTP_HOST?.trim();
@@ -70,6 +78,24 @@ export function createMailer(
             documentUrl,
           },
           'SMTP is not configured; guest comment notification (dev log)',
+        );
+      },
+      async sendGuestCommentResolvedNotification({
+        to,
+        documentTitle,
+        versionNumber,
+        page,
+        authorReply,
+      }) {
+        logger.warn(
+          {
+            to,
+            documentTitle,
+            versionNumber,
+            page,
+            authorReply,
+          },
+          'SMTP is not configured; guest comment resolved notification (dev log)',
         );
       },
     };
@@ -159,6 +185,32 @@ export function createMailer(
 `.trim();
       await transporter.sendMail({ from: env.SMTP_FROM, to, subject, text, html });
       logger.info({ to, documentTitle }, 'guest comment notification sent');
+    },
+    async sendGuestCommentResolvedNotification({
+      to,
+      guestName,
+      documentTitle,
+      versionNumber,
+      page,
+      authorReply,
+    }) {
+      const greeting = guestName?.trim() ? `Здравствуйте, ${guestName.trim()}!` : 'Здравствуйте!';
+      const subject = `Ответ по замечанию: «${documentTitle}»`;
+      const text = [
+        greeting,
+        '',
+        `По вашему замечанию к документу «${documentTitle}» (версия ${versionNumber}, стр. ${page}) отправитель оставил ответ:`,
+        '',
+        authorReply,
+      ].join('\n');
+      const html = `
+<p>${escapeHtml(greeting)}</p>
+<p>По вашему замечанию к документу «${escapeHtml(documentTitle)}» (версия ${versionNumber}, стр. ${page}) отправитель оставил ответ:</p>
+<blockquote style="margin:12px 0;padding:12px;border-left:3px solid #86efac;background:#f0fdf4;color:#14532d;white-space:pre-wrap;">${escapeHtml(authorReply)}</blockquote>
+<p style="color:#64748b;font-size:12px;">Вы получили это письмо, потому что указали email при отправке замечания.</p>
+`.trim();
+      await transporter.sendMail({ from: env.SMTP_FROM, to, subject, text, html });
+      logger.info({ to, documentTitle }, 'guest comment resolved notification sent');
     },
   };
 }

@@ -8,6 +8,15 @@ import {
   useOptimizePdfMutation,
   useSplitPagesMutation,
   type OptimizePreset,
+  HINT_OPTIMIZE_NEW_VERSION,
+  HINT_OPTIMIZE_REQUIREMENTS,
+  MSG_OPERATION_STARTING,
+  MSG_OPTIMIZE_RUNNING,
+  MSG_OPTIMIZE_DONE_SUFFIX,
+  MSG_PROCESSING_WAIT,
+  formatOptimizeWaitHint,
+  msgNewVersionStarted,
+  readJobProgressLabel,
 } from '@folio-mind/store';
 import {
   estimateOptimizeSize,
@@ -26,13 +35,13 @@ import {
   ToolAccordionSection,
   type ToolSectionId,
 } from '../ui/ToolAccordionSection.js';
+import { DocumentPageOrderPanel } from './DocumentPageOrderPanel.js';
 import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
-import { DocumentBookletExportPanel } from './DocumentBookletExportPanel.js';
-import { DocumentBookletAiPanel } from './DocumentBookletAiPanel.js';
+import { DocumentBookletPanel } from './DocumentBookletPanel.js';
 import { DocumentGuestCommentsPanel } from './DocumentGuestCommentsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
@@ -178,7 +187,7 @@ export function DocumentPdfOperationsPanel({
   const operationPending = splitLoading || mergeLoading || optimizeLoading || optimizeRunning;
   const splitBlockedReason = (() => {
     if (!activeVersion) return 'Выберите версию в списке слева';
-    if (activeVersion.status === 'processing') return 'Версия ещё обрабатывается';
+    if (activeVersion.status === 'processing') return MSG_PROCESSING_WAIT;
     if (activeVersion.status === 'failed') return 'Версия с ошибкой — удалите или создайте заново';
     if (activeVersion.status === 'pending_upload') return 'Файл не загружен';
     if (!activeReady) return `Статус версии: ${activeVersion.status}`;
@@ -217,7 +226,7 @@ export function DocumentPdfOperationsPanel({
         const savedNote =
           Number.isFinite(savedPct) && savedPct > 0 ? ` (−${savedPct}%)` : '';
         const detail = optimizeMessage || `Версия ${targetVersion.version} собрана`;
-        setStatusHint(`${detail}${sizeNote}${savedNote} — PDF в viewer, миниатюры подгружаются.`);
+        setStatusHint(`${detail}${sizeNote}${savedNote} — ${MSG_OPTIMIZE_DONE_SUFFIX}`);
         setStatusHintVersionId(targetVersion.id);
       }
     }
@@ -246,6 +255,7 @@ export function DocumentPdfOperationsPanel({
     if (targetVersion.status === 'ready') {
       setStatusHint(`Версия ${targetVersion.version} готова`);
       setStatusHintVersionId(targetVersion.id);
+      onSelectVersion(targetVersion.id);
       setOperationJobId(null);
       setTargetVersionId(null);
       setPollOperation(false);
@@ -253,14 +263,14 @@ export function DocumentPdfOperationsPanel({
       return () => clearTimeout(timer);
     }
     if (targetVersion.status === 'failed') {
-      setOperationError(`Версия ${targetVersion.version} ещё обрабатывается. Подождите или обратитесь к администратору.`);
+      setOperationError(`Не удалось подготовить версию ${targetVersion.version}. Попробуйте ещё раз или обратитесь к администратору.`);
       setStatusHint(null);
       setStatusHintVersionId(null);
       setOperationJobId(null);
       setTargetVersionId(null);
       setPollOperation(false);
     }
-  }, [targetVersion?.id, targetVersion?.status, targetVersion?.version]);
+  }, [onSelectVersion, targetVersion?.id, targetVersion?.status, targetVersion?.version]);
   useEffect(() => {
     if (!statusHintVersionId) return;
     const exists = versions.some((v) => v.id === statusHintVersionId);
@@ -299,8 +309,7 @@ export function DocumentPdfOperationsPanel({
     setTargetVersionId(result.versionId);
     setPollOperation(true);
     setOperationError(null);
-    setStatusHint(`Создана версия ${result.version}. Worker собирает PDF…`);
-    onSelectVersion(result.versionId);
+    setStatusHint(msgNewVersionStarted(result.version));
   }
   async function handleSplit() {
     if (!activeVersion || !activeReady) return;
@@ -355,10 +364,14 @@ export function DocumentPdfOperationsPanel({
       setOperationError(getMutationError(err));
     }
   }
+  const optimizeProgressLabel = useMemo(() => {
+    if (!optimizeRunning || !operationJob) return null;
+    return readJobProgressLabel(operationJob.payload) ?? MSG_OPTIMIZE_RUNNING;
+  }, [optimizeRunning, operationJob]);
   const progressLabel = (() => {
     if (operationError) return null;
-    if (splitLoading || mergeLoading || optimizeLoading) return 'Запуск операции…';
-    if (optimizeRunning) return 'Сжимаем PDF…';
+    if (splitLoading || mergeLoading || optimizeLoading) return MSG_OPERATION_STARTING;
+    if (optimizeRunning) return optimizeProgressLabel ?? MSG_OPTIMIZE_RUNNING;
     return statusHint;
   })();
   const versionSubtitle =
@@ -372,6 +385,10 @@ export function DocumentPdfOperationsPanel({
       ? 'Нужно минимум две готовые версии'
       : `${readyVersions.length} готовых версий`;
   const sourceBytes = activeVersion?.size ? Number(activeVersion.size) : 0;
+  const optimizeWaitHint = useMemo(
+    () => (sourceBytes > 0 ? formatOptimizeWaitHint(sourceBytes) : null),
+    [sourceBytes],
+  );
   const optimizeEstimate = useMemo(() => {
     if (!activeReady || sourceBytes <= 0) return null;
     return estimateOptimizeSize(sourceBytes, effectivePageCount, optimizePreset);
@@ -519,6 +536,9 @@ export function DocumentPdfOperationsPanel({
                       Похоже на текстовый PDF — заметного сжатия может не быть.
                     </span>
                   )}
+                  {optimizeWaitHint && (
+                    <span className="mt-1 block text-slate-500">{optimizeWaitHint}</span>
+                  )}
                 </p>
               )}
             </div>
@@ -531,8 +551,8 @@ export function DocumentPdfOperationsPanel({
               buttonClassName={reportActionBtnPrimary}
               helpContent={
                 <>
-                  <p>Worker соберёт оптимизированный PDF и добавит его как новую версию в списке слева.</p>
-                  <p>Нужна готовая версия с известным числом страниц (не более 200).</p>
+                  <p>{HINT_OPTIMIZE_NEW_VERSION}</p>
+                  <p>{HINT_OPTIMIZE_REQUIREMENTS}</p>
                 </>
               }
             >
@@ -617,6 +637,30 @@ export function DocumentPdfOperationsPanel({
           {splitBlockedReason && (
             <p className="mt-2 text-xs text-amber-700">{splitBlockedReason}</p>
           )}
+        </ToolAccordionSection>
+
+        <ToolAccordionSection
+          title="Порядок страниц"
+          subtitle={versionSubtitle}
+          isOpen={isSectionOpen('pages')}
+          onToggle={() => toggleSection('pages')}
+          helpTitle="Порядок и дубликаты страниц"
+          helpContent={
+            <>
+              <p>Переставьте листы стрелками ↑↓ или продублируйте кнопкой «+1».</p>
+              <p>Будет создана новая версия PDF. Исходная версия останется без изменений.</p>
+            </>
+          }
+        >
+          <DocumentPageOrderPanel
+            documentId={documentId}
+            versionId={activeVersion?.id}
+            pageCount={effectivePageCount}
+            versionReady={activeReady}
+            operationPending={operationPending}
+            onOperationStarted={beginOperation}
+            onError={setOperationError}
+          />
         </ToolAccordionSection>
 
         <ToolAccordionSection
@@ -743,44 +787,26 @@ export function DocumentPdfOperationsPanel({
         )}
 
         <ToolAccordionSection
-          title="ИИ для буклета"
-          subtitle="Подписи, титульник, поиск материалов"
-          isOpen={isSectionOpen('booklet-ai')}
-          onToggle={() => toggleSection('booklet-ai')}
-          helpTitle="ИИ для буклета"
+          title="Буклет"
+          subtitle="Подготовка, проверка печати, ZIP для заказчика"
+          isOpen={isSectionOpen('booklet')}
+          onToggle={() => toggleSection('booklet')}
+          helpTitle="Буклет для заказчика"
           helpContent={
             <>
-              <p>Автоподписи к рендерам из имени файла, черновик текста титульника и поиск по проекту.</p>
+              <p>Три шага: подписи и материалы → проверка DPI и шрифтов → ZIP с PDF и JPG.</p>
+              <p>Готовый пакет можно отдать по ссылке в разделе «Ссылка для заказчика».</p>
             </>
           }
         >
-          <DocumentBookletAiPanel
+          <DocumentBookletPanel
             documentId={documentId}
             documentTitle={documentTitle}
             projectId={projectId}
             projectName={projectName}
             versionReady={versionReady}
             layout={layout}
-          />
-        </ToolAccordionSection>
-
-        <ToolAccordionSection
-          title="Экспорт буклета"
-          subtitle="ZIP для заказчика, страницы JPG/PNG, чеклист печати"
-          isOpen={isSectionOpen('export')}
-          onToggle={() => toggleSection('export')}
-          helpTitle="Экспорт для архитекторов"
-          helpContent={
-            <>
-              <p>Пакет PDF + JPG по всем страницам — одна ссылка на скачивание ZIP.</p>
-              <p>Отдельно можно выгрузить выбранные страницы без полного PDF.</p>
-            </>
-          }
-        >
-          <DocumentBookletExportPanel
-            documentId={documentId}
             versionId={activeVersion?.id ?? ''}
-            versionReady={versionReady}
             pageCount={effectivePageCount}
             viewerPage={viewerPage}
           />
@@ -788,7 +814,7 @@ export function DocumentPdfOperationsPanel({
 
         <ToolAccordionSection
           title="Ссылка для заказчика"
-          subtitle="Просмотр превью и скачивание ZIP"
+          subtitle="Просмотр в браузере и скачивание ZIP"
           isOpen={isSectionOpen('share')}
           onToggle={() => toggleSection('share')}
           helpTitle="Гостевой просмотр"

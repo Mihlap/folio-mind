@@ -17,6 +17,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md}\"",
     "db:generate": "pnpm --filter @folio-mind/server exec prisma generate",
     "db:migrate": "pnpm --filter @folio-mind/server exec prisma migrate dev",
+    "db:regen-migration": "node apps/server/scripts/regen-migration.cjs",
     "db:push": "pnpm --filter @folio-mind/server exec prisma db push",
     "smoke:phase1": "node tools/smoke-phase1.mjs",
     "smoke:phase2": "node tools/smoke-phase2.mjs",

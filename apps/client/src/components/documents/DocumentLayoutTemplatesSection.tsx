@@ -121,7 +121,7 @@ export function DocumentLayoutTemplatesSection({ layout, viewerPage, versionRead
       {isLoading && <p className="text-xs text-slate-500">Загрузка…</p>}
 
       {!isLoading && items.length === 0 && (
-        <p className="text-xs text-slate-500">Шаблоны недоступны — проверьте подключение к API.</p>
+        <p className="text-xs text-slate-500">Шаблоны недоступны — проверьте интернет или обновите страницу.</p>
       )}
 
       {!isLoading && items.length > 0 && (

@@ -27,6 +27,12 @@ type Props = {
   viewerPage: number;
 };
 
+const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
+  draft: 'Черновик',
+  in_review: 'На согласовании',
+  final: 'Финал',
+};
+
 function formatExpires(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', {
     day: 'numeric',
@@ -125,6 +131,28 @@ export function DocumentSharePanel({
       <p className="text-[11px] leading-snug text-slate-400">
         Заказчик откроет страницы в браузере — без скачивания PDF. Ссылка действует выбранное время.
       </p>
+
+      {activeVersion && (
+        <div
+          className={`rounded-lg border px-3 py-2 text-xs ${
+            versionReady
+              ? 'border-folio-200 bg-folio-50/60 text-folio-800'
+              : 'border-amber-200 bg-amber-50 text-amber-900'
+          }`}
+        >
+          <p className="font-medium">
+            Ссылка будет привязана к версии v{activeVersion.version}
+            {activeVersion.versionLabel
+              ? ` (${VERSION_LABEL_TITLE[activeVersion.versionLabel]})`
+              : ''}
+          </p>
+          {!versionReady && (
+            <p className="mt-1 text-[11px] leading-snug text-amber-800">
+              Эта версия еще обрабатывается. Создать ссылку можно после завершения обработки.
+            </p>
+          )}
+        </div>
+      )}
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-slate-500">Срок действия</span>

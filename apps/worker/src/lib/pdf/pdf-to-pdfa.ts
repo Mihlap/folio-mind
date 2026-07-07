@@ -1,40 +1,16 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { withPdfTempFiles } from './pdf-temp-files.js';
+import { readOutputIfExists, withPdfTempFiles } from './pdf-temp-files.js';
+import { isGhostscriptAvailable, resolveGhostscriptBin } from './optimize-external.js';
 
 const execFileAsync = promisify(execFile);
 
-function discoverBinaryOnWindows(dirPrefix: string, binName: string): string | null {
-  const programFiles = process.env['ProgramFiles'] ?? 'C:\\Program Files';
-  try {
-    for (const entry of readdirSync(programFiles)) {
-      if (!entry.toLowerCase().startsWith(dirPrefix.toLowerCase())) continue;
-      const candidate = join(programFiles, entry, 'bin', binName);
-      if (existsSync(candidate)) return candidate;
-    }
-    const gsRoot = join(programFiles, 'gs');
-    if (existsSync(gsRoot)) {
-      for (const entry of readdirSync(gsRoot)) {
-        const candidate = join(gsRoot, entry, 'bin', binName);
-        if (existsSync(candidate)) return candidate;
-      }
-    }
-  } catch {
-  }
-  return null;
-}
-
-function resolveGhostscriptBin(): string {
-  if (process.env.GHOSTSCRIPT_BIN?.trim()) return process.env.GHOSTSCRIPT_BIN.trim();
-  if (process.platform === 'win32') {
-    return discoverBinaryOnWindows('gs', 'gswin64c.exe') ?? 'gswin64c';
-  }
-  return 'gs';
-}
-
 export async function tryConvertPdfA(sourceBuffer: Buffer): Promise<Buffer | null> {
+  if (!(await isGhostscriptAvailable())) {
+    console.warn('[pdf-a] Ghostscript недоступен — PDF/A пропущен. Запустите tools/install-ghostscript.ps1 или установите GS вручную.');
+    return null;
+  }
+
   const gsBin = resolveGhostscriptBin();
   return withPdfTempFiles(sourceBuffer, async ({ inputPath, outputPath }) => {
     try {
@@ -45,6 +21,7 @@ export async function tryConvertPdfA(sourceBuffer: Buffer): Promise<Buffer | nul
           '-dNOPAUSE',
           '-dNOOUTERSAVE',
           '-sDEVICE=pdfwrite',
+          '-dCompatibilityLevel=1.7',
           '-dPDFA=2',
           '-dPDFACompatibilityPolicy=1',
           '-sColorConversionStrategy=RGB',
@@ -54,10 +31,10 @@ export async function tryConvertPdfA(sourceBuffer: Buffer): Promise<Buffer | nul
         ],
         { timeout: 180_000, maxBuffer: 64 * 1024 * 1024 },
       );
-      const { readFile } = await import('node:fs/promises');
-      const out = await readFile(outputPath);
-      return out.length > 0 ? out : null;
-    } catch {
+      return readOutputIfExists(outputPath);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn(`[pdf-a] Конвертация не удалась (${gsBin}): ${detail}`);
       return null;
     }
   });

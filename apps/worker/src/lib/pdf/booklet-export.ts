@@ -79,7 +79,9 @@ export async function buildBookletExportZip(params: {
       pdfAApplied,
       printReadiness: readiness,
       message:
-        pdfA && !pdfAApplied ? MSG_ARCHIVE_PDF_FALLBACK : `Пакет готов: PDF + ${images.length} JPG (${jpegDpi} dpi).`,
+        pdfA && !pdfAApplied
+          ? MSG_ARCHIVE_PDF_FALLBACK
+          : `Пакет готов: PDF и ${images.length} JPG (${jpegDpi} dpi). Можно скачать или отправить ссылку заказчику.`,
     },
   };
 }

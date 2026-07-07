@@ -70,6 +70,7 @@ export const documentsApi = baseApi.injectEndpoints({
         versions: Array<{
           id: string;
           version: number;
+          versionLabel: 'draft' | 'in_review' | 'final' | null;
           status: string;
           size: string;
           mimeType: string;
@@ -484,6 +485,29 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: documentId },
       ],
     }),
+    rearrangePages: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        version: number;
+        status: 'processing';
+      },
+      {
+        documentId: string;
+        versionId: string;
+        pages: number[];
+      }
+    >({
+      query: ({ documentId, versionId, pages }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/rearrange-pages`,
+        method: 'POST',
+        body: { pages },
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+      ],
+    }),
     mergeVersions: build.mutation<
       {
         operationJobId: string;
@@ -721,6 +745,23 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: 'LIST' },
       ],
     }),
+    updateVersionLabel: build.mutation<
+      { versionId: string; versionLabel: 'draft' | 'in_review' | 'final' | null },
+      {
+        documentId: string;
+        versionId: string;
+        versionLabel: 'draft' | 'in_review' | 'final' | null;
+      }
+    >({
+      query: ({ documentId, versionId, versionLabel }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/label`,
+        method: 'PATCH',
+        body: { versionLabel },
+      }),
+      invalidatesTags: (_result, _error, { documentId }) => [
+        { type: 'Documents', id: documentId },
+      ],
+    }),
   }),
 });
 export const {
@@ -742,6 +783,7 @@ export const {
   useCompareVersionIntegrityQuery,
   useGetVersionPreviewsQuery,
   useSplitPagesMutation,
+  useRearrangePagesMutation,
   useMergeVersionsMutation,
   useOptimizePdfMutation,
   useApplyLayoutPdfMutation,
@@ -755,4 +797,5 @@ export const {
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useUpdateDocumentReviewStatusMutation,
+  useUpdateVersionLabelMutation,
 } = documentsApi;

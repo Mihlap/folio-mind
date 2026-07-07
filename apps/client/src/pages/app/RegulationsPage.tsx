@@ -4,13 +4,13 @@ import { FeatureHelpButton } from '../../components/ui/FeatureHelp.js';
 import { useBackgroundUpload } from '../../context/background-upload-provider.js';
 import { useAppSelector } from '../../hooks/index.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
-import { useDeleteRagSourceMutation, useListRagSourcesQuery } from '@folio-mind/store';
+import { useDeleteRagSourceMutation, useListRagSourcesQuery, VERSION_STATUS_LABELS } from '@folio-mind/store';
 
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'ожидает файл',
-  processing: 'обрабатывается',
+  processing: VERSION_STATUS_LABELS.processing,
   ready: 'готов к проверке',
-  failed: 'ошибка обработки',
+  failed: 'ошибка',
 };
 
 export function RegulationsPage() {

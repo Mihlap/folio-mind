@@ -139,7 +139,7 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
               disabled={!versionReady || creating || !content.trim()}
               onClick={() => void handleAddComment()}
               buttonClassName={reportActionBtnPrimary}
-              helpContent={<p>Короткий комментарий к текущей странице viewer.</p>}
+              helpContent={<p>Короткий комментарий к открытой сейчас странице.</p>}
             >
               {creating ? 'Сохранение…' : 'Добавить заметку'}
             </FeatureHelpActionButton>

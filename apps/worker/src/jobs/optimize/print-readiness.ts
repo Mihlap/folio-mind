@@ -39,12 +39,12 @@ export async function processPrintReadinessJob(
           documentId,
           versionId,
           printReadiness: report,
-          message: 'Чеклист перед печатью готов.',
+          message: 'Проверка завершена — смотрите отчёт ниже.',
         },
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Print readiness failed';
+    const message = err instanceof Error ? err.message : 'Не удалось проверить PDF';
     await prisma.job.update({
       where: { id: operationJobId },
       data: { status: 'failed', payload: { error: message } },

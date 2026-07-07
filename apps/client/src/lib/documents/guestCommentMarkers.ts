@@ -1,7 +1,7 @@
 import type { GuestShareComment } from '@folio-mind/store';
 import type { PdfPageMarker } from '@folio-mind/ui';
 
-const MAX_TITLE_LEN = 40;
+const MAX_TITLE_LEN = 80;
 
 function truncateTitle(text: string): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
@@ -9,8 +9,12 @@ function truncateTitle(text: string): string {
   return `${normalized.slice(0, MAX_TITLE_LEN - 1)}…`;
 }
 
-export function guestCommentsToPageMarkers(items: GuestShareComment[]): PdfPageMarker[] {
-  return items.map((item) => ({
+export function guestCommentsToPageMarkers(
+  items: GuestShareComment[],
+  options?: { openOnly?: boolean },
+): PdfPageMarker[] {
+  const filtered = options?.openOnly ? items.filter((item) => item.status === 'open') : items;
+  return filtered.map((item) => ({
     id: item.id,
     page: item.page,
     kind: 'guest_comment',

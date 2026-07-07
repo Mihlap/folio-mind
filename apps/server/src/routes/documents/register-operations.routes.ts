@@ -28,6 +28,7 @@ import {
   applyLayoutPdfSchema,
   mergeVersionsSchema,
   optimizePdfSchema,
+  rearrangePagesSchema,
   splitPagesSchema,
   versionCompareResponseSchema,
 } from './schemas.js';
@@ -125,6 +126,117 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_split',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            sourceVersionId: sourceVersion.id,
+            targetVersionId: targetVersion.id,
+            pages,
+            operationJobId: operationJob.id,
+          },
+        },
+      });
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId: targetVersion.id,
+        version: targetVersion.version,
+        status: 'processing',
+      });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/rearrange-pages',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        body: rearrangePagesSchema,
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            version: z.number(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const pages = [...request.body.pages];
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      if (!sourceVersion.pageCount || sourceVersion.pageCount <= 0) {
+        return reply.code(400).send({ error: 'Source version pageCount is unknown' });
+      }
+      for (const page of pages) {
+        if (page > sourceVersion.pageCount) {
+          return reply.code(400).send({ error: 'Page index out of range' });
+        }
+      }
+      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
+      const targetS3Key = buildOriginalKey(
+        document.id,
+        nextVersionNumber,
+        `reorder-v${sourceVersion.version}.pdf`,
+      );
+      const [targetVersion, operationJob] = await app.prisma.$transaction([
+        app.prisma.documentVersion.create({
+          data: {
+            documentId: document.id,
+            version: nextVersionNumber,
+            s3Key: targetS3Key,
+            size: BigInt(0),
+            mimeType: sourceVersion.mimeType,
+            status: 'processing',
+            sourceVersionId: sourceVersion.id,
+          },
+        }),
+        app.prisma.job.create({
+          data: {
+            type: 'pdf-rearrange',
+            status: 'queued',
+            tenantId: user.tenantId,
+            payload: {
+              documentId,
+              sourceVersionId: sourceVersion.id,
+              pages,
+            },
+          },
+        }),
+      ]);
+      await enqueueSplitPagesJob(env, {
+        jobId: `rearrange-pages-${targetVersion.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        sourceVersionId: sourceVersion.id,
+        targetVersionId: targetVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Key: sourceVersion.s3Key,
+        targetS3Key,
+        pages,
+        requestId: request.requestId,
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_rearrange_pages',
           userId: user.sub,
           tenantId: user.tenantId,
           documentId,

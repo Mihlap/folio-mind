@@ -49,6 +49,8 @@ type PdfViewerProps = {
     pageWidthPx?: number;
     pageHeightPx?: number;
   }) => void;
+  surfaceTone?: 'light' | 'dark';
+  showPageNav?: boolean;
 } & PdfViewerLayoutProps;
 export function PdfViewer({
   url,
@@ -93,6 +95,8 @@ export function PdfViewer({
   onLayoutObjectCropChange,
   onLayoutFilesDrop,
   onLayoutMediaAssetDrop,
+  surfaceTone = 'light',
+  showPageNav = true,
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -333,6 +337,7 @@ export function PdfViewer({
     onLayoutFilesDrop,
     onLayoutMediaAssetDrop,
   };
+  const surfaceClass = surfaceTone === 'dark' ? 'bg-black' : 'bg-slate-100';
   return (
     <div
       ref={containerRef}
@@ -376,7 +381,9 @@ export function PdfViewer({
       {error ? (
         <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
       ) : displayMode === 'single' ? (
-        <div className="scrollbar-thin flex min-h-0 flex-1 justify-center overflow-auto rounded-lg bg-slate-100 p-2">
+        <div
+          className={`scrollbar-thin flex min-h-0 flex-1 justify-center overflow-auto rounded-lg ${surfaceClass} ${surfaceTone === 'dark' ? 'p-1' : 'p-2'}`}
+        >
           <PdfViewerPage
             key={pageNum}
             {...pageProps}
@@ -388,7 +395,7 @@ export function PdfViewer({
       ) : (
         <div
           ref={scrollRef}
-          className="scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-lg bg-slate-100 p-2"
+          className={`scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-lg ${surfaceClass} ${surfaceTone === 'dark' ? 'p-1' : 'p-2'}`}
         >
           {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => (
             <div
@@ -416,7 +423,7 @@ export function PdfViewer({
         </div>
       )}
 
-      {numPages > 1 && (
+      {numPages > 1 && showPageNav && (
         <div className="mt-4 flex shrink-0 justify-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
             <PageNavButton

@@ -4,22 +4,22 @@ import { FeatureHelpButton } from './FeatureHelp.js';
 export type ToolSectionId =
   | 'optimize'
   | 'split'
+  | 'pages'
   | 'merge'
   | 'annotations'
   | 'edits'
   | 'diff'
   | 'layout'
-  | 'booklet-ai'
-  | 'share'
-  | 'export';
+  | 'booklet'
+  | 'share';
 
 export const TOOL_SECTION_IDS: ToolSectionId[] = [
   'optimize',
   'split',
+  'pages',
   'merge',
   'layout',
-  'booklet-ai',
-  'export',
+  'booklet',
   'share',
   'annotations',
   'edits',

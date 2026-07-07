@@ -8,6 +8,7 @@ import {
   useGetVersionPreviewsQuery,
   useListAnnotationsQuery,
   useListGuestCommentsQuery,
+  useListPageReviewMarksQuery,
   fetchMediaAssetDataUrl,
   clearSearch,
   nextSearchMatch,
@@ -42,11 +43,17 @@ import { usePanelToggleCenterY } from '../../hooks/usePanelToggleCenterY.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
 import { annotationsToPageMarkers } from '../../lib/documents/annotationMarkers.js';
 import { guestCommentsToPageMarkers } from '../../lib/documents/guestCommentMarkers.js';
+import { isDocumentVersionSelectable } from '../../lib/documents/versionSelection.js';
+import {
+  pageReviewMarksByPage,
+  pageReviewMarksToPageMarkers,
+} from '../../lib/documents/pageReviewMarkers.js';
 import {
   countAcceptedEditsByPage,
   listAcceptedEditAnnotations,
 } from '../../lib/documents/acceptedEditOverlays.js';
 import { AcceptedEditsModal } from '../../components/documents/AcceptedEditsModal.js';
+import { DocumentPresentationOverlay } from '../../components/documents/DocumentPresentationOverlay.js';
 import type { EditTextInjection } from '../../components/documents/useDocumentAnnotationsPanel.js';
 import { useLayoutEditor } from '../../hooks/useLayoutEditor.js';
 import { formatLayoutAddSummary } from '../../lib/layout/layoutAddSummary.js';
@@ -90,6 +97,7 @@ export function DocumentPage() {
   const [rightTab, setRightTab] = useState<DocumentRightTab>('report');
   const [toolsFocusSection, setToolsFocusSection] = useState<ToolSectionId | null>(null);
   const [layoutAddNotice, setLayoutAddNotice] = useState<string | null>(null);
+  const [presentationOpen, setPresentationOpen] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
   const workspaceRowRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLElement>(null);
@@ -102,10 +110,21 @@ export function DocumentPage() {
     doc && isDocumentReviewStatus(doc.reviewStatus) ? doc.reviewStatus : ('draft' as const);
   const reviewStatusChangedAt = doc?.reviewStatusChangedAt ?? null;
   const latest = versions[0];
+  const handleSelectVersion = useCallback(
+    (versionId: string) => {
+      const version = versions.find((v) => v.id === versionId);
+      if (version && !isDocumentVersionSelectable(version)) return;
+      setSelectedVersionId(versionId);
+    },
+    [versions],
+  );
   const activeVersion = versions.find((v) => v.id === selectedVersionId) ?? latest;
   const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
   const layoutPageCount =
     pdfNumPages > 0 ? pdfNumPages : (activeVersion?.pageCount ?? 0);
+  useEffect(() => {
+    setPresentationOpen(false);
+  }, [activeVersion?.id]);
   const layout = useLayoutEditor({
     versionId: activeVersion?.id,
     viewerPage,
@@ -144,14 +163,23 @@ export function DocumentPage() {
   }, [doc?.versions, refetchDocument]);
   useEffect(() => {
     if (!doc || selectedVersionId) return;
-    if (latest) setSelectedVersionId(latest.id);
-  }, [doc?.id, latest?.id, selectedVersionId]);
+    const initial = versions.find(isDocumentVersionSelectable) ?? latest;
+    if (initial) setSelectedVersionId(initial.id);
+  }, [doc?.id, latest, selectedVersionId, versions]);
   useEffect(() => {
     if (!selectedVersionId || versions.length === 0) return;
     if (!versions.some((v) => v.id === selectedVersionId) && latest) {
-      setSelectedVersionId(latest.id);
+      const fallback = versions.find(isDocumentVersionSelectable) ?? latest;
+      setSelectedVersionId(fallback.id);
     }
   }, [versions, selectedVersionId, latest?.id]);
+  useEffect(() => {
+    if (!activeVersion || isDocumentVersionSelectable(activeVersion)) return;
+    const fallback =
+      versions.find((v) => v.id !== activeVersion.id && isDocumentVersionSelectable(v)) ??
+      versions.find(isDocumentVersionSelectable);
+    if (fallback) setSelectedVersionId(fallback.id);
+  }, [activeVersion, versions]);
   useEffect(() => {
     if (!doc) {
       setWorkspace(null);
@@ -162,7 +190,7 @@ export function DocumentPage() {
       title: doc.title,
       versions,
       selectedVersionId: activeVersion?.id,
-      onSelectVersion: setSelectedVersionId,
+      onSelectVersion: handleSelectVersion,
       onRequestNewVersion: upload.openFilePicker,
       onRequestNewDocxVersion: upload.openDocxFilePicker,
       uploadingNewVersion: upload.uploading,
@@ -180,6 +208,7 @@ export function DocumentPage() {
     upload.uploadHint,
     upload.openFilePicker,
     upload.openDocxFilePicker,
+    handleSelectVersion,
     setWorkspace,
   ]);
   useEffect(() => {
@@ -208,12 +237,21 @@ export function DocumentPage() {
       refetchOnFocus: true,
     },
   );
+  const { data: pageReviewData } = useListPageReviewMarksQuery(
+    { documentId: id!, versionId: activeVersion?.id ?? '' },
+    { skip: !id || !activeVersion?.id || !versionReady },
+  );
+  const reviewMarkByPage = useMemo(
+    () => pageReviewMarksByPage(pageReviewData?.items ?? []),
+    [pageReviewData?.items],
+  );
   const pageMarkers = useMemo(
     () => [
+      ...pageReviewMarksToPageMarkers(pageReviewData?.items ?? []),
       ...annotationsToPageMarkers(annotationsData?.items ?? []),
-      ...guestCommentsToPageMarkers(guestCommentsData?.items ?? []),
+      ...guestCommentsToPageMarkers(guestCommentsData?.items ?? [], { openOnly: true }),
     ],
-    [annotationsData?.items, guestCommentsData?.items],
+    [pageReviewData?.items, annotationsData?.items, guestCommentsData?.items],
   );
   const guestCommentIds = useMemo(
     () => new Set((guestCommentsData?.items ?? []).map((item) => item.id)),
@@ -245,8 +283,8 @@ export function DocumentPage() {
   useEffect(() => {
     const versionId = searchParams.get('versionId');
     if (!versionId || !versions.some((v) => v.id === versionId)) return;
-    setSelectedVersionId(versionId);
-  }, [searchParams, versions]);
+    handleSelectVersion(versionId);
+  }, [handleSelectVersion, searchParams, versions]);
 
   useEffect(() => {
     const commentId = searchParams.get('guestComment');
@@ -552,7 +590,7 @@ export function DocumentPage() {
         newDocumentUploadProgress={newDocumentUpload.uploadProgress}
         versionUploading={upload.uploading}
         newDocumentError={newDocumentUpload.error}
-        onSelectVersion={setSelectedVersionId}
+        onSelectVersion={handleSelectVersion}
         onNewDocument={newDocumentUpload.openFilePicker}
       />
 
@@ -588,6 +626,7 @@ export function DocumentPage() {
                 viewerPage={viewerPage}
                 initialThumbPages={INITIAL_THUMB_PAGES}
                 layout="vertical"
+                reviewMarkByPage={reviewMarkByPage}
                 onGoToPage={handleGoToPage}
               />
 
@@ -598,6 +637,7 @@ export function DocumentPage() {
                   viewerPage={viewerPage}
                   initialThumbPages={INITIAL_THUMB_PAGES}
                   layout="horizontal"
+                  reviewMarkByPage={reviewMarkByPage}
                   onGoToPage={handleGoToPage}
                 />
 
@@ -629,6 +669,8 @@ export function DocumentPage() {
                           rightPanel.expand();
                         }
                       }}
+                      onPresentationStart={() => setPresentationOpen(true)}
+                      presentationDisabled={!versionReady || !pdfReadyForUi || layoutPageCount <= 0}
                     />
                   )}
                 </div>
@@ -740,7 +782,7 @@ export function DocumentPage() {
           activeVersion={activeVersion}
           versionReady={versionReady}
           viewerPage={viewerPage}
-          onSelectVersion={setSelectedVersionId}
+          onSelectVersion={handleSelectVersion}
           onGoToPage={handleGoToPage}
           focusedAnnotationId={focusedAnnotationId}
           focusedGuestCommentId={focusedGuestCommentId}
@@ -857,6 +899,21 @@ export function DocumentPage() {
         saving={updatingAnnotation}
       />
 
+      {doc && activeVersion?.id && (
+        <DocumentPresentationOverlay
+          open={presentationOpen}
+          onClose={() => setPresentationOpen(false)}
+          documentTitle={doc.title}
+          page={viewerPage}
+          pageCount={layoutPageCount}
+          onPageChange={handleGoToPage}
+          pdfUrl={pdfViewMode === 'presigned-url' ? (pdfUrl ?? undefined) : undefined}
+          pdfData={pdfViewMode === 'bytes' ? (pdfData ?? undefined) : undefined}
+          pdfSourceKey={pdfSourceKey ?? undefined}
+          pdfReady={pdfReadyForUi}
+        />
+      )}
+
       <DocumentMobileSheet
         open={mobileSheet === 'panel'}
         title={rightTab === 'chat' ? 'Чат' : rightTab === 'tools' ? 'Инструменты' : 'Отчёт'}
@@ -869,7 +926,7 @@ export function DocumentPage() {
           activeVersion={activeVersion}
           versionReady={versionReady}
           viewerPage={viewerPage}
-          onSelectVersion={setSelectedVersionId}
+          onSelectVersion={handleSelectVersion}
           onGoToPage={handleGoToPage}
           focusedAnnotationId={focusedAnnotationId}
           focusedGuestCommentId={focusedGuestCommentId}

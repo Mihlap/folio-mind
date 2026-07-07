@@ -5,17 +5,20 @@ export type GuestShareComment = {
   page: number;
   content: string;
   authorName: string | null;
+  authorReply: string | null;
   x: number | null;
   y: number | null;
   status: 'open' | 'resolved';
   createdAt: string;
   updatedAt: string;
+  resolvedAt: string | null;
 };
 
 export type CreateGuestShareCommentBody = {
   page: number;
   content: string;
   authorName?: string;
+  authorEmail?: string;
   x?: number;
   y?: number;
 };
@@ -37,12 +40,13 @@ export const guestCommentsApi = baseApi.injectEndpoints({
         versionId: string;
         commentId: string;
         status: 'open' | 'resolved';
+        authorReply?: string | null;
       }
     >({
-      query: ({ documentId, commentId, status }) => ({
+      query: ({ documentId, commentId, status, authorReply }) => ({
         url: `/documents/${documentId}/guest-comments/${commentId}`,
         method: 'PATCH',
-        body: { status },
+        body: { status, ...(authorReply !== undefined ? { authorReply } : {}) },
       }),
       invalidatesTags: (_r, _e, { versionId }) => [{ type: 'GuestComments', id: versionId }],
     }),

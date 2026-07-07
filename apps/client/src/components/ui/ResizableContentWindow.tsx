@@ -51,10 +51,10 @@ export function ResizableContentWindow({ open, title, onClose, children }: Props
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-3 py-3 sm:px-4 sm:py-4">{children}</div>
         <span
-          className="pointer-events-none absolute bottom-1 right-1 select-none text-[10px] text-slate-300"
+          className="pointer-events-none absolute bottom-1.5 right-2 select-none text-[10px] text-slate-400"
           aria-hidden
         >
-          ↘
+          Потяните за угол ↘
         </span>
       </div>
     </div>

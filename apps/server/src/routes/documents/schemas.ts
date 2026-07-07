@@ -35,6 +35,9 @@ export const splitPagesSchema = z.object({
       'Номера страниц должны быть уникальны',
     ),
 });
+export const rearrangePagesSchema = z.object({
+  pages: z.array(z.number().int().min(1)).min(1).max(500),
+});
 export const mergeVersionsSchema = z.object({
   versionIds: z
     .array(z.string().min(1))
@@ -164,6 +167,7 @@ export const versionIntegrityResponseSchema = z.object({
 export const versionListItemSchema = z.object({
   id: z.string(),
   version: z.number(),
+  versionLabel: z.string().nullable(),
   status: z.string(),
   size: z.string(),
   mimeType: z.string(),

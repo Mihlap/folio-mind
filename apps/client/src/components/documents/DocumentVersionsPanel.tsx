@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import {
   useDeleteDocumentVersionMutation,
   useLazyGetSourceDocxUrlQuery,
+  getVersionListStatusLabel,
 } from '@folio-mind/store';
 import { useAppSelector } from '../../hooks/index.js';
 import { useBackgroundUpload } from '../../context/background-upload-provider.js';
@@ -13,16 +14,10 @@ import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
 import { DeleteDocumentButton } from './DeleteDocumentButton.js';
 import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.js';
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
+import { isDocumentVersionSelectable, TITLE_VERSION_PREPARING } from '../../lib/documents/versionSelection.js';
 
-const STATUS_LABEL: Record<string, string> = {
-  pending_upload: 'не загружен',
-  processing: 'обработка',
-  ready: 'готов',
-  failed: 'ошибка',
-};
 function getDisplayStatus(status: string): string {
-  if (status === 'processing') return 'готов к просмотру';
-  return STATUS_LABEL[status] ?? status;
+  return getVersionListStatusLabel(status);
 }
 
 const versionActionBtn =
@@ -32,6 +27,7 @@ const versionActionBtnEmerald =
 export type DocumentVersionItem = {
   id: string;
   version: number;
+  versionLabel: 'draft' | 'in_review' | 'final' | null;
   status: string;
   size: string;
   mimeType: string;
@@ -90,6 +86,8 @@ export function DocumentVersionsPanel({
     if (inputRef.current) inputRef.current.value = '';
   }
   function handleSelectVersion(versionId: string) {
+    const version = versions.find((v) => v.id === versionId);
+    if (version && !isDocumentVersionSelectable(version)) return;
     onSelectVersion(versionId);
   }
   async function handlePdfDownload(versionId: string, versionNumber: number) {
@@ -171,6 +169,7 @@ export function DocumentVersionsPanel({
             minute: '2-digit',
           });
           const sizeMb = v.size ? (Number(v.size) / (1024 * 1024)).toFixed(1) : '—';
+          const selectable = isDocumentVersionSelectable(v);
           return (
             <li
               key={v.id}
@@ -178,7 +177,8 @@ export function DocumentVersionsPanel({
             >
               <button
                 type="button"
-                disabled={v.status === 'pending_upload'}
+                disabled={!selectable}
+                title={!selectable ? TITLE_VERSION_PREPARING : undefined}
                 onClick={() => handleSelectVersion(v.id)}
                 className="w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50"
               >

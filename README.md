@@ -50,7 +50,9 @@ pnpm dev
 
 ```powershell
 winget install QPDF.QPDF
-# Ghostscript: https://ghostscript.com/releases/gsdnld.html (в winget пакета нет)
+# Ghostscript (в winget пакета нет) — локально в репозиторий, без прав администратора:
+powershell -File .\tools\install-ghostscript.ps1
+# или установщик: https://ghostscript.com/releases/gsdnld.html
 ```
 
 После установки qpdf перезапустите worker (или укажите путь в `apps/worker/.env`):

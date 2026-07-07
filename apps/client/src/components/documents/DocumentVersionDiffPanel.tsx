@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLazyCompareVersionsQuery, useCompareVersionIntegrityQuery } from '@folio-mind/store';
+import {
+  useLazyCompareVersionsQuery,
+  useCompareVersionIntegrityQuery,
+  useGetVersionPreviewsQuery,
+} from '@folio-mind/store';
 import { IntegrityCompareBadge } from './DocumentVersionIntegrityBadge.js';
 import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
@@ -66,6 +70,7 @@ export function DocumentVersionDiffPanel({
   }, [activeVersion, readyVersions]);
   const [baseVersionId, setBaseVersionId] = useState(defaultBaseId);
   const [expandedPage, setExpandedPage] = useState<number | null>(null);
+  const [visualPage, setVisualPage] = useState<number | null>(null);
   const [compare, { data, isFetching, error, reset }] = useLazyCompareVersionsQuery();
   useEffect(() => {
     setBaseVersionId(defaultBaseId);
@@ -80,6 +85,36 @@ export function DocumentVersionDiffPanel({
     () => (data?.pages.filter((p: PageDiff) => p.status !== 'unchanged') ?? []) as PageDiff[],
     [data?.pages],
   );
+  const visualIndex = useMemo(() => {
+    if (!visualPage) return -1;
+    return changedPages.findIndex((p) => p.page === visualPage);
+  }, [changedPages, visualPage]);
+  const visualCurrent = visualIndex >= 0 ? changedPages[visualIndex] : null;
+  const { data: baseVisualPreview } = useGetVersionPreviewsQuery(
+    {
+      documentId,
+      versionId: baseVersionId,
+      from: visualPage ?? 1,
+      to: visualPage ?? 1,
+    },
+    {
+      skip: !visualPage || !baseVersionId,
+    },
+  );
+  const { data: compareVisualPreview } = useGetVersionPreviewsQuery(
+    {
+      documentId,
+      versionId: compareVersionId,
+      from: visualPage ?? 1,
+      to: visualPage ?? 1,
+    },
+    {
+      skip: !visualPage || !compareVersionId,
+    },
+  );
+  const baseVisualUrl = baseVisualPreview?.pages.find((p) => p.page === visualPage)?.url ?? null;
+  const compareVisualUrl =
+    compareVisualPreview?.pages.find((p) => p.page === visualPage)?.url ?? null;
   const editDiff = data?.acceptedEdits;
   const hasEditListChanges = Boolean(
     editDiff &&
@@ -94,6 +129,7 @@ export function DocumentVersionDiffPanel({
   async function handleCompare() {
     if (!canCompare) return;
     setExpandedPage(null);
+    setVisualPage(null);
     await compare({
       documentId,
       baseVersionId,
@@ -274,7 +310,14 @@ export function DocumentVersionDiffPanel({
                         onClick={() => onGoToPage(pageDiff.page)}
                         className="ml-auto cursor-pointer rounded px-1.5 py-0.5 text-[11px] text-folio-700 hover:bg-folio-50"
                       >
-                        Открыть в viewer
+                        Открыть в просмотрщике
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVisualPage(pageDiff.page)}
+                        className="cursor-pointer rounded px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100"
+                      >
+                        Side-by-side
                       </button>
                     </div>
 
@@ -340,6 +383,86 @@ export function DocumentVersionDiffPanel({
                 );
               })}
             </ul>
+          )}
+          {visualPage && (
+            <div className="rounded-lg border border-slate-200 bg-white p-2">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <p className="text-xs font-medium text-slate-700">
+                  Визуальное сравнение · стр. {visualPage}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onGoToPage(visualPage)}
+                  className="cursor-pointer rounded px-1.5 py-0.5 text-[11px] text-folio-700 hover:bg-folio-50"
+                >
+                  Открыть в просмотрщике
+                </button>
+                <button
+                  type="button"
+                  disabled={visualIndex <= 0}
+                  onClick={() => {
+                    if (visualIndex > 0) setVisualPage(changedPages[visualIndex - 1]!.page);
+                  }}
+                  className="cursor-pointer rounded border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-600 disabled:opacity-40"
+                >
+                  ← Пред.
+                </button>
+                <button
+                  type="button"
+                  disabled={visualIndex < 0 || visualIndex >= changedPages.length - 1}
+                  onClick={() => {
+                    if (visualIndex >= 0 && visualIndex < changedPages.length - 1) {
+                      setVisualPage(changedPages[visualIndex + 1]!.page);
+                    }
+                  }}
+                  className="cursor-pointer rounded border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-600 disabled:opacity-40"
+                >
+                  След. →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisualPage(null)}
+                  className="ml-auto cursor-pointer rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-100"
+                >
+                  Закрыть
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded border border-slate-100 bg-slate-50 p-2">
+                  <p className="mb-1 text-[10px] font-medium uppercase text-slate-500">
+                    v{data.baseVersion}
+                  </p>
+                  {baseVisualUrl ? (
+                    <img
+                      src={baseVisualUrl}
+                      alt={`База, страница ${visualPage}`}
+                      className="w-full rounded border border-slate-200 bg-white"
+                    />
+                  ) : (
+                    <p className="text-xs text-slate-500">Для этой страницы нет превью в базе.</p>
+                  )}
+                </div>
+                <div className="rounded border border-slate-100 bg-slate-50 p-2">
+                  <p className="mb-1 text-[10px] font-medium uppercase text-slate-500">
+                    v{data.compareVersion}
+                  </p>
+                  {compareVisualUrl ? (
+                    <img
+                      src={compareVisualUrl}
+                      alt={`Сравнение, страница ${visualPage}`}
+                      className="w-full rounded border border-slate-200 bg-white"
+                    />
+                  ) : (
+                    <p className="text-xs text-slate-500">Для этой страницы нет превью в сравнении.</p>
+                  )}
+                </div>
+              </div>
+              {visualCurrent && (
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Тип изменения: {STATUS_LABEL[visualCurrent.status] ?? visualCurrent.status}
+                </p>
+              )}
+            </div>
           )}
         </>
       )}

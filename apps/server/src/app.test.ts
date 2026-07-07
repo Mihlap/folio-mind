@@ -45,6 +45,23 @@ describe('API /health', () => {
     await app.close();
   });
 });
+describe('API DELETE with empty JSON body', () => {
+  it('does not fail body parsing before auth', async () => {
+    const app = await buildApp({ env: testEnv });
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/documents/test-doc/share-links/test-link',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer invalid-token',
+      },
+      payload: '',
+    });
+    expect(res.statusCode).not.toBe(400);
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+});
 describe('API /auth/register', () => {
   it('creates tenant and user', async () => {
     const app = await buildApp({ env: testEnv });

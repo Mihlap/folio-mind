@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS, isLayoutImageObject, isLayoutShapeObject, DEFAULT_LAYOUT_SOLID_FILL, DEFAULT_LAYOUT_GRADIENT_FILL } from '@folio-mind/store';
+import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS, isLayoutImageObject, isLayoutShapeObject, DEFAULT_LAYOUT_SOLID_FILL, DEFAULT_LAYOUT_GRADIENT_FILL, HINT_LAYOUT_SAVE_NEW_VERSION, msgNewVersionStarted, formatProcessingWaitMessage } from '@folio-mind/store';
 import { normalizeLayoutObjectsForPdf, estimateLayoutObjectsBytes } from '../../lib/layout/normalizeLayoutImage.js';
 import {
   FeatureHelpActionButton,
@@ -173,8 +173,7 @@ export function DocumentLayoutPanel({
       setOperationJobId(result.operationJobId);
       setTargetVersionId(result.versionId);
       setPollOperation(true);
-      setStatusHint(`Создана версия ${result.version}. Worker встраивает изображения в PDF…`);
-      onSelectVersion(result.versionId);
+      setStatusHint(msgNewVersionStarted(result.version));
     } catch (err) {
       setError(getMutationError(err));
     }
@@ -520,15 +519,12 @@ export function DocumentLayoutPanel({
           buttonClassName={reportActionBtnPrimaryStretch}
           helpContent={
             <>
-              <p>
-                Worker встроит все изображения из черновика в копию PDF и создаст новую версию в
-                списке слева (как после «Сжать» или «Объединить»).
-              </p>
+              <p>{HINT_LAYOUT_SAVE_NEW_VERSION}</p>
               <p>PNG, JPEG и WebP (WebP автоматически конвертируется в PNG). До 12 МБ суммарно.</p>
             </>
           }
         >
-          {saving ? 'Запуск…' : savePending ? 'Сохраняем…' : 'Сохранить в PDF'}
+          {saving ? 'Запуск…' : savePending ? formatProcessingWaitMessage('Сохраняем макет') : 'Сохранить в PDF'}
         </FeatureHelpActionButton>
         <button
           type="button"

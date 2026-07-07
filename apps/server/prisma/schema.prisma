@@ -181,9 +181,11 @@ model GuestShareComment {
   page        Int
   content     String
   authorName  String?
+  authorEmail String?
   x           Float?
   y           Float?
   status      String            @default("open")
+  authorReply String?
   resolvedAt  DateTime?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
@@ -233,6 +235,7 @@ model DocumentVersion {
   documentId String
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   version    Int
+  versionLabel String?
   s3Key      String
   size       BigInt   @default(0)
   sha256     String?

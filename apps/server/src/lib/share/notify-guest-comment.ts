@@ -16,6 +16,20 @@ export type GuestCommentNotifyPayload = {
   };
 };
 
+export type GuestCommentResolvedNotifyPayload = {
+  guestEmail: string;
+  guestName: string | null;
+  documentId: string;
+  documentTitle: string;
+  versionId: string;
+  versionNumber: number;
+  comment: {
+    id: string;
+    page: number;
+    authorReply: string;
+  };
+};
+
 function buildDocumentUrl(
   env: Env,
   documentId: string,
@@ -174,5 +188,39 @@ export async function notifyGuestCommentOwner(
     page: payload.comment.page,
     contentPreview: preview,
     documentUrl: docUrl,
+  });
+}
+
+export async function notifyGuestCommentResolvedGuest(
+  env: Env,
+  mailer: Mailer,
+  logger: Logger,
+  payload: GuestCommentResolvedNotifyPayload,
+): Promise<void> {
+  const guestEmail = payload.guestEmail.trim().toLowerCase();
+  if (!guestEmail) return;
+
+  const webhookBody = {
+    event: 'guest_comment.resolved',
+    guestEmail,
+    documentId: payload.documentId,
+    documentTitle: payload.documentTitle,
+    versionId: payload.versionId,
+    versionNumber: payload.versionNumber,
+    comment: {
+      id: payload.comment.id,
+      page: payload.comment.page,
+      authorReply: payload.comment.authorReply,
+    },
+  };
+  await postWebhook(env, webhookBody, logger);
+
+  await mailer.sendGuestCommentResolvedNotification({
+    to: guestEmail,
+    guestName: payload.guestName,
+    documentTitle: payload.documentTitle,
+    versionNumber: payload.versionNumber,
+    page: payload.comment.page,
+    authorReply: payload.comment.authorReply,
   });
 }

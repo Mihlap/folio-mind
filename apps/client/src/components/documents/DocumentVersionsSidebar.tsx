@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { useDeleteDocumentVersionMutation, useLazyGetSourceDocxUrlQuery } from '@folio-mind/store';
+import {
+  useDeleteDocumentVersionMutation,
+  useLazyGetSourceDocxUrlQuery,
+  getVersionStatusLabel,
+  useUpdateVersionLabelMutation,
+} from '@folio-mind/store';
+import { isDocumentVersionSelectable, TITLE_VERSION_PREPARING } from '../../lib/documents/versionSelection.js';
 import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
 import { useAppSelector } from '../../hooks/index.js';
 import { ConfirmDangerDialog } from '../ui/ConfirmDangerDialog.js';
@@ -9,12 +15,6 @@ import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.j
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
 import { docxBadgeLabel, docxBadgeTitle, docxDownloadLabel, docxDownloadTitle, versionHasDocxDownload } from '../../lib/documents/sourceDocx.js';
 import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
-const STATUS_SHORT: Record<string, string> = {
-  pending_upload: 'не загружен',
-  processing: 'обработка',
-  ready: 'готов',
-  failed: 'ошибка',
-};
 function formatVersionMeta(size: string, pageCount?: number | null) {
   const parts: string[] = [];
   if (pageCount && pageCount > 0) parts.push(`${pageCount} стр.`);
@@ -27,6 +27,18 @@ const versionActionBtn =
   'inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm transition hover:border-folio-300 hover:bg-folio-50';
 const versionActionBtnEmerald =
   'inline-flex cursor-pointer items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50/60 px-2 py-1 text-[10px] font-medium text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50';
+const versionLabelBtn =
+  'rounded border px-1.5 py-0.5 text-[10px] font-medium transition';
+const VERSION_LABELS: Array<{ id: 'draft' | 'in_review' | 'final'; title: string }> = [
+  { id: 'draft', title: 'Черновик' },
+  { id: 'in_review', title: 'Соглас.' },
+  { id: 'final', title: 'Финал' },
+];
+const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
+  draft: 'Черновик',
+  in_review: 'На согласовании',
+  final: 'Финал',
+};
 type Props = {
   variant?: 'sidebar' | 'drawer';
   onVersionAction?: () => void;
@@ -36,6 +48,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
   const workspace = ctx?.workspace;
   const token = useAppSelector((s) => s.auth.token);
   const [deleteVersion, { isLoading: deletingVersion }] = useDeleteDocumentVersionMutation();
+  const [updateVersionLabel, { isLoading: updatingVersionLabel }] = useUpdateVersionLabelMutation();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [localError, setLocalError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{
@@ -56,6 +69,8 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
     uploadStatusHint,
   } = workspace;
   function handleSelectVersion(versionId: string) {
+    const version = versions.find((v) => v.id === versionId);
+    if (version && !isDocumentVersionSelectable(version)) return;
     onSelectVersion(versionId);
     onVersionAction?.();
   }
@@ -74,6 +89,22 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch {
       setLocalError('Не удалось скачать DOCX');
+    }
+  }
+  async function handleVersionLabel(
+    versionId: string,
+    currentLabel: 'draft' | 'in_review' | 'final' | null,
+    nextLabel: 'draft' | 'in_review' | 'final',
+  ) {
+    try {
+      setLocalError(null);
+      await updateVersionLabel({
+        documentId,
+        versionId,
+        versionLabel: currentLabel === nextLabel ? null : nextLabel,
+      }).unwrap();
+    } catch {
+      setLocalError('Не удалось сохранить подпись версии');
     }
   }
   async function confirmDeleteVersion() {
@@ -142,6 +173,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
         {versions.map((v, index) => {
           const isSelected = v.id === selectedVersionId;
           const isLatest = index === 0;
+          const selectable = isDocumentVersionSelectable(v);
           return (
             <li key={v.id}>
               <div
@@ -149,7 +181,8 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
               >
                 <button
                   type="button"
-                  disabled={v.status === 'pending_upload'}
+                  disabled={!selectable}
+                  title={!selectable ? TITLE_VERSION_PREPARING : undefined}
                   onClick={() => handleSelectVersion(v.id)}
                   className="w-full cursor-pointer rounded-md text-left disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -171,9 +204,14 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                     {isSelected && (
                       <span className="text-[10px] font-normal text-folio-600">· в просмотре</span>
                     )}
+                    {v.versionLabel && (
+                      <span className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-700">
+                        {VERSION_LABEL_TITLE[v.versionLabel]}
+                      </span>
+                    )}
                   </span>
                   <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
-                    {STATUS_SHORT[v.status] ?? v.status}
+                    {getVersionStatusLabel(v.status)}
                     {formatVersionMeta(v.size, v.pageCount) !== '—'
                       ? ` · ${formatVersionMeta(v.size, v.pageCount)}`
                       : ''}
@@ -213,6 +251,33 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                     role="toolbar"
                     aria-label={`Скачать v${v.version}`}
                   >
+                    <div className="mr-1 inline-flex items-center gap-1">
+                      {VERSION_LABELS.map((item) => {
+                        const selected = v.versionLabel === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            disabled={updatingVersionLabel}
+                            onClick={() =>
+                              void handleVersionLabel(
+                                v.id,
+                                v.versionLabel as 'draft' | 'in_review' | 'final' | null,
+                                item.id,
+                              )
+                            }
+                            className={`${versionLabelBtn} ${
+                              selected
+                                ? 'border-folio-300 bg-folio-50 text-folio-700'
+                                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            } disabled:opacity-50`}
+                            title={`Отметить как «${VERSION_LABEL_TITLE[item.id]}»`}
+                          >
+                            {item.title}
+                          </button>
+                        );
+                      })}
+                    </div>
                     {v.status === 'ready' && (
                       <button
                         type="button"

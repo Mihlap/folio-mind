@@ -2,12 +2,17 @@ import { PDFDocument } from 'pdf-lib';
 import type { OptimizePreset } from '@folio-mind/pdf-contracts';
 import {
   getOptimizeToolAvailability,
+  optimizeEarlyExitTargetBytes,
   tryGhostscriptOptimize,
   tryQpdfOptimize,
   type ExternalOptimizeMethod,
 } from './optimize-external.js';
 
 export type OptimizePdfMethod = 'copy' | 'pack' | ExternalOptimizeMethod;
+
+export type OptimizeProgressReporter = (
+  update: { label: string; step?: number; total?: number },
+) => void | Promise<void>;
 
 export type OptimizePdfResult = {
   buffer: Buffer;
@@ -30,9 +35,23 @@ async function packWithPdfLib(sourceBuffer: Buffer): Promise<Buffer> {
   );
 }
 
+function smallestCandidate(
+  candidates: Array<{ buffer: Buffer; method: OptimizePdfMethod; engineDetail?: string }>,
+  sourceBytes: number,
+) {
+  return candidates
+    .filter((item) => item.buffer.length < sourceBytes)
+    .sort((a, b) => a.buffer.length - b.buffer.length)[0];
+}
+
+function isGoodEnough(size: number, targetBytes: number | null): boolean {
+  return targetBytes !== null && size <= targetBytes;
+}
+
 export async function optimizePdfBuffer(
   sourceBuffer: Buffer,
   preset: OptimizePreset,
+  onProgress?: OptimizeProgressReporter,
 ): Promise<OptimizePdfResult> {
   const sourceBytes = sourceBuffer.length;
   const sourcePdf = await PDFDocument.load(sourceBuffer, { ignoreEncryption: true });
@@ -57,19 +76,26 @@ export async function optimizePdfBuffer(
     };
   }
 
+  const targetBytes = optimizeEarlyExitTargetBytes(sourceBytes, preset);
   const candidates: Array<{
     buffer: Buffer;
     method: OptimizePdfMethod;
     engineDetail?: string;
   }> = [];
 
+  await onProgress?.({ label: 'Уплотняем PDF' });
   const qpdfBuffer = await tryQpdfOptimize(sourceBuffer, preset);
   if (qpdfBuffer) {
     candidates.push({ buffer: qpdfBuffer, method: 'qpdf' });
   }
 
   if (preset === 'email' || preset === 'archive') {
-    const gsBuffer = await tryGhostscriptOptimize(sourceBuffer, preset);
+    const gsBuffer = await tryGhostscriptOptimize(sourceBuffer, preset, {
+      earlyExitBelowBytes: targetBytes,
+      onProfileDone: async (step, total) => {
+        await onProgress?.({ label: 'Сжимаем картинки', step, total });
+      },
+    });
     if (gsBuffer) {
       candidates.push({
         buffer: gsBuffer.buffer,
@@ -78,8 +104,18 @@ export async function optimizePdfBuffer(
       });
     }
 
-    if (qpdfBuffer) {
-      const gsOnQpdf = await tryGhostscriptOptimize(qpdfBuffer, preset);
+    const bestSoFar = smallestCandidate(candidates, sourceBytes);
+    const shouldRefineQpdf =
+      qpdfBuffer &&
+      (!bestSoFar || qpdfBuffer.length < bestSoFar.buffer.length) &&
+      !isGoodEnough(bestSoFar?.buffer.length ?? sourceBytes, targetBytes);
+
+    if (shouldRefineQpdf) {
+      await onProgress?.({ label: 'Дожимаем картинки', step: 1, total: 1 });
+      const gsOnQpdf = await tryGhostscriptOptimize(qpdfBuffer, preset, {
+        earlyExitBelowBytes: targetBytes,
+        maxProfiles: 1,
+      });
       if (gsOnQpdf) {
         candidates.push({
           buffer: gsOnQpdf.buffer,
@@ -90,15 +126,17 @@ export async function optimizePdfBuffer(
     }
   }
 
-  try {
-    const packed = await packWithPdfLib(sourceBuffer);
-    candidates.push({ buffer: packed, method: 'pack' });
-  } catch {
+  const bestBeforePack = smallestCandidate(candidates, sourceBytes);
+  if (!isGoodEnough(bestBeforePack?.buffer.length ?? sourceBytes, targetBytes)) {
+    try {
+      await onProgress?.({ label: 'Финальная упаковка' });
+      const packed = await packWithPdfLib(sourceBuffer);
+      candidates.push({ buffer: packed, method: 'pack' });
+    } catch {
+    }
   }
 
-  const smaller = candidates
-    .filter((item) => item.buffer.length < sourceBytes)
-    .sort((a, b) => a.buffer.length - b.buffer.length)[0];
+  const smaller = smallestCandidate(candidates, sourceBytes);
 
   if (!smaller) {
     return {

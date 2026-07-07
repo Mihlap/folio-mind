@@ -10,6 +10,7 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 import type { Env } from './lib/config/env.js';
 import { GLOBAL_RATE_LIMIT } from './lib/auth/rate-limits.js';
 import { prismaPlugin } from './plugins/prisma.js';
+import { jsonBodyPlugin } from './plugins/json-body.js';
 import { requestIdPlugin } from './plugins/request-id.js';
 import { tracingPlugin } from './plugins/tracing.js';
 import { aiRoutes } from './routes/ai.js';
@@ -36,6 +37,7 @@ export async function buildApp(options: BuildAppOptions) {
   });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+  await app.register(jsonBodyPlugin);
   await app.register(requestIdPlugin);
   await app.register(tracingPlugin);
   await app.register(cors, {

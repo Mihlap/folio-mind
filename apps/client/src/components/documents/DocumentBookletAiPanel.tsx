@@ -19,6 +19,7 @@ type Props = {
   projectName?: string | null;
   versionReady: boolean;
   layout?: LayoutEditorState;
+  compact?: boolean;
 };
 
 export function DocumentBookletAiPanel({
@@ -28,6 +29,7 @@ export function DocumentBookletAiPanel({
   projectName,
   versionReady,
   layout,
+  compact = false,
 }: Props) {
   const [objectHint, setObjectHint] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,7 +65,7 @@ export function DocumentBookletAiPanel({
     }
     if (job.status === 'failed') {
       const payload = job.payload as { error?: string } | null;
-      setError(payload?.error ?? 'ИИ не смог подготовить черновик');
+      setError(payload?.error ?? 'Не удалось подготовить черновик. Проверьте, что ИИ настроен администратором.');
       setActiveJobId(null);
     }
   }, [job, activeJobId]);
@@ -82,14 +84,18 @@ export function DocumentBookletAiPanel({
       setActiveJobId(result.jobId);
       setStatusHint('ИИ готовит черновик титульника…');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось запустить ИИ');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось запустить черновик титульника. Проверьте, что ИИ настроен администратором.',
+      );
     }
   }
 
   function handleFillCaptions() {
     if (!layout) return;
     layout.autoFillCaptionsFromFilenames();
-    setCaptionNotice('Подписи заполнены из имён файлов (только пустые слоты).');
+    setCaptionNotice('Пустые подписи заполнены из имён файлов. Проверьте текст в «Макет».');
   }
 
   async function handleSearch() {
@@ -98,7 +104,7 @@ export function DocumentBookletAiPanel({
     try {
       await searchMaterials({ projectId, q: searchQuery.trim() }).unwrap();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Поиск не удался');
+      setError(err instanceof Error ? err.message : 'Не удалось выполнить поиск. Попробуйте ещё раз.');
     }
   }
 
@@ -106,16 +112,18 @@ export function DocumentBookletAiPanel({
 
   return (
     <div className="space-y-4 text-sm text-slate-700">
-      <p className="text-xs text-slate-500">
-        Помощник для буклета: подписи к рендерам, черновик титульника и поиск материалов проекта.
-      </p>
+      {!compact && (
+        <p className="text-xs text-slate-500">
+          Подписи к рендерам, черновик текста титульника и поиск файлов по проекту.
+        </p>
+      )}
 
       <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-slate-800">Подписи к рендерам</span>
           <FeatureHelpButton title="Автоподписи">
             <p>При вставке картинки подпись берётся из имени файла (без расширения).</p>
-            <p>Можно отредактировать в панели «Макет» у выбранного изображения.</p>
+            <p>Текст можно изменить в «Макет» у выбранного изображения.</p>
           </FeatureHelpButton>
         </div>
         <p className="text-[11px] text-slate-500">
@@ -137,8 +145,8 @@ export function DocumentBookletAiPanel({
       <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-slate-800">Черновик титульника</span>
-          <FeatureHelpButton title="Титульник ИИ">
-            <p>ИИ предложит заголовок, подзаголовок и короткий слоган для титульной страницы.</p>
+          <FeatureHelpButton title="Черновик титульника">
+            <p>ИИ предложит заголовок, подзаголовок и короткий слоган. Текст нужно вручную перенести на титульную страницу в «Макет».</p>
           </FeatureHelpButton>
         </div>
         <label className="block text-xs text-slate-600">
@@ -172,7 +180,7 @@ export function DocumentBookletAiPanel({
 
       {projectId ? (
         <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-          <span className="text-xs font-medium text-slate-800">Поиск по материалам проекта</span>
+          <span className="text-xs font-medium text-slate-800">Поиск по проекту</span>
           <div className="flex gap-2">
             <input
               value={searchQuery}
@@ -227,7 +235,7 @@ export function DocumentBookletAiPanel({
         </div>
       ) : (
         <p className="text-xs text-slate-500">
-          Привяжите документ к проекту — тогда здесь появится поиск по его материалам.
+          Привяжите документ к проекту — здесь можно искать другие PDF и картинки по названию.
         </p>
       )}
 

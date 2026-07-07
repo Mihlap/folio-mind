@@ -41,7 +41,7 @@ if (!isWorkerS3Configured()) {
 void getOptimizeToolAvailability().then((tools) => {
   if (!tools.qpdf && !tools.ghostscript) {
     console.warn(
-      '[worker] qpdf и Ghostscript не найдены — сжатие PDF почти не уменьшит размер. Windows: winget install qpdf; winget install ArtifexGhostscript.GhostScript',
+      '[worker] qpdf и Ghostscript не найдены — сжатие PDF и PDF/A недоступны. Windows: winget install QPDF.QPDF; Ghostscript: powershell -File .\\tools\\install-ghostscript.ps1',
     );
     return;
   }

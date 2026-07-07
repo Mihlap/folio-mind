@@ -22,7 +22,26 @@ export function markerKindClass(kind: PdfPageMarkerKind): string {
       return 'bg-yellow-400 ring-yellow-200 hover:bg-yellow-500';
     case 'guest_comment':
       return 'bg-sky-500 ring-sky-200 hover:bg-sky-600';
+    case 'page_review_ok':
+      return 'bg-emerald-500 ring-emerald-200 hover:bg-emerald-600';
+    case 'page_review_fix':
+      return 'bg-amber-500 ring-amber-200 hover:bg-amber-600';
     default:
       return 'bg-amber-500 ring-amber-200 hover:bg-amber-600';
+  }
+}
+
+export function markerKindLabel(kind: PdfPageMarkerKind): string {
+  switch (kind) {
+    case 'guest_comment':
+      return 'Замечание';
+    case 'accepted_edit':
+      return 'Правка';
+    case 'page_review_ok':
+      return 'ОК';
+    case 'page_review_fix':
+      return 'Правки';
+    default:
+      return 'Заметка';
   }
 }

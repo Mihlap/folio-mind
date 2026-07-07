@@ -153,9 +153,11 @@ CREATE TABLE "GuestShareComment" (
     "page" INTEGER NOT NULL,
     "content" TEXT NOT NULL,
     "authorName" TEXT,
+    "authorEmail" TEXT,
     "x" DOUBLE PRECISION,
     "y" DOUBLE PRECISION,
     "status" TEXT NOT NULL DEFAULT 'open',
+    "authorReply" TEXT,
     "resolvedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -201,6 +203,7 @@ CREATE TABLE "DocumentVersion" (
     "id" TEXT NOT NULL,
     "documentId" TEXT NOT NULL,
     "version" INTEGER NOT NULL,
+    "versionLabel" TEXT,
     "s3Key" TEXT NOT NULL,
     "size" BIGINT NOT NULL DEFAULT 0,
     "sha256" TEXT,
@@ -396,13 +399,13 @@ CREATE INDEX "MediaAsset_tenantId_createdAt_idx" ON "MediaAsset"("tenantId", "cr
 CREATE INDEX "MediaAsset_documentId_createdAt_idx" ON "MediaAsset"("documentId", "createdAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "DocumentPageReviewMark_documentId_versionId_page_key" ON "DocumentPageReviewMark"("documentId", "versionId", "page");
-
--- CreateIndex
 CREATE INDEX "DocumentPageReviewMark_documentId_versionId_idx" ON "DocumentPageReviewMark"("documentId", "versionId");
 
 -- CreateIndex
 CREATE INDEX "DocumentPageReviewMark_tenantId_idx" ON "DocumentPageReviewMark"("tenantId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DocumentPageReviewMark_documentId_versionId_page_key" ON "DocumentPageReviewMark"("documentId", "versionId", "page");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "DocumentVersion_documentId_version_key" ON "DocumentVersion"("documentId", "version");

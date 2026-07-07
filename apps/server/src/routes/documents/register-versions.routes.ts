@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
+  DOCUMENT_VERSION_LABELS,
   UPLOAD_NETWORK_ERROR_MESSAGE,
   isUserUploadedSourceDocxKey,
 } from '@folio-mind/pdf-contracts';
@@ -125,6 +126,62 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
         docxUploadUrl,
         docxS3Key,
       });
+    },
+  );
+  r.patch(
+    '/documents/:documentId/versions/:versionId/label',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        body: z.object({
+          versionLabel: z
+            .enum([...DOCUMENT_VERSION_LABELS] as [string, ...string[]])
+            .nullable(),
+        }),
+        response: {
+          200: z.object({
+            versionId: z.string(),
+            versionLabel: z.string().nullable(),
+          }),
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+      await app.prisma.documentVersion.update({
+        where: { id: versionId },
+        data: { versionLabel: request.body.versionLabel },
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_label_update',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: {
+            versionId,
+            versionLabel: request.body.versionLabel,
+          },
+        },
+      });
+      return {
+        versionId,
+        versionLabel: request.body.versionLabel,
+      };
     },
   );
   r.post(

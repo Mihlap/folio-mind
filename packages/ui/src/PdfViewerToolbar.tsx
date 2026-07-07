@@ -17,6 +17,8 @@ type PdfViewerToolbarProps = {
   onClearSearch: () => void;
   layoutMode?: boolean;
   onLayoutModeChange?: (enabled: boolean) => void;
+  onPresentationStart?: () => void;
+  presentationDisabled?: boolean;
 };
 export function PdfViewerToolbar({
   displayMode,
@@ -35,6 +37,8 @@ export function PdfViewerToolbar({
   onClearSearch,
   layoutMode = false,
   onLayoutModeChange,
+  onPresentationStart,
+  presentationDisabled = false,
 }: PdfViewerToolbarProps) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -81,6 +85,15 @@ export function PdfViewerToolbar({
         />
       )}
 
+      {onPresentationStart && (
+        <ToolbarButton
+          active={false}
+          onClick={onPresentationStart}
+          label="Презентация"
+          disabled={presentationDisabled}
+        />
+      )}
+
       <div className="flex min-w-0 w-full basis-full items-center gap-1 sm:basis-auto sm:flex-1">
         <input
           type="search"
@@ -121,16 +134,19 @@ function ToolbarButton({
   active,
   onClick,
   label,
+  disabled,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition ${active ? 'bg-folio-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+      disabled={disabled}
+      className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'bg-folio-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
     >
       {label}
     </button>

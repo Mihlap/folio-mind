@@ -5,6 +5,7 @@ import {
   useListDocumentsQuery,
   useListProjectsQuery,
   isDocumentReviewStatus,
+  getVersionListStatusLabel,
 } from '@folio-mind/store';
 import { DocumentReviewStatusBadge } from '../../components/documents/DocumentReviewStatusControl.js';
 import { useAppSelector } from '../../hooks/index.js';
@@ -13,16 +14,8 @@ import { DeleteDocumentButton } from '../../components/documents/DeleteDocumentB
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 
-const STATUS_LABEL: Record<string, string> = {
-  pending_upload: 'не загружен',
-  processing: 'обработка',
-  ready: 'готов',
-  failed: 'ошибка',
-};
-
 function getDisplayStatus(status: string): string {
-  if (status === 'processing') return 'готов к просмотру';
-  return STATUS_LABEL[status] ?? status;
+  return getVersionListStatusLabel(status);
 }
 
 export function DashboardPage() {

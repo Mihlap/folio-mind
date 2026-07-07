@@ -1,4 +1,6 @@
 import { DocumentPageThumbnail, isThumbnailEager } from './DocumentPageThumbnail.js';
+import type { PageReviewMarkStatus } from '../../lib/documents/pageReviewMarkers.js';
+
 type PreviewPage = {
   page: number;
   url: string;
@@ -9,14 +11,37 @@ type DocumentThumbnailStripProps = {
   viewerPage: number;
   initialThumbPages: number;
   layout: 'vertical' | 'horizontal';
+  reviewMarkByPage?: Record<number, PageReviewMarkStatus>;
   onGoToPage: (page: number) => void;
 };
+
+function ThumbnailReviewBadge({ status }: { status: PageReviewMarkStatus }) {
+  if (status === 'needs_fix') {
+    return (
+      <span
+        className="pointer-events-none absolute inset-x-0 bottom-0 bg-amber-600/95 py-0.5 text-center text-[8px] font-medium leading-none text-white"
+        title="Нужны правки"
+      >
+        правки
+      </span>
+    );
+  }
+  return (
+    <span
+      className="pointer-events-none absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-white"
+      title="ОК"
+      aria-hidden
+    />
+  );
+}
+
 export function DocumentThumbnailStrip({
   versionId,
   pages,
   viewerPage,
   initialThumbPages,
   layout,
+  reviewMarkByPage = {},
   onGoToPage,
 }: DocumentThumbnailStripProps) {
   if (pages.length === 0) return null;
@@ -32,10 +57,12 @@ export function DocumentThumbnailStrip({
             key={thumb.page}
             type="button"
             onClick={() => onGoToPage(thumb.page)}
-            className={`shrink-0 cursor-pointer overflow-hidden rounded border-2 transition-[border-color,box-shadow] duration-200 ${
+            className={`relative shrink-0 cursor-pointer overflow-hidden rounded border-2 transition-[border-color,box-shadow] duration-200 ${
               viewerPage === thumb.page
                 ? 'border-folio-600 ring-1 ring-folio-200'
-                : 'border-slate-200 hover:border-folio-300'
+                : reviewMarkByPage[thumb.page] === 'needs_fix'
+                  ? 'border-amber-400'
+                  : 'border-slate-200 hover:border-folio-300'
             }`}
           >
             <DocumentPageThumbnail
@@ -45,6 +72,9 @@ export function DocumentThumbnailStrip({
               eager={isThumbnailEager(thumb.page, initialThumbPages)}
               staggerMs={Math.min(thumb.page - 1, 14) * 35}
             />
+            {reviewMarkByPage[thumb.page] && (
+              <ThumbnailReviewBadge status={reviewMarkByPage[thumb.page]} />
+            )}
           </button>
         ))}
       </div>
@@ -60,7 +90,13 @@ export function DocumentThumbnailStrip({
           key={thumb.page}
           type="button"
           onClick={() => onGoToPage(thumb.page)}
-          className={`shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-[border-color] duration-200 ${viewerPage === thumb.page ? 'border-folio-600' : 'border-slate-200'}`}
+          className={`relative shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-[border-color] duration-200 ${
+            viewerPage === thumb.page
+              ? 'border-folio-600'
+              : reviewMarkByPage[thumb.page] === 'needs_fix'
+                ? 'border-amber-400'
+                : 'border-slate-200'
+          }`}
         >
           <DocumentPageThumbnail
             src={thumb.url}
@@ -69,6 +105,9 @@ export function DocumentThumbnailStrip({
             eager={isThumbnailEager(thumb.page, initialThumbPages)}
             staggerMs={Math.min(thumb.page - 1, 14) * 35}
           />
+          {reviewMarkByPage[thumb.page] && (
+            <ThumbnailReviewBadge status={reviewMarkByPage[thumb.page]} />
+          )}
         </button>
       ))}
     </div>

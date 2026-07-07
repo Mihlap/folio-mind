@@ -19,6 +19,7 @@ import {
   reportActionBtnPrimary,
   reportActionsColumnClass,
 } from '../ui/FeatureHelp.js';
+import { BookletStepHeading } from './BookletStepHeading.js';
 
 type Props = {
   documentId: string;
@@ -26,12 +27,13 @@ type Props = {
   versionReady: boolean;
   pageCount: number;
   viewerPage: number;
+  compact?: boolean;
 };
 
 function levelLabel(level: string): string {
-  if (level === 'ok') return 'OK';
+  if (level === 'ok') return 'Готово';
   if (level === 'warning') return 'Внимание';
-  return 'Проблема';
+  return 'Стоит проверить';
 }
 
 function levelClass(level: string): string {
@@ -45,12 +47,14 @@ function parsePagesInput(input: string, maxPage: number): number[] | string {
     .split(/[,;\s]+/)
     .map((p) => p.trim())
     .filter(Boolean);
-  if (parts.length === 0) return 'Укажите номера страниц';
+  if (parts.length === 0) return 'Укажите номера страниц через запятую, например: 1, 3, 5';
   const pages: number[] = [];
   for (const part of parts) {
     const n = Number(part);
-    if (!Number.isInteger(n) || n < 1) return `Некорректный номер: ${part}`;
-    if (maxPage > 0 && n > maxPage) return `Страница ${n} больше числа страниц (${maxPage})`;
+    if (!Number.isInteger(n) || n < 1) return `Некорректный номер страницы: «${part}»`;
+    if (maxPage > 0 && n > maxPage) {
+      return `Страницы ${n} нет в документе (всего ${maxPage} стр.)`;
+    }
     if (!pages.includes(n)) pages.push(n);
   }
   return pages.sort((a, b) => a - b);
@@ -62,6 +66,7 @@ export function DocumentBookletExportPanel({
   versionReady,
   pageCount,
   viewerPage,
+  compact = false,
 }: Props) {
   const [jpegDpi, setJpegDpi] = useState(BOOKLET_EXPORT_DEFAULT_JPEG_DPI);
   const [pdfA, setPdfA] = useState(false);
@@ -95,15 +100,13 @@ export function DocumentBookletExportPanel({
       const payload = job.payload as Record<string, unknown> | null;
       if (jobKind === 'readiness' && payload && 'printReadiness' in payload) {
         setReadiness(payload.printReadiness as PrintReadinessReport);
-        setStatusHint(String(payload.message ?? 'Чеклист готов.'));
+        setStatusHint(String(payload.message ?? 'Проверка завершена.'));
       } else if (jobKind === 'booklet') {
         const fallbackMsg =
           payload?.pdfA === true && payload?.pdfAApplied === false
             ? MSG_ARCHIVE_PDF_FALLBACK
             : null;
-        setStatusHint(
-          fallbackMsg ?? String(payload?.message ?? 'Пакет готов.'),
-        );
+        setStatusHint(fallbackMsg ?? String(payload?.message ?? 'Пакет готов.'));
         if (payload && 'printReadiness' in payload) {
           setReadiness(payload.printReadiness as PrintReadinessReport);
         }
@@ -113,17 +116,17 @@ export function DocumentBookletExportPanel({
             window.open(result.url, '_blank', 'noopener,noreferrer');
           })
           .catch(() => {
-            setError('Пакет создан, но ссылку скачать не удалось — нажмите «Скачать ZIP».');
+            setError('Пакет собран, но ссылку открыть не удалось — нажмите «Скачать ZIP».');
           });
       } else if (jobKind === 'pages') {
-        setStatusHint(String(payload?.message ?? 'Экспорт страниц готов.'));
+        setStatusHint(String(payload?.message ?? 'Картинки выбранных страниц готовы.'));
         void fetchPagesUrl({ documentId, versionId })
           .unwrap()
           .then((result: { url: string }) => {
             window.open(result.url, '_blank', 'noopener,noreferrer');
           })
           .catch(() => {
-            setError('Экспорт создан, но ссылку открыть не удалось.');
+            setError('Экспорт готов, но ссылку открыть не удалось — попробуйте ещё раз.');
           });
       }
       setActiveJobId(null);
@@ -131,7 +134,7 @@ export function DocumentBookletExportPanel({
     }
     if (job.status === 'failed') {
       const payload = job.payload as { error?: string } | null;
-      setError(payload?.error ?? 'Операция не удалась');
+      setError(payload?.error ?? 'Не удалось выполнить операцию. Попробуйте ещё раз.');
       setActiveJobId(null);
       setJobKind(null);
     }
@@ -145,9 +148,9 @@ export function DocumentBookletExportPanel({
       const result = await exportBooklet({ documentId, versionId, jpegDpi, pdfA }).unwrap();
       setJobKind('booklet');
       setActiveJobId(result.operationJobId);
-      setStatusHint('Собираем ZIP: PDF + JPG по страницам…');
+      setStatusHint('Собираем ZIP: PDF и JPG по каждой странице…');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось запустить экспорт');
+      setError(err instanceof Error ? err.message : 'Не удалось запустить сборку пакета');
     }
   }
 
@@ -170,7 +173,7 @@ export function DocumentBookletExportPanel({
       }).unwrap();
       setJobKind('pages');
       setActiveJobId(result.operationJobId);
-      setStatusHint(`Рендер ${parsed.length} стр. в ${exportFormat.toUpperCase()}…`);
+      setStatusHint(`Готовим ${parsed.length} стр. в ${exportFormat.toUpperCase()}…`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось экспортировать страницы');
     }
@@ -184,7 +187,7 @@ export function DocumentBookletExportPanel({
       const result = await printReadiness({ documentId, versionId }).unwrap();
       setJobKind('readiness');
       setActiveJobId(result.operationJobId);
-      setStatusHint('Проверяем DPI и шрифты…');
+      setStatusHint('Проверяем качество картинок и шрифты…');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось запустить проверку');
     }
@@ -196,28 +199,80 @@ export function DocumentBookletExportPanel({
       const result = await fetchBookletUrl({ documentId, versionId }).unwrap();
       window.open(result.url, '_blank', 'noopener,noreferrer');
     } catch {
-      setError('Пакет ещё не готов — сначала соберите ZIP.');
+      setError('Пакет ещё не собран — сначала нажмите «Собрать ZIP для заказчика».');
     }
   }
 
   const busy = exportingBooklet || exportingPages || checkingReadiness || Boolean(activeJobId);
 
-  return (
-    <div className="space-y-4 text-sm text-slate-700">
-      <p className="text-xs text-slate-500">
-        Пакет для заказчика: PDF + JPG всех страниц в одном ZIP. Отдельно — выбранные страницы без полного PDF.
+  const readinessBlock = (
+    <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-slate-800">Чеклист перед печатью</span>
+        <FeatureHelpButton title="Проверка перед печатью">
+          <p>Оценка резкости картинок (DPI) и того, встроены ли шрифты в PDF.</p>
+          <p>Это подсказка, не гарантия типографии. Ориентир для печати A4: от {PRINT_MIN_DPI} dpi.</p>
+        </FeatureHelpButton>
+      </div>
+      <p className="text-[11px] leading-snug text-slate-500">
+        Автоматическая оценка по PDF. «Стоит проверить» не значит, что печать невозможна — откройте файл
+        и посмотрите глазами.
       </p>
+      <FeatureHelpActionButton
+        helpTitle="Проверить"
+        helpContent={<p>Краткий отчёт по страницам: DPI картинок и шрифты.</p>}
+        disabled={!versionReady || busy}
+        onClick={() => void handlePrintReadiness()}
+        buttonClassName={reportActionBtnPrimary}
+      >
+        {checkingReadiness || (activeJobId && jobKind === 'readiness') ? 'Проверка…' : 'Проверить перед печатью'}
+      </FeatureHelpActionButton>
+      {readiness && (
+        <div className="space-y-2 text-xs">
+          <p
+            className={[
+              'inline-flex rounded-full border px-2 py-0.5 font-medium',
+              levelClass(readiness.overallLevel),
+            ].join(' ')}
+          >
+            Итого: {levelLabel(readiness.overallLevel)}
+          </p>
+          <p className="text-slate-600">{readiness.fonts.note}</p>
+          {readiness.warnings.length > 0 && (
+            <ul className="list-disc space-y-0.5 pl-4 text-amber-800">
+              {readiness.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+          <ul className="max-h-40 space-y-1 overflow-y-auto">
+            {readiness.pages.map((page) => (
+              <li key={page.page} className="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                <span>Стр. {page.page}</span>
+                <span className={levelClass(page.level).split(' ')[0]}>
+                  {page.minEstimatedDpi != null ? `${page.minEstimatedDpi} dpi` : '—'} ·{' '}
+                  {levelLabel(page.level)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 
+  const packageBlock = (
+    <>
       <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-slate-800">Пакет PDF + JPG</span>
-          <FeatureHelpButton title="Экспорт буклета">
-            <p>ZIP содержит document.pdf, папку pages/ с JPG и print-readiness.json.</p>
-            <p>Одна presigned-ссылка — можно переслать заказчику.</p>
+          <span className="text-xs font-medium text-slate-800">ZIP: PDF + JPG всех страниц</span>
+          <FeatureHelpButton title="Пакет для заказчика">
+            <p>В архиве: PDF документа, папка pages/ с JPG каждой страницы и отчёт о готовности к печати.</p>
+            <p>После сборки можно дать ссылку клиенту в разделе «Ссылка для заказчика».</p>
           </FeatureHelpButton>
         </div>
         <label className="flex items-center gap-2 text-xs">
-          JPG, dpi
+          Качество JPG, dpi
           <input
             type="number"
             min={72}
@@ -246,7 +301,7 @@ export function DocumentBookletExportPanel({
         <div className={reportActionsColumnClass}>
           <FeatureHelpActionButton
             helpTitle="Собрать ZIP"
-            helpContent={<p>PDF + JPG каждой страницы + отчёт print-readiness.json</p>}
+            helpContent={<p>PDF + JPG каждой страницы + отчёт о готовности к печати.</p>}
             disabled={!versionReady || busy}
             onClick={() => void handleExportBooklet()}
             buttonClassName={reportActionBtnPrimary}
@@ -265,9 +320,12 @@ export function DocumentBookletExportPanel({
       </div>
 
       <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-        <span className="text-xs font-medium text-slate-800">Страницы в PNG/JPG</span>
+        <span className="text-xs font-medium text-slate-800">Отдельные страницы (JPG или PNG)</span>
+        <p className="text-[11px] leading-snug text-slate-500">
+          Без полного PDF — только выбранные листы в архиве.
+        </p>
         <label className="block text-xs text-slate-600">
-          Номера (через запятую)
+          Номера страниц
           <input
             type="text"
             value={pagesInput}
@@ -313,56 +371,34 @@ export function DocumentBookletExportPanel({
           {exportingPages || (activeJobId && jobKind === 'pages') ? 'Экспорт…' : 'Экспорт выбранных страниц'}
         </FeatureHelpActionButton>
       </div>
+    </>
+  );
 
-      <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-slate-800">Чеклист перед печатью</span>
-          <FeatureHelpButton title="DPI и шрифты">
-            <p>Оценка DPI растра (эвристика по PDF) и наличия встроенных шрифтов.</p>
-            <p>Ориентир: ≥ {PRINT_MIN_DPI} dpi для печати A4.</p>
-          </FeatureHelpButton>
-        </div>
-        <FeatureHelpActionButton
-          helpTitle="Проверить"
-          helpContent={<p>Эвристика по встроенным шрифтам и растровым объектам в PDF.</p>}
-          disabled={!versionReady || busy}
-          onClick={() => void handlePrintReadiness()}
-          buttonClassName={reportActionBtnPrimary}
-        >
-          {checkingReadiness || (activeJobId && jobKind === 'readiness') ? 'Проверка…' : 'Проверить перед печатью'}
-        </FeatureHelpActionButton>
-        {readiness && (
-          <div className="space-y-2 text-xs">
-            <p
-              className={[
-                'inline-flex rounded-full border px-2 py-0.5 font-medium',
-                levelClass(readiness.overallLevel),
-              ].join(' ')}
-            >
-              Итого: {levelLabel(readiness.overallLevel)}
-            </p>
-            <p className="text-slate-600">{readiness.fonts.note}</p>
-            {readiness.warnings.length > 0 && (
-              <ul className="list-disc space-y-0.5 pl-4 text-amber-800">
-                {readiness.warnings.map((w) => (
-                  <li key={w}>{w}</li>
-                ))}
-              </ul>
-            )}
-            <ul className="max-h-40 space-y-1 overflow-y-auto">
-              {readiness.pages.map((page) => (
-                <li key={page.page} className="flex justify-between gap-2 border-b border-slate-100 pb-1">
-                  <span>Стр. {page.page}</span>
-                  <span className={levelClass(page.level).split(' ')[0]}>
-                    {page.minEstimatedDpi != null ? `${page.minEstimatedDpi} dpi` : '—'} ·{' '}
-                    {levelLabel(page.level)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+  return (
+    <div className="space-y-4 text-sm text-slate-700">
+      {!compact && (
+        <p className="text-xs text-slate-500">
+          Проверка качества, ZIP с PDF и JPG, экспорт отдельных страниц.
+        </p>
+      )}
+
+      {compact ? (
+        <>
+          <section className="space-y-3 border-t border-slate-100 pt-4">
+            <BookletStepHeading step={2} title="Проверка перед печатью" />
+            {readinessBlock}
+          </section>
+          <section className="space-y-3 border-t border-slate-100 pt-4">
+            <BookletStepHeading step={3} title="Пакет для заказчика" />
+            <div className="space-y-4">{packageBlock}</div>
+          </section>
+        </>
+      ) : (
+        <>
+          {readinessBlock}
+          {packageBlock}
+        </>
+      )}
 
       {statusHint && <p className="text-xs text-slate-600">{statusHint}</p>}
       {error && <p className="text-xs text-red-600">{error}</p>}
