@@ -10,8 +10,8 @@ export type PdfOverlayEdit = {
   suggestion: string;
   anchor?: { xNorm: number; yNorm: number };
 };
-export async function applyEditsViaPdfOverlay(
-  sourceS3Key: string,
+export async function applyEditsViaPdfOverlayBuffer(
+  pdfBytes: Buffer,
   edits: PdfOverlayEdit[],
 ): Promise<{
   buffer: Buffer;
@@ -19,7 +19,6 @@ export async function applyEditsViaPdfOverlay(
   applied: number;
   failed: number;
 }> {
-  const pdfBytes = await getObjectBuffer(sourceS3Key);
   const { positions, itemsByPage, fontBytesByName } = await findAllTextPositions(pdfBytes, edits);
   const pdfDoc = await PDFDocument.load(pdfBytes);
   registerPdfFontkit(pdfDoc);
@@ -39,4 +38,17 @@ export async function applyEditsViaPdfOverlay(
     applied,
     failed: edits.length - applied,
   };
+}
+
+export async function applyEditsViaPdfOverlay(
+  sourceS3Key: string,
+  edits: PdfOverlayEdit[],
+): Promise<{
+  buffer: Buffer;
+  pageCount: number;
+  applied: number;
+  failed: number;
+}> {
+  const pdfBytes = await getObjectBuffer(sourceS3Key);
+  return applyEditsViaPdfOverlayBuffer(pdfBytes, edits);
 }

@@ -9,6 +9,8 @@ import { processApplyLayoutPdfJob } from './jobs/optimize/apply-layout-pdf.js';
 import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accepted-suggestions.js';
 import { processApplyEditsFinalJob } from './jobs/optimize/apply-edits-final.js';
 import { processExportHighlightDocxJob } from './jobs/optimize/export-highlight-docx.js';
+import { processExportFormDataJob } from './jobs/optimize/export-form-data.js';
+import { processApplyVisualSignatureJob } from './jobs/optimize/apply-visual-signature.js';
 import { processExportBookletJob } from './jobs/optimize/export-booklet-package.js';
 import { processExportPagesJob } from './jobs/optimize/export-pages-images.js';
 import { processPrintReadinessJob } from './jobs/optimize/print-readiness.js';
@@ -140,6 +142,10 @@ function createOptimizeWorker() {
             await processApplyEditsFinalJob(env, data);
           } else if (job.name === 'export-highlight-docx') {
             await processExportHighlightDocxJob(env, data);
+          } else if (job.name === 'export-form-data') {
+            await processExportFormDataJob(env, data);
+          } else if (job.name === 'apply-visual-signature') {
+            await processApplyVisualSignatureJob(env, data);
           } else if (job.name === 'export-booklet') {
             await processExportBookletJob(env, data);
           } else if (job.name === 'export-pages') {

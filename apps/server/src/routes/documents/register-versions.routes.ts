@@ -274,6 +274,63 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
     },
   );
   r.post(
+    '/documents/:documentId/versions/:versionId/attach-source-docx',
+    {
+      preHandler: [app.authenticate],
+      config: uploadRateLimit,
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        body: z.object({
+          fileName: z.string().min(1).max(255),
+        }),
+        response: {
+          200: z.object({
+            docxS3Key: z.string(),
+            uploadUrl: z.string(),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const { fileName } = request.body;
+      if (!fileName.toLowerCase().endsWith('.docx')) {
+        return reply.code(400).send({ error: 'Only DOCX files are supported' });
+      }
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version || version.status === 'pending_upload') {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+      if (isUserUploadedSourceDocxKey(version.sourceDocxKey)) {
+        return reply.code(400).send({ error: 'У версии уже есть исходный DOCX' });
+      }
+      const docxS3Key = buildOriginalKey(document.id, version.version, fileName);
+      const uploadUrl = await getPresignedPutUrl({
+        key: docxS3Key,
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      await app.prisma.documentVersion.update({
+        where: { id: versionId },
+        data: { sourceDocxKey: docxS3Key },
+      });
+      return { docxS3Key, uploadUrl };
+    },
+  );
+  r.post(
     '/documents/:documentId/versions/:versionId/source-docx-complete',
     {
       preHandler: [app.authenticate],

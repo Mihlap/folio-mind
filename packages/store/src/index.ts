@@ -156,6 +156,7 @@ export {
   useCreateDocumentVersionFromDocxMutation,
   useCompleteUploadMutation,
   useCompleteDocxUploadMutation,
+  useAttachSourceDocxMutation,
   useUploadVersionFileMutation,
   useDeleteDocumentMutation,
   useUpdateDocumentReviewStatusMutation,

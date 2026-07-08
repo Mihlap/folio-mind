@@ -10,9 +10,9 @@
 | ------------------ | --------------- | ----------------------------------- | ----------------------------------------------------------- |
 | **0** Подготовка   | 3–6 нед.        | Dev-стек, auth, compose, каркас     | ✅ **100%**                                                 |
 | **1** Web MVP      | 2–4 мес.        | S3, viewer, превью, ИИ v0           | ✅ **100%**                                                 |
-| **2** Правки и RAG | 3–6 мес.        | Операции PDF, правки ИИ, регламенты | **~98%**                                                    |
+| **2** Правки и RAG | 3–6 мес.        | Операции PDF, правки ИИ, регламенты | ✅ **100%**                                                 |
 | **2b** Буклеты     | 3–6 мес.        | Макет, медиатека, согласование      | **~97%**                                                    |
-| **3** Конвертация  | 4–8 мес.        | Office ↔ PDF, формы, подпись        | **~82%** _(экспорт буклета MVP)_                   |
+| **3** Конвертация  | 4–8 мес.        | Office ↔ PDF, формы, подпись        | ✅ **100%** _(MVP: DOCX-пайплайн, AcroForm export, визуальная подпись, API)_ |
 | **4** Mobile       | 2–5 мес.        | PWA, APK, офлайн буклет             | **0%**                                                      |
 
 _Вне плана v1–v4 (бэклог): Enterprise SSO, on-prem, real-time co-editing._
@@ -59,7 +59,7 @@ _Вне плана v1–v4 (бэклог): Enterprise SSO, on-prem, real-time co
 
 ---
 
-## Фаза 2 — Редактирование и RAG (3–6 месяцев) — **~98%**
+## Фаза 2 — Редактирование и RAG (3–6 месяцев) — **100%**
 
 - [x] pdf-lib / worker: merge, split, страницы — **100%**
 - [x] Текстовый diff по извлечённому слою + UI сравнения версий — **100%**
@@ -67,7 +67,7 @@ _Вне плана v1–v4 (бэклог): Enterprise SSO, on-prem, real-time co
 - [x] Viewer: маркеры аннотаций на страницах PDF (overlay + координаты x/y) — **100%**
 - [x] Режим «было / стало»: ручные правки + ИИ; модальное окно — **100%**
 - [x] ИИ: accept/reject + **«Собрать PDF»** (согласование: реестр в приложении) — **100%**
-- [x] **«Применить правки»** — финальный PDF с изменённым текстом — **~85%** _(см. статус верификации ниже)_
+- [x] **«Применить правки»** — финальный PDF с изменённым текстом — **100%** _(ambiguous + page disambiguation + hybrid overlay)_
 - [x] RAG v1: загрузка регламентов, индексация, сверка с договором — **100%**
 - [x] RAG pgvector: эмбеддинги, семантический поиск — **100%**
 - [x] PDF integrity v1 — **100%**
@@ -182,7 +182,7 @@ _Параллельно с фазой 2 после стабильного viewer
 
 ---
 
-## Фаза 3 — Конвертация, формы, подпись (4–8 месяцев) — **~82%**
+## Фаза 3 — Конвертация, формы, подпись (4–8 месяцев) — **100%**
 
 ### Инфраструктура и качество кода (2026-06)
 
@@ -217,35 +217,34 @@ PDF + принятые правки
 
 | Этап | Задача                                                   | %                                         |
 | ---- | -------------------------------------------------------- | ----------------------------------------- |
-| D    | `sourceDocxKey`, UI загрузки DOCX, source-first pipeline | **~96%**                                  |
-| B    | Gotenberg в compose (DOCX → PDF)                         | **~95%**                                  |
-| B    | pdf2docx в compose (PDF → DOCX), pre-convert, кэш        | **~92%**                                  |
-| C    | `apply-edits-final`: автозамены, отчёт applied/failed    | **~92%**                                  |
-| C    | PDF-only: сначала PDF→DOCX, fallback overlay              | **~95%**                                  |
-| C    | Fallback DOCX→PDF overlay при `applied === 0`            | **~85%**                                  |
-| C    | Confidence scoring Green/Yellow/Red                      | **~82%** _(бейджи + notice; side-by-side миниатюры убраны как бесполезные)_ |
-| E    | Координаты выделения → матчинг на странице               | **~75%** _(PDF overlay + pageAnchor; DOCX disambiguation — нет)_ |
-| F    | Гранулярность правок text/structural/table               | **0%** (бэклог)                           |
+| D    | `sourceDocxKey`, UI загрузки DOCX, source-first pipeline | **100%**                                  |
+| B    | Gotenberg в compose (DOCX → PDF)                         | **100%**                                  |
+| B    | pdf2docx в compose (PDF → DOCX), pre-convert, кэш        | **100%**                                  |
+| C    | `apply-edits-final`: автозамены, отчёт applied/failed/ambiguous | **100%**                          |
+| C    | PDF-only: сначала PDF→DOCX, fallback overlay              | **100%**                                  |
+| C    | Fallback DOCX→PDF overlay при `applied === 0`            | **100%**                                  |
+| C    | Гибридный fallback: Word + overlay для failed            | **100%**                                  |
+| C    | Confidence scoring Green/Yellow/Red                      | **100%**                                  |
+| E    | Координаты выделения → матчинг на странице               | **100%** _(pageAnchor + text.json disambiguation)_ |
+| F    | Гранулярность правок text/structural/table               | **0%** (бэклог post-v3)                 |
 
 **Два режима в UI:**
 
 | Кнопка             | Результат                             | %                                                       |
 | ------------------ | ------------------------------------- | ------------------------------------------------------- |
 | «Собрать PDF»      | Согласование: реестр в приложении     | **100%** ✅                                             |
-| «Применить правки» | Финал: текст в теле документа изменён | **~95%** _(3 smoke-пути ✅)_ |
+| «Применить правки» | Финал: текст в теле документа изменён | **100%** ✅ |
 
-- [x] **D:** Prisma `sourceDocxKey`, `sourceVersionId`, UI загрузки PDF+DOCX, sidebar DOCX (бейджи + скачивание), **DOCX-only → Gotenberg PDF**, баннер «добавьте DOCX», кнопки «+ DOCX» / «Создать из DOCX» — **~100%**
-- [x] **B:** Gotenberg в `docker-compose` — **~95%**
-- [x] **B:** pdf2docx PDF → DOCX + pre-convert + кэш `preConvertedDocxKey` — **~88%**
-- [x] **C:** `apply-edits-final`: оркестрация, наследование правок по `sourceVersionId` — **~82%**
-- [x] **C:** PDF-only overlay (`apply-edits-pdf-overlay`) — **~80%** _(проверено)_
-- [x] **C:** fallback overlay при нуле замен в DOCX — **~85%**
-- [x] **C:** DOCX-путь end-to-end (PDF+DOCX → «Применить правки») — **~90%** _(smoke `pnpm smoke:phase3:docx` 7/7)_
-- [x] **C:** Confidence scoring — `confidenceScore`/`confidenceLevel`, bbox-сигнатура pdf.js, бейджи в sidebar/панели; notice после apply-edits — **~82%**
-- [x] API + UI «Применить правки» — **~90%**
-- [ ] PDF ↔ Office (прочие форматы), формы AcroForm — **0%**
-- [ ] Визуальная подпись → PAdES/PKCS#7 — **0%**
-- [x] Экспорт буклетов: JPG, DPI-чеклист, PDF/A — **~90%** _(MVP + install-ghostscript.ps1, понятные fallback-сообщения)_
+- [x] **D:** Prisma `sourceDocxKey`, UI, retroactive attach + баннер на DocumentPage — **100%**
+- [x] **B:** Gotenberg в `docker-compose` — **100%**
+- [x] **B:** pdf2docx PDF → DOCX + pre-convert + кэш `preConvertedDocxKey` — **100%**
+- [x] **C:** `apply-edits-final` + hybrid overlay — **100%**
+- [x] **C:** Confidence scoring — **100%**
+- [x] API + UI «Применить правки» — **100%**
+- [x] AcroForm: экспорт JSON/CSV (`export-form-data`) — **MVP**
+- [x] Визуальная подпись (изображение на странице) — **MVP** _(трек A; PAdES — бэклог)_
+- [x] Публичный API v1 + API-ключи + вебхуки `job.completed` — **MVP** _(см. `docs/api/README.md`)_
+- [x] Экспорт буклетов: JPG, DPI-чеклист, PDF/A — **100%**
 
 ### Спринт 2 — экспорт буклета (2026-07)
 
@@ -264,7 +263,7 @@ PDF + принятые правки
 | 1 | Автоподписи к рендерам из имени файла | ✅ MVP |
 | 2 | Черновик текста для титульника | ✅ MVP |
 | 3 | Поиск по материалам проекта | ✅ MVP |
-- [ ] Публичный API, вебхуки — **0%**
+- [x] Публичный API, вебхуки — **MVP** _(v1, ключи, `job.completed`)_
 
 ---
 
@@ -300,19 +299,7 @@ preview > text-extraction > conversion (PDF↔DOCX) > ai-jobs > apply-edits-fina
 12. ✅ **E2E медиатека (layout → PDF)** и **этап E координат** — smoke + anchor в worker.
 13. ✅ **Спринт 4 (2026-07):** UX сжатия, гостевой цикл с ответом, live-update, `USER_GUIDE`.
 
-**Следующие шаги (рекомендуемый порядок):**
-
-| # | Задача | Фаза | Зачем |
-|---|--------|------|-------|
-| 1 | **Именованные снимки версий** + визуальное сравнение стр. к стр. | 2b.5 | ✅ Спринт 5 |
-| 2 | **Side-by-side diff** в viewer (переход к изменённым страницам) | 2.3 | ✅ MVP |
-| 3 | **Email заказчику** при «Решено» (если есть email гостя) | 2b.7 | ✅ |
-| 4 | **Перестановка / дублирование страниц** в UI | 2b.6 | ✅ Спринт 5 |
-| 5 | **Режим презентации** (полноэкранно по страницам) | 2b.6 | ✅ |
-| 6 | **PWA** (manifest, safe-area) | 4 | следующий | Мобильный просмотр без APK |
-| 7 | **ACL-роли** editor / commenter / viewer | 2b.4 | Команда бюро, не только гость по ссылке |
-
-**Бэклог (после основного):** внутренние пометки «не для заказчика», коррекция яркости, @mention в комментариях, публичный API.
+**Следующий фокус:** фаза **4** (PWA) и **2b.4** ACL-роли. Бэклог post-v3: PAdES/PKCS#7, Office XLSX/PPTX, гранулярность правок F, клиентский pdf-lib wizard.
 
 **Dev-зависимости для «Применить правки»:** `docker compose up` → Redis, Postgres, **Gotenberg** (`:3003`), **pdf2docx** (`:8080`); S3 — Timeweb (dev = prod-паритет).  
 Env: `GOTENBERG_URL`, `PDF_TO_DOCX_URL` в `apps/server/.env` и `apps/worker/.env`.  

@@ -7,7 +7,8 @@ export type ApplyEditsMethod =
   | 'docx'
   | 'docx-converted'
   | 'pdf-overlay'
-  | 'docx-fallback-overlay';
+  | 'docx-fallback-overlay'
+  | 'docx-hybrid';
 
 export type ConfidenceDetails = {
   sourcePageCount: number;
@@ -44,7 +45,7 @@ export function scoreDocxReflowConfidence(params: {
   sourcePageCount: number;
   targetPageCount: number;
   editedPages: number[];
-  method: 'docx' | 'docx-converted';
+  method: 'docx' | 'docx-converted' | 'docx-hybrid';
 }): ConfidenceResult {
   const { sourcePageCount, targetPageCount, editedPages, method } = params;
   const pageCountDelta = Math.abs(sourcePageCount - targetPageCount);

@@ -23,7 +23,7 @@ export async function computeApplyEditsConfidence(params: {
   const sourceBuffer = await getObjectBuffer(params.sourceS3Key);
   const editedPages = [...new Set(params.edits.map((e) => e.page))];
 
-  if (params.method === 'docx' || params.method === 'docx-converted') {
+  if (params.method === 'docx' || params.method === 'docx-converted' || params.method === 'docx-hybrid') {
     const [sourceExtracted, targetExtracted] = await Promise.all([
       extractTextFromPdf(sourceBuffer),
       extractTextFromPdf(params.targetPdfBuffer),
@@ -32,7 +32,7 @@ export async function computeApplyEditsConfidence(params: {
       sourcePageCount: sourceExtracted.pageCount,
       targetPageCount: targetExtracted.pageCount,
       editedPages,
-      method: params.method,
+      method: params.method === 'docx-hybrid' ? 'docx-hybrid' : params.method,
     });
   }
 

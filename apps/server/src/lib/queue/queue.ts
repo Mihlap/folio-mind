@@ -222,6 +222,47 @@ export async function enqueueExportHighlightDocxJob(
   await optimizeQueue.add('export-highlight-docx', payload, { jobId: payload.jobId });
 }
 
+export async function enqueueExportFormDataJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    format?: 'json' | 'csv';
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('export-form-data', payload, { jobId: payload.jobId });
+}
+
+export async function enqueueApplyVisualSignatureJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    sourceVersionId: string;
+    targetVersionId: string;
+    tenantId: string;
+    sourceS3Key: string;
+    targetS3Key: string;
+    imageS3Key: string;
+    page: number;
+    xNorm: number;
+    yNorm: number;
+    widthNorm: number;
+    heightNorm: number;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('apply-visual-signature', payload, { jobId: payload.jobId });
+}
+
 export async function enqueueExportBookletJob(
   env: Env,
   payload: {

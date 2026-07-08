@@ -26,6 +26,7 @@ import { layoutTemplateRoutes } from './routes/layout-templates.js';
 import { mediaRoutes } from './routes/media.js';
 import { projectRoutes } from './routes/projects.js';
 import { pageReviewRoutes } from './routes/page-review.js';
+import { apiV1Routes } from './routes/api/v1/index.js';
 export type BuildAppOptions = {
   env: Env;
   skipDatabase?: boolean;
@@ -82,6 +83,7 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(layoutTemplateRoutes);
     await app.register(projectRoutes);
     await app.register(pageReviewRoutes);
+    await app.register(apiV1Routes, { env: options.env });
   } else if (options.skipDatabase) {
     await app.register(healthRoutes, { env: options.env });
   }

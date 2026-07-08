@@ -4,7 +4,7 @@ import type { WorkerEnv } from '../../lib/config/env.js';
 import { convertDocxToPdf, isGotenbergConfigured } from '../../lib/convert/gotenberg.js';
 import { resolveDocxForEdits } from '../../lib/convert/resolve-docx.js';
 import { applyEditsToDocx, type DocxEditResult } from '../../lib/docx/apply-edits.js';
-import { applyEditsViaPdfOverlay } from '../../lib/pdf/apply-edits-pdf-overlay.js';
+import { applyEditsViaPdfOverlay, applyEditsViaPdfOverlayBuffer } from '../../lib/pdf/apply-edits-pdf-overlay.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import { resolveS3Key } from '@folio-mind/pdf-contracts';
 import { deleteObjectByKey, isWorkerS3Configured, putObjectBuffer } from '../../lib/storage/s3.js';
@@ -13,6 +13,11 @@ import {
   finalizeOptimizeVersion,
 } from '../../lib/pdf/finalize-optimize-version.js';
 import { computeApplyEditsConfidence } from '../../lib/pdf/compute-apply-edits-confidence.js';
+import {
+  buildPageContextSearchVariants,
+  getPageTextForEdit,
+  loadPageTextHints,
+} from '../../lib/docx/page-disambiguation.js';
 
 type ApplyEditsFinalPayload = WorkerJobPayload & {
   operationJobId?: string;
@@ -44,11 +49,12 @@ function readPageAnchor(meta: unknown): { xNorm: number; yNorm: number } | undef
   return { xNorm: anchor.xNorm, yNorm: anchor.yNorm };
 }
 
-type ApplyMethod = 'docx' | 'docx-converted' | 'pdf-overlay' | 'docx-fallback-overlay';
+type ApplyMethod = 'docx' | 'docx-converted' | 'pdf-overlay' | 'docx-fallback-overlay' | 'docx-hybrid';
 
 type DocxPipelineResult = {
   applied: number;
   failed: number;
+  ambiguous: number;
   modifiedDocx: Buffer;
   docxS3Key: string;
   docxSource: string;
@@ -72,6 +78,7 @@ async function completeWithPdf(params: {
   pageCount: number;
   applied: number;
   failed: number;
+  ambiguous?: number;
   method: ApplyMethod;
   docxS3Key?: string;
   docxSource?: string;
@@ -94,6 +101,7 @@ async function completeWithPdf(params: {
     pageCount,
     applied,
     failed,
+    ambiguous = 0,
     method,
     docxS3Key,
     docxSource,
@@ -101,7 +109,7 @@ async function completeWithPdf(params: {
     requestId,
   } = params;
   const prisma = getPrisma();
-  const partial = failed > 0;
+  const partial = failed > 0 || ambiguous > 0;
   await putObjectBuffer({
     key: targetS3Key,
     body: pdfBuffer,
@@ -158,6 +166,7 @@ async function completeWithPdf(params: {
         targetVersionId,
         applied,
         failed,
+        ambiguous,
         previewJobId,
         docxS3Key,
         method,
@@ -167,7 +176,7 @@ async function completeWithPdf(params: {
         confidenceSummary: confidence?.summary,
         status: partial ? 'partial' : 'success',
         message: partial
-          ? `Применено ${applied} из ${edits.length} правок (${methodLabel(method)}).`
+          ? `Применено ${applied} из ${edits.length} правок${ambiguous > 0 ? `, неоднозначно: ${ambiguous}` : ''} (${methodLabel(method)}).`
           : method === 'docx' || method === 'docx-converted'
             ? 'PDF и DOCX обновлены из Word.'
             : method === 'pdf-overlay'
@@ -190,26 +199,37 @@ function methodLabel(method: ApplyMethod): string {
       return 'наложение на PDF';
     case 'docx-fallback-overlay':
       return 'наложение на PDF (fallback)';
+    case 'docx-hybrid':
+      return 'Word + наложение на PDF';
   }
 }
 
 async function runDocxPipeline(params: {
   documentId: string;
   rootVersionId: string;
+  editSourceVersionId: string;
   sourceS3Key: string;
   targetVersionId: string;
   userSourceDocxKey: string | null;
   edits: Edit[];
 }): Promise<DocxPipelineResult | null> {
   try {
+    const pageHints = await loadPageTextHints(params.documentId, params.editSourceVersionId);
     const { buffer, source: docxSourceKind } = await resolveDocxForEdits({
       documentId: params.documentId,
       rootVersionId: params.rootVersionId,
       sourcePdfS3Key: params.sourceS3Key,
       userSourceDocxKey: params.userSourceDocxKey,
     });
-    const { modifiedDocx, applied, failed, results } = await applyEditsToDocx(buffer, params.edits);
-    if (applied === 0) {
+    const { modifiedDocx, applied, failed, ambiguous, results } = await applyEditsToDocx(
+      buffer,
+      params.edits,
+      {
+        pageContextVariants: (edit) =>
+          buildPageContextSearchVariants(getPageTextForEdit(pageHints, edit.page), edit.originalText),
+      },
+    );
+    if (applied === 0 && ambiguous === 0) {
       console.warn('[apply-edits-final] DOCX: ни одна правка не найдена в Word', {
         documentId: params.documentId,
         failed,
@@ -230,6 +250,7 @@ async function runDocxPipeline(params: {
     return {
       applied,
       failed,
+      ambiguous,
       modifiedDocx,
       docxS3Key,
       docxSource: docxSourceKind,
@@ -328,6 +349,7 @@ export async function processApplyEditsFinalJob(
     const docxPipeline = await runDocxPipeline({
       documentId,
       rootVersionId: resolvedRootVersionId,
+      editSourceVersionId: resolvedEditVersionId,
       sourceS3Key,
       targetVersionId,
       userSourceDocxKey: docxUserKey ?? null,
@@ -348,6 +370,7 @@ export async function processApplyEditsFinalJob(
               targetVersionId,
               applied: docxPipeline.applied,
               failed: docxPipeline.failed,
+              ambiguous: docxPipeline.ambiguous,
               docxS3Key: docxPipeline.docxS3Key,
               method: docxPipeline.method,
               editResults: docxPipeline.editResults,
@@ -360,7 +383,31 @@ export async function processApplyEditsFinalJob(
         return;
       }
       try {
-        const pdfBuffer = await convertDocxToPdf(docxPipeline.modifiedDocx);
+        let pdfBuffer = await convertDocxToPdf(docxPipeline.modifiedDocx);
+        let appliedTotal = docxPipeline.applied;
+        let failedTotal = docxPipeline.failed;
+        let ambiguousTotal = docxPipeline.ambiguous;
+        let method: ApplyMethod = docxPipeline.method;
+
+        const pendingOverlay = docxPipeline.editResults
+          .filter((r) => r.status === 'failed')
+          .map((r) => ({
+            page: r.page,
+            originalText: r.originalText,
+            suggestion: r.suggestion,
+            anchor: edits.find((e) => e.originalText === r.originalText)?.anchor,
+          }));
+
+        if (pendingOverlay.length > 0) {
+          const hybrid = await applyEditsViaPdfOverlayBuffer(pdfBuffer, pendingOverlay);
+          if (hybrid.applied > 0) {
+            pdfBuffer = hybrid.buffer;
+            appliedTotal += hybrid.applied;
+            failedTotal = Math.max(0, failedTotal - hybrid.applied);
+            method = 'docx-hybrid';
+          }
+        }
+
         await completeWithPdf({
           env,
           data,
@@ -375,9 +422,10 @@ export async function processApplyEditsFinalJob(
           edits,
           pdfBuffer,
           pageCount: 0,
-          applied: docxPipeline.applied,
-          failed: docxPipeline.failed,
-          method: docxPipeline.method,
+          applied: appliedTotal,
+          failed: failedTotal,
+          ambiguous: ambiguousTotal,
+          method,
           docxS3Key: docxPipeline.docxS3Key,
           docxSource: docxPipeline.docxSource,
           editResults: docxPipeline.editResults,

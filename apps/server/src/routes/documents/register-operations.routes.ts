@@ -15,6 +15,8 @@ import type { Env } from '../../lib/config/env.js';
 import {
   enqueueApplyEditsFinalJob,
   enqueueApplyLayoutPdfJob,
+  enqueueApplyVisualSignatureJob,
+  enqueueExportFormDataJob,
   enqueueExportHighlightDocxJob,
   enqueueMergeVersionsJob,
   enqueueOptimizePdfJob,
@@ -922,6 +924,148 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       });
       return reply.status(202).send({
         operationJobId: operationJob.id,
+        status: 'processing',
+      });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/export-form-data',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        body: z.object({ format: z.enum(['json', 'csv']).default('json') }),
+        response: {
+          202: z.object({ operationJobId: z.string(), status: z.literal('processing') }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      const operationJob = await app.prisma.job.create({
+        data: {
+          type: 'export-form-data',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: { documentId, versionId, format: request.body.format },
+        },
+      });
+      await enqueueExportFormDataJob(env, {
+        jobId: `export-form-data-${operationJob.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        versionId,
+        tenantId: user.tenantId,
+        sourceS3Key: sourceVersion.s3Key,
+        format: request.body.format,
+        requestId: request.requestId,
+      });
+      return reply.status(202).send({ operationJobId: operationJob.id, status: 'processing' });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/apply-visual-signature',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        body: z.object({
+          imageS3Key: z.string().min(1),
+          page: z.number().int().min(1).default(1),
+          xNorm: z.number().min(0).max(1).default(0.1),
+          yNorm: z.number().min(0).max(1).default(0.8),
+          widthNorm: z.number().min(0.01).max(1).default(0.25),
+          heightNorm: z.number().min(0.01).max(1).default(0.1),
+        }),
+        response: {
+          202: z.object({
+            operationJobId: z.string(),
+            versionId: z.string(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!sourceVersion || sourceVersion.status !== 'ready') {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
+      const targetS3Key = buildOriginalKey(
+        document.id,
+        nextVersionNumber,
+        `signed-v${sourceVersion.version}.pdf`,
+      );
+      const [targetVersion, operationJob] = await app.prisma.$transaction([
+        app.prisma.documentVersion.create({
+          data: {
+            documentId: document.id,
+            version: nextVersionNumber,
+            s3Key: targetS3Key,
+            size: BigInt(0),
+            mimeType: sourceVersion.mimeType,
+            status: 'processing',
+            sourceVersionId: sourceVersion.id,
+          },
+        }),
+        app.prisma.job.create({
+          data: {
+            type: 'apply-visual-signature',
+            status: 'queued',
+            tenantId: user.tenantId,
+            payload: { documentId, sourceVersionId: sourceVersion.id },
+          },
+        }),
+      ]);
+      const { imageS3Key, page, xNorm, yNorm, widthNorm, heightNorm } = request.body;
+      await enqueueApplyVisualSignatureJob(env, {
+        jobId: `apply-visual-signature-${targetVersion.id}`,
+        operationJobId: operationJob.id,
+        documentId,
+        sourceVersionId: sourceVersion.id,
+        targetVersionId: targetVersion.id,
+        tenantId: user.tenantId,
+        sourceS3Key: sourceVersion.s3Key,
+        targetS3Key,
+        imageS3Key,
+        page,
+        xNorm,
+        yNorm,
+        widthNorm,
+        heightNorm,
+        requestId: request.requestId,
+      });
+      return reply.status(202).send({
+        operationJobId: operationJob.id,
+        versionId: targetVersion.id,
         status: 'processing',
       });
     },

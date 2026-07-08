@@ -317,6 +317,33 @@ CREATE TABLE "RagChunk" (
     CONSTRAINT "RagChunk_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "ApiKey" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "keyHash" TEXT NOT NULL,
+    "scopes" TEXT[] DEFAULT ARRAY['documents:read']::TEXT[],
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastUsedAt" TIMESTAMP(3),
+    "revokedAt" TIMESTAMP(3),
+
+    CONSTRAINT "ApiKey_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "WebhookEndpoint" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "secret" TEXT NOT NULL,
+    "events" TEXT[] DEFAULT ARRAY['job.completed']::TEXT[],
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "WebhookEndpoint_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE INDEX "LayoutTemplate_tenantId_updatedAt_idx" ON "LayoutTemplate"("tenantId", "updatedAt");
 
@@ -431,6 +458,15 @@ CREATE INDEX "RagChunk_sourceId_idx" ON "RagChunk"("sourceId");
 -- CreateIndex
 CREATE INDEX "RagChunk_tenantId_idx" ON "RagChunk"("tenantId");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "ApiKey_keyHash_key" ON "ApiKey"("keyHash");
+
+-- CreateIndex
+CREATE INDEX "ApiKey_tenantId_createdAt_idx" ON "ApiKey"("tenantId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "WebhookEndpoint_tenantId_enabled_idx" ON "WebhookEndpoint"("tenantId", "enabled");
+
 -- AddForeignKey
 ALTER TABLE "LayoutTemplate" ADD CONSTRAINT "LayoutTemplate_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -493,3 +529,9 @@ ALTER TABLE "RagSource" ADD CONSTRAINT "RagSource_tenantId_fkey" FOREIGN KEY ("t
 
 -- AddForeignKey
 ALTER TABLE "RagChunk" ADD CONSTRAINT "RagChunk_sourceId_fkey" FOREIGN KEY ("sourceId") REFERENCES "RagSource"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ApiKey" ADD CONSTRAINT "ApiKey_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WebhookEndpoint" ADD CONSTRAINT "WebhookEndpoint_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;

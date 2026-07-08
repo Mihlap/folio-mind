@@ -34,6 +34,7 @@ import {
 } from '../../components/documents/DocumentRightPanel.js';
 import { DocumentVersionsSidebar } from '../../components/documents/DocumentVersionsSidebar.js';
 import { DocumentConfidenceNotice } from '../../components/documents/DocumentConfidenceNotice.js';
+import { DocumentSourceDocxBanner } from '../../components/documents/DocumentSourceDocxBanner.js';
 import { useDocumentWorkspace } from '../../context/document-workspace-context.js';
 import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js';
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
@@ -604,6 +605,16 @@ export function DocumentPage() {
                   summary={activeVersion?.confidenceSummary}
                   score={activeVersion?.confidenceScore}
                   onOpenCompare={openCompareTools}
+                />
+              </div>
+            )}
+            {id && activeVersion?.id && activeVersion.status === 'ready' && (
+              <div className="mb-2 shrink-0">
+                <DocumentSourceDocxBanner
+                  documentId={id}
+                  versionId={activeVersion.id}
+                  sourceDocxKey={activeVersion.sourceDocxKey}
+                  onAttached={() => void refetchDocument()}
                 />
               </div>
             )}

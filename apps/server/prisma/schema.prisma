@@ -17,6 +17,8 @@ model Tenant {
   ragSources RagSource[]
   mediaAssets MediaAsset[]
   layoutTemplates LayoutTemplate[]
+  apiKeys ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
 }
 
 model LayoutTemplate {
@@ -348,4 +350,31 @@ model RagChunk {
 
   @@index([sourceId])
   @@index([tenantId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique
+  scopes     String[]  @default(["documents:read"])
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([tenantId, createdAt])
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  url       String
+  secret    String
+  events    String[] @default(["job.completed"])
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, enabled])
 }

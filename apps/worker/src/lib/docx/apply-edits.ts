@@ -5,7 +5,8 @@ export type DocxEdit = {
   page: number;
 };
 export type DocxEditResult = DocxEdit & {
-  status: 'applied' | 'failed';
+  status: 'applied' | 'failed' | 'ambiguous';
+  matchCount?: number;
 };
 type WtSegment = {
   index: number;
@@ -24,7 +25,7 @@ function escapeXml(text: string): string {
 function normalizeWs(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
-function normalizeForMatch(text: string): string {
+export function normalizeForMatch(text: string): string {
   return text
     .replace(/\u00A0/g, ' ')
     .replace(/\u00AD/g, '')
@@ -130,15 +131,42 @@ function mapPlainSpanToSegments(
   if (startSeg === -1 || endSeg === -1) return null;
   return { startSeg, endSeg, startOff, endOff };
 }
+function countOccurrencesInXml(xml: string, search: string): number {
+  let total = 0;
+  for (const variant of searchVariants(search)) {
+    const segments = collectWtSegments(xml);
+    if (segments.length === 0) continue;
+    const plain = buildPlainWithStructuralSpaces(xml, segments);
+    const plainNorm = normalizeForMatch(plain);
+    const flexPattern = normalizeForMatch(variant)
+      .split(' ')
+      .filter(Boolean)
+      .map((word) => (/^_{2,}$/.test(word) ? '[_\\s]{2,}' : escapeRegex(word)))
+      .join('\\s+');
+    if (!flexPattern) continue;
+    const re = new RegExp(flexPattern, 'giu');
+    const matches = plainNorm.match(re);
+    total += matches?.length ?? 0;
+    if (total > 0) break;
+    if (xml.includes(variant)) total += 1;
+  }
+  return total;
+}
+
 function replaceAcrossWordRuns(
   xml: string,
   search: string,
   replacement: string,
+  extraVariants: string[] = [],
 ): {
   xml: string;
   found: boolean;
 } {
-  for (const variant of searchVariants(search)) {
+  const variants = [...extraVariants, ...searchVariants(search)];
+  const seen = new Set<string>();
+  for (const variant of variants) {
+    if (!variant || seen.has(variant)) continue;
+    seen.add(variant);
     const hit = replaceAcrossWordRunsOnce(xml, variant, replacement);
     if (hit.found) return hit;
   }
@@ -227,13 +255,19 @@ function findPlainSpanForNormMatch(
   }
   return null;
 }
+export type ApplyEditsOptions = {
+  pageContextVariants?: (edit: DocxEdit) => string[];
+};
+
 export async function applyEditsToDocx(
   docxBuffer: Buffer,
   edits: DocxEdit[],
+  options?: ApplyEditsOptions,
 ): Promise<{
   modifiedDocx: Buffer;
   applied: number;
   failed: number;
+  ambiguous: number;
   results: DocxEditResult[];
 }> {
   const sortedEdits = [...edits].sort((a, b) => b.originalText.length - a.originalText.length);
@@ -245,21 +279,41 @@ export async function applyEditsToDocx(
         /^word\/header\d*\.xml$/.test(name) ||
         /^word\/footer\d*\.xml$/.test(name)),
   );
+  const partXml = new Map<string, string>();
+  for (const path of partPaths) {
+    const file = zip.file(path);
+    if (file) partXml.set(path, await file.async('string'));
+  }
   let applied = 0;
   let failed = 0;
+  let ambiguous = 0;
   const results: DocxEditResult[] = [];
   for (const edit of sortedEdits) {
+    const extraVariants = options?.pageContextVariants?.(edit) ?? [];
+    let matchCount = 0;
+    for (const xml of partXml.values()) {
+      matchCount += countOccurrencesInXml(xml, edit.originalText);
+      for (const variant of extraVariants) {
+        matchCount += countOccurrencesInXml(xml, variant);
+      }
+    }
+    if (matchCount > 1 && extraVariants.length === 0) {
+      ambiguous++;
+      results.push({ ...edit, status: 'ambiguous', matchCount });
+      continue;
+    }
     let found = false;
     for (const path of partPaths) {
-      const file = zip.file(path);
-      if (!file) continue;
-      const xml = await file.async('string');
+      const xml = partXml.get(path);
+      if (!xml) continue;
       const { xml: next, found: hit } = replaceAcrossWordRuns(
         xml,
         edit.originalText,
         edit.suggestion,
+        extraVariants,
       );
       if (hit) {
+        partXml.set(path, next);
         zip.file(path, next);
         found = true;
         break;
@@ -268,6 +322,9 @@ export async function applyEditsToDocx(
     if (found) {
       applied++;
       results.push({ ...edit, status: 'applied' });
+    } else if (matchCount > 1) {
+      ambiguous++;
+      results.push({ ...edit, status: 'ambiguous', matchCount });
     } else {
       failed++;
       results.push({ ...edit, status: 'failed' });
@@ -279,5 +336,5 @@ export async function applyEditsToDocx(
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     }),
   );
-  return { modifiedDocx, applied, failed, results };
+  return { modifiedDocx, applied, failed, ambiguous, results };
 }

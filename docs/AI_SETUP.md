@@ -35,8 +35,4 @@ GIGACHAT_TIMEOUT=180
 
 Локальные копии проектов на этом ПК не найдены. Проверьте:
 
-- `apps/server/.env` в **folio-mind** (если уже настраивали)
-- `apps/backend/.env` в клоне **Synastry**
-- корневой `.env` в **Pagecraft** / Landing-generator
-
 Скопируйте `GIGACHAT_CREDENTIALS` в `apps/server/.env` folio-mind.

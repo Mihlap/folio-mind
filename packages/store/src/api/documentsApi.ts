@@ -182,6 +182,19 @@ export const documentsApi = baseApi.injectEndpoints({
         method: 'POST',
         body: { docxS3Key },
       }),
+      invalidatesTags: (_r, _e, { documentId }) => [
+        { type: 'Documents', id: documentId },
+      ],
+    }),
+    attachSourceDocx: build.mutation<
+      { docxS3Key: string; uploadUrl: string },
+      { documentId: string; versionId: string; fileName: string }
+    >({
+      query: ({ documentId, versionId, fileName }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/attach-source-docx`,
+        method: 'POST',
+        body: { fileName },
+      }),
     }),
     createDocumentVersion: build.mutation<
       {
@@ -774,6 +787,7 @@ export const {
   useCreateDocumentVersionFromDocxMutation,
   useCompleteUploadMutation,
   useCompleteDocxUploadMutation,
+  useAttachSourceDocxMutation,
   useUploadVersionFileMutation,
   useDeleteDocumentMutation,
   useDeleteDocumentVersionMutation,
