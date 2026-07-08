@@ -81,7 +81,9 @@ export async function processApplyVisualSignatureJob(env: WorkerEnv, data: Paylo
     const message = err instanceof Error ? err.message : 'apply-visual-signature failed';
     try {
       await deleteObjectByKey(targetS3Key!);
-    } catch {}
+    } catch {
+      // Cleanup is best-effort; keep the original job failure visible.
+    }
     await failOptimizeOperation({
       operationJobId,
       targetVersionId,

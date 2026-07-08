@@ -25,6 +25,14 @@ import {
   versionIntegrityResponseSchema,
   versionListItemSchema,
 } from './schemas.js';
+function toConfidenceLevel(value: string | null): 'green' | 'yellow' | 'red' | null {
+  return value === 'green' || value === 'yellow' || value === 'red' ? value : null;
+}
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
 export const registerReadRoutes: FastifyPluginAsync<{
   env: Env;
 }> = async (app, opts) => {
@@ -168,10 +176,10 @@ export const registerReadRoutes: FastifyPluginAsync<{
             createdAt: v.createdAt.toISOString(),
             integrityStatus: v.integrityStatus,
             integritySummary: v.integritySummary,
-            confidenceLevel: v.confidenceLevel ?? null,
+            confidenceLevel: toConfidenceLevel(v.confidenceLevel),
             confidenceScore: v.confidenceScore ?? null,
             confidenceSummary: v.confidenceSummary ?? null,
-            confidenceDetails: (v as { confidenceDetails?: unknown }).confidenceDetails ?? null,
+            confidenceDetails: toRecord(v.confidenceDetails),
             sourceVersionId: (v as { sourceVersionId?: string | null }).sourceVersionId ?? null,
             sourceDocxKey: v.sourceDocxKey ?? null,
             hasAppliedDocx: appliedDocxVersionIds.has(v.id),

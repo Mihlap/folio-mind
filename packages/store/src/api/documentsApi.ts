@@ -481,6 +481,7 @@ export const documentsApi = baseApi.injectEndpoints({
         versionId: string;
         version: number;
         status: 'processing';
+        replacedInPlace: boolean;
       },
       {
         documentId: string;
@@ -504,17 +505,19 @@ export const documentsApi = baseApi.injectEndpoints({
         versionId: string;
         version: number;
         status: 'processing';
+        replacedInPlace: boolean;
       },
       {
         documentId: string;
         versionId: string;
         pages: number[];
+        saveMode?: 'new_version' | 'replace_current';
       }
     >({
-      query: ({ documentId, versionId, pages }) => ({
+      query: ({ documentId, versionId, pages, saveMode = 'new_version' }) => ({
         url: `/documents/${documentId}/versions/${versionId}/operations/rearrange-pages`,
         method: 'POST',
-        body: { pages },
+        body: { pages, saveMode },
       }),
       invalidatesTags: (_r, _e, { documentId }) => [
         { type: 'Documents', id: 'LIST' },
@@ -527,6 +530,7 @@ export const documentsApi = baseApi.injectEndpoints({
         versionId: string;
         version: number;
         status: 'processing';
+        replacedInPlace: boolean;
       },
       {
         documentId: string;
@@ -572,6 +576,7 @@ export const documentsApi = baseApi.injectEndpoints({
         versionId: string;
         version: number;
         status: 'processing';
+        replacedInPlace: boolean;
       },
       {
         documentId: string;
@@ -582,13 +587,18 @@ export const documentsApi = baseApi.injectEndpoints({
           rect: { x: number; y: number; width: number; height: number };
           imageSrc: string;
           rotation: number;
+          crop?: { x: number; y: number; width: number; height: number };
+          sourceFileName?: string;
+          caption?: string;
         }>;
+        blankInsertions?: Array<{ afterPage: number; count: number }>;
+        saveMode?: 'new_version' | 'replace_current';
       }
     >({
-      query: ({ documentId, versionId, objects }) => ({
+      query: ({ documentId, versionId, objects, blankInsertions = [], saveMode = 'new_version' }) => ({
         url: `/documents/${documentId}/versions/${versionId}/operations/apply-layout-pdf`,
         method: 'POST',
-        body: { objects },
+        body: { objects, blankInsertions, saveMode },
       }),
       invalidatesTags: (_r, _e, { documentId }) => [
         { type: 'Documents', id: 'LIST' },
@@ -611,7 +621,7 @@ export const documentsApi = baseApi.injectEndpoints({
         url: `/documents/${documentId}/versions/${versionId}/operations/apply-edits-final`,
         method: 'POST',
       }),
-      invalidatesTags: (_r, _e, { documentId, versionId }) => [
+      invalidatesTags: (_r, _e, { documentId }) => [
         { type: 'Documents', id: 'LIST' },
         { type: 'Documents', id: documentId },
       ],

@@ -35,6 +35,7 @@ export function DocumentAiPanel({
   });
   const chatPending = isJobPending(chatJob?.status);
   const chatError = chatJob?.payload?.error;
+  const chatReply = chatJob?.payload?.reply;
   useEffect(() => {
     setChatJobId(null);
     setPollChat(false);
@@ -42,14 +43,14 @@ export function DocumentAiPanel({
     setChatInput('');
   }, [versionId]);
   useEffect(() => {
-    if (chatJob?.status === 'completed' && chatJob.payload?.reply) {
+    if (chatJob?.status === 'completed' && chatReply) {
       setPollChat(false);
-      setMessages((prev) => [...prev, { role: 'assistant', content: chatJob.payload!.reply! }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: chatReply }]);
     }
     if (chatJob?.status === 'failed') {
       setPollChat(false);
     }
-  }, [chatJob?.status, chatJob?.payload?.reply]);
+  }, [chatJob?.status, chatReply]);
   const configuredProviders = providersData?.providers.filter((p) => p.configured) ?? [];
   const messagesMaxHeight = embedded
     ? 'max-h-[min(42vh,360px)]'
@@ -93,7 +94,8 @@ export function DocumentAiPanel({
           <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold text-slate-900">Чат по документу</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Можно спрашивать о тексте PDF и о работе в РазУм — шаблоны, медиатека, макет, гостевая ссылка.
+              Можно спрашивать о тексте PDF и о работе в РазУм — шаблоны, медиатека, макет, гостевая
+              ссылка.
             </p>
           </div>
         )}

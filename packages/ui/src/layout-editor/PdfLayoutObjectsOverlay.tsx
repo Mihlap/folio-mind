@@ -126,14 +126,20 @@ export function PdfLayoutObjectsOverlay({
       if (!drag) return;
       const { pageWidthPx: w, pageHeightPx: h } = pageSizeRef.current;
       const step = snapStepRef.current;
-
-      if (step > 0 && w > 0 && h > 0) {
-        if (drag.kind === 'crop-resize') {
-          const next = snapLayoutRect(cropFromDrag(drag, event), step, 0.05);
-          onObjectCropChangeRef.current(drag.id, next);
+      if (w > 0 && h > 0 && drag.kind !== 'crop-resize') {
+        const next = rectFromDrag(drag, event, w, h);
+        if (drag.kind === 'move' && step > 0) {
+          onObjectChangeRef.current(drag.id, snapLayoutRect(next, step));
         } else {
-          const next = snapLayoutRect(rectFromDrag(drag, event, w, h), step);
           onObjectChangeRef.current(drag.id, next);
+        }
+      }
+      if (drag.kind === 'crop-resize') {
+        const next = cropFromDrag(drag, event);
+        if (step > 0) {
+          onObjectCropChangeRef.current(drag.id, snapLayoutRect(next, step, 0.05));
+        } else {
+          onObjectCropChangeRef.current(drag.id, next);
         }
       }
 

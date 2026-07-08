@@ -93,7 +93,3 @@ export function DocumentReviewStatusControl({
     </div>
   );
 }
-
-export function getDocumentReviewStatusLabel(status: DocumentReviewStatus): string {
-  return STATUS_LABEL[status];
-}

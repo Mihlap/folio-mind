@@ -5,11 +5,8 @@ import {
   useRequestBookletTitleDraftMutation,
   type BookletTitleDraftResult,
 } from '@folio-mind/store';
-import {
-  FeatureHelpButton,
-  reportActionBtnPrimary,
-  reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+import { FeatureHelpButton } from '../ui/FeatureHelp.js';
+import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 
 type Props = {

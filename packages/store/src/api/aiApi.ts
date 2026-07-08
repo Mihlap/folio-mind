@@ -19,7 +19,14 @@ export type AiJobPayload = {
   cached?: boolean;
   prompt?: string;
   suggestionCount?: number;
+  suggestionIds?: string[];
+  analyzedPageCount?: number;
+  scope?: 'document' | 'page';
+  page?: number;
+  resultHint?: string;
   ragChunkCount?: number;
+  errorDetail?: string;
+  rawText?: string;
 };
 export const aiApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -128,14 +135,20 @@ export const aiApi = baseApi.injectEndpoints({
         documentId: string;
         versionId: string;
         provider?: AiProviderId;
+        scope?: 'document' | 'page';
+        page?: number;
       }
     >({
-      query: ({ documentId, versionId, provider }) => ({
+      query: ({ documentId, versionId, provider, scope, page }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/suggestions`,
         method: 'POST',
-        body: { provider },
+        body: {
+          provider,
+          scope,
+          ...(scope === 'page' && page != null ? { page } : {}),
+        },
       }),
-      invalidatesTags: (_r, _e, { versionId }) => [{ type: 'AiSuggestions', id: versionId }],
+      // Список обновляем после завершения job в панели, не сразу после POST.
     }),
     applyAcceptedSuggestions: build.mutation<
       {

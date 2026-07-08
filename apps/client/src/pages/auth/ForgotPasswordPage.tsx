@@ -13,7 +13,9 @@ export function ForgotPasswordPage() {
     try {
       await forgotPassword({ email }).unwrap();
       setSent(true);
-    } catch {}
+    } catch {
+      // The mutation error state renders the message below.
+    }
   }
   return (
     <AuthLayout title="Восстановление пароля" subtitle="Отправим ссылку для сброса">

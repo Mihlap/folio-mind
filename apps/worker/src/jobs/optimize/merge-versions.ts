@@ -58,7 +58,10 @@ export async function processMergeVersionsJob(
     if (!exists) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }
@@ -81,7 +84,10 @@ export async function processMergeVersionsJob(
     if (!existsBeforeUpload) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }
@@ -121,7 +127,9 @@ export async function processMergeVersionsJob(
     const message = err instanceof Error ? err.message : 'Merge versions failed';
     try {
       await deleteObjectByKey(targetS3Key);
-    } catch {}
+    } catch {
+      // Cleanup is best-effort; keep the original job failure visible.
+    }
     try {
       await failOptimizeOperation({
         operationJobId,
@@ -129,7 +137,9 @@ export async function processMergeVersionsJob(
         error: message,
         payload: { documentId, sourceVersionIds, sourceS3Keys },
       });
-    } catch {}
+    } catch {
+      // Preserve the original error if the failure marker cannot be written.
+    }
     throw err;
   }
 }

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useHealthQuery } from '@folio-mind/store';
 import { Button } from '../../components/ui/Button.js';
 export function LandingPage() {
-  const { data: health } = useHealthQuery();
+  const { data: health } = useHealthQuery(undefined, { skip: import.meta.env.MODE === 'test' });
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6 sm:py-6">

@@ -57,6 +57,3 @@ export function DocumentPageThumbnail({ src, alt, layout, eager, staggerMs = 0 }
     />
   );
 }
-export function isThumbnailEager(page: number, initialPages = 15) {
-  return page <= initialPages;
-}

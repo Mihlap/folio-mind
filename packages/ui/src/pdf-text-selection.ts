@@ -310,7 +310,9 @@ export function readBrowserSelectionInTextLayer(
   for (const span of textLayer.querySelectorAll('span')) {
     try {
       if (range.intersectsNode(span)) hits.push(span);
-    } catch {}
+    } catch {
+      // Some detached text-layer nodes can make intersectsNode throw; skip them.
+    }
   }
   const highlightRects = selectionHighlightRectsInPage(range, pageRoot);
   const clientRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);

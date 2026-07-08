@@ -22,6 +22,8 @@ type ApplyLayoutPdfPayload = WorkerJobPayload & {
   sourceS3Key?: string;
   targetS3Key?: string;
   layoutObjects?: LayoutImageObject[];
+  blankInsertions?: Array<{ afterPage: number; count: number }>;
+  replaceInPlace?: boolean;
 };
 
 export async function processApplyLayoutPdfJob(
@@ -36,6 +38,8 @@ export async function processApplyLayoutPdfJob(
     sourceS3Key,
     targetS3Key,
     layoutObjects,
+    blankInsertions = [],
+    replaceInPlace = false,
     requestId,
   } = data;
 
@@ -54,6 +58,7 @@ export async function processApplyLayoutPdfJob(
 
   const prisma = getPrisma();
   await prisma.job.update({ where: { id: operationJobId }, data: { status: 'processing' } });
+  let originalPdfBuffer: Buffer | null = null;
 
   try {
     if (!isWorkerS3Configured()) {
@@ -67,13 +72,17 @@ export async function processApplyLayoutPdfJob(
     if (!exists) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }
 
     const sourceBuffer = await getObjectBuffer(sourceS3Key);
-    const applied = await applyLayoutToPdfBuffer(sourceBuffer, layoutObjects);
+    originalPdfBuffer = sourceBuffer;
+    const applied = await applyLayoutToPdfBuffer(sourceBuffer, layoutObjects, blankInsertions);
 
     const existsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },
@@ -82,7 +91,10 @@ export async function processApplyLayoutPdfJob(
     if (!existsBeforeUpload) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }
@@ -123,18 +135,36 @@ export async function processApplyLayoutPdfJob(
           appliedCount: applied.appliedCount,
           skippedCount: applied.skippedCount,
           previewJobId,
-          message:
-            applied.skippedCount > 0
+          message: replaceInPlace
+            ? applied.skippedCount > 0
+              ? `Макет сохранён в текущую версию: ${applied.appliedCount} из ${layoutObjects.length} объектов`
+              : `Макет сохранён в текущую версию: ${applied.appliedCount} изображений встроено в PDF`
+            : applied.skippedCount > 0
               ? `Макет сохранён: ${applied.appliedCount} из ${layoutObjects.length} объектов (часть вне диапазона страниц)`
               : `Макет сохранён: ${applied.appliedCount} изображений встроено в PDF`,
+          replaceInPlace,
         },
       },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Apply layout PDF failed';
-    try {
-      await deleteObjectByKey(targetS3Key);
-    } catch {}
+    if (replaceInPlace && sourceS3Key === targetS3Key && originalPdfBuffer) {
+      try {
+        await putObjectBuffer({
+          key: targetS3Key,
+          body: originalPdfBuffer,
+          contentType: 'application/pdf',
+        });
+      } catch {
+        // Restore is best-effort; the failure marker below keeps the version out of ready state.
+      }
+    } else {
+      try {
+        await deleteObjectByKey(targetS3Key);
+      } catch {
+        // Cleanup is best-effort; keep the original job failure visible.
+      }
+    }
     try {
       await failOptimizeOperation({
         operationJobId,
@@ -142,7 +172,9 @@ export async function processApplyLayoutPdfJob(
         error: message,
         payload: { documentId, sourceVersionId, objectCount: layoutObjects.length },
       });
-    } catch {}
+    } catch {
+      // Preserve the original error if the failure marker cannot be written.
+    }
     throw err;
   }
 }

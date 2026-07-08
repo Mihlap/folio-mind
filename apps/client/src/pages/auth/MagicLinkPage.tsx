@@ -21,7 +21,9 @@ export function MagicLinkPage() {
         captchaToken: captchaToken ?? undefined,
       }).unwrap();
       setSent(true);
-    } catch {}
+    } catch {
+      // The mutation error state renders the message below.
+    }
   }
   return (
     <AuthLayout title="Вход по ссылке" subtitle="Без пароля — письмо на почту">

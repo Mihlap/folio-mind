@@ -18,7 +18,7 @@ type ReadOnlyFieldProps = {
   dialogHint?: string;
 };
 
-function ExpandableFieldDialog({
+export function ExpandableFieldDialog({
   fieldId,
   label,
   dialogHint,

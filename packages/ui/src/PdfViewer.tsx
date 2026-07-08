@@ -115,15 +115,23 @@ export function PdfViewer({
   const [searchMatches, setSearchMatches] = useState<PdfSearchMatch[]>([]);
   const [selectionPrompt, setSelectionPrompt] = useState<PdfSelectionPrompt | null>(null);
   const [liveSelection, setLiveSelection] = useState<PdfLiveSelection | null>(null);
+  const [referencePageSizePt, setReferencePageSizePt] = useState({ width: 595, height: 842 });
   const selectionQuoteRef = useRef<string>('');
+  const layoutMaxPage = useMemo(() => {
+    let max = 0;
+    for (const object of layoutObjects) max = Math.max(max, Number(object.page) || 0);
+    return max;
+  }, [layoutObjects]);
+  const displayPageCount = Math.max(numPages, layoutEnabled ? layoutMaxPage : 0);
   const goToPage = useCallback(
     (next: number, source: 'external' | 'observer' = 'external') => {
-      const clamped = Math.max(1, Math.min(numPages || next, next));
+      const maxPage = displayPageCount || next;
+      const clamped = Math.max(1, Math.min(maxPage, next));
       lastPageUpdateSourceRef.current = source;
       if (onPageChange) onPageChange(clamped);
       else setInternalPage(clamped);
     },
-    [numPages, onPageChange],
+    [displayPageCount, onPageChange],
   );
   const computeScale = useCallback(
     (pageWidth: number) => {
@@ -194,6 +202,11 @@ export function PdfViewer({
         pdfRef.current = pdf;
         setNumPages(pdf.numPages);
         onDocumentPagesLoad?.(pdf.numPages);
+        void pdf.getPage(1).then((firstPage) => {
+          if (cancelled) return;
+          const viewport = firstPage.getViewport({ scale: 1 });
+          setReferencePageSizePt({ width: viewport.width, height: viewport.height });
+        });
         setPdfReady(true);
         onDocumentLoad?.();
       })
@@ -285,7 +298,7 @@ export function PdfViewer({
     );
     for (const el of pageRefs.current.values()) observer.observe(el);
     return () => observer.disconnect();
-  }, [displayMode, pdfReady, numPages, pageNum, goToPage]);
+  }, [displayMode, pdfReady, displayPageCount, pageNum, goToPage]);
   const activeMatch = searchMatches[activeMatchIndex];
   const showTextLayerOnPages = Boolean(searchQuery.trim()) || enableTextSelection;
   const selectionForPage = (pageNumber: number) => {
@@ -307,6 +320,8 @@ export function PdfViewer({
   );
   const pageProps = {
     pdf: pdfRef.current,
+    pdfPageCount: numPages,
+    referencePageSizePt,
     containerWidth,
     computeScale,
     pdfReady,
@@ -397,7 +412,7 @@ export function PdfViewer({
           ref={scrollRef}
           className={`scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-lg ${surfaceClass} ${surfaceTone === 'dark' ? 'p-1' : 'p-2'}`}
         >
-          {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => (
+          {Array.from({ length: displayPageCount }, (_, i) => i + 1).map((pageNumber) => (
             <div
               key={pageNumber}
               ref={(el) => {
@@ -412,7 +427,7 @@ export function PdfViewer({
                   {...pageProps}
                   pageNumber={pageNumber}
                   highlight={activeMatch?.page === pageNumber}
-                  showLabel={numPages > 1}
+                  showLabel={displayPageCount > 1}
                   selectionHighlightRects={selectionForPage(pageNumber)}
                 />
               ) : (
@@ -423,7 +438,7 @@ export function PdfViewer({
         </div>
       )}
 
-      {numPages > 1 && showPageNav && (
+      {displayPageCount > 1 && showPageNav && (
         <div className="mt-4 flex shrink-0 justify-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
             <PageNavButton
@@ -434,11 +449,11 @@ export function PdfViewer({
               ‹
             </PageNavButton>
             <span className="min-w-[4.5rem] text-center text-sm font-medium tabular-nums text-slate-700">
-              {pageNum} / {numPages}
+              {pageNum} / {displayPageCount}
             </span>
             <PageNavButton
               label="Следующая страница"
-              disabled={pageNum >= numPages}
+              disabled={pageNum >= displayPageCount}
               onClick={() => goToPage(pageNum + 1)}
             >
               ›

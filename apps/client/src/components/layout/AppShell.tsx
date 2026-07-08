@@ -2,7 +2,7 @@ import { NavLink, Outlet, useMatch } from 'react-router-dom';
 import { Fragment, useRef } from 'react';
 import { logout, useMeQuery } from '@folio-mind/store';
 import { DocumentVersionsSidebar } from '../documents/DocumentVersionsSidebar.js';
-import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
+import { useDocumentWorkspaceOptional } from '../../context/useDocumentWorkspace.js';
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { usePanelToggleLeftEdge } from '../../hooks/usePanelToggleCenterY.js';
 import { useAppDispatch } from '../../hooks/index.js';

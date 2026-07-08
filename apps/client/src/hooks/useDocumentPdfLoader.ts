@@ -155,7 +155,6 @@ export function useDocumentPdfLoader({
 
     const generation = ++loadGenerationRef.current;
     const abortController = new AbortController();
-    let presignedTimer: ReturnType<typeof setTimeout> | undefined;
     let bytesTimer: ReturnType<typeof setTimeout> | undefined;
 
     const fail = (message: string) => {
@@ -191,7 +190,7 @@ export function useDocumentPdfLoader({
     setPdfLoadStage('api-link');
     setPdfViewMode('presigned-url');
 
-    presignedTimer = setTimeout(() => {
+    const presignedTimer = setTimeout(() => {
       if (presignedLoadedRef.current || bytesAttemptRef.current) return;
       bytesTimer = setTimeout(() => {
         abortController.abort();

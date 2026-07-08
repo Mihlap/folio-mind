@@ -3,7 +3,6 @@ import { rgb } from 'pdf-lib';
 import {
   drawLabelAndExcerpt,
   drawTextLine,
-  drawWrappedParagraph,
   type PdfTextLayout,
 } from './pdf-text-layout.js';
 export type AppendixEdit = {

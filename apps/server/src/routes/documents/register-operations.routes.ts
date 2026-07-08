@@ -1,7 +1,12 @@
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
+import {
+  resolveReplaceCurrentTarget,
+  validateReplaceCurrentAllowed,
+} from '../../lib/documents/operation-save-target.js';
 import { compareAcceptedEdits } from '../../lib/documents/compare-accepted-edits.js';
 import {
   resolveEditSourceVersionId,
@@ -39,6 +44,47 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
 }> = async (app, opts) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const env = opts.env;
+
+  async function markVersionOperationEnqueueFailed(params: {
+    operationJobId: string;
+    targetVersionId: string;
+    err: unknown;
+    restoreReady?: boolean;
+  }): Promise<void> {
+    const message =
+      params.err instanceof Error ? params.err.message : 'Failed to enqueue operation job';
+    await app.prisma.$transaction([
+      app.prisma.documentVersion.update({
+        where: { id: params.targetVersionId },
+        data: { status: params.restoreReady ? 'ready' : 'failed' },
+      }),
+      app.prisma.job.update({
+        where: { id: params.operationJobId },
+        data: { status: 'failed', payload: { error: message } },
+      }),
+    ]);
+  }
+
+  async function markJobEnqueueFailed(operationJobId: string, err: unknown): Promise<void> {
+    const message = err instanceof Error ? err.message : 'Failed to enqueue operation job';
+    await app.prisma.job.update({
+      where: { id: operationJobId },
+      data: { status: 'failed', payload: { error: message } },
+    });
+  }
+
+  async function reserveNextVersionNumber(
+    tx: Prisma.TransactionClient,
+    documentId: string,
+  ): Promise<number> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${documentId}))`;
+    const latestVersion = await tx.documentVersion.findFirst({
+      where: { documentId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    return (latestVersion?.version ?? 0) + 1;
+  }
   r.post(
     '/documents/:documentId/versions/:versionId/operations/split',
     {
@@ -83,48 +129,60 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       if (pages[pages.length - 1]! > sourceVersion.pageCount) {
         return reply.code(400).send({ error: 'Page index out of range' });
       }
-      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
-      const targetS3Key = buildOriginalKey(
-        document.id,
-        nextVersionNumber,
-        `split-v${sourceVersion.version}.pdf`,
-      );
-      const [targetVersion, operationJob] = await app.prisma.$transaction([
-        app.prisma.documentVersion.create({
-          data: {
-            documentId: document.id,
-            version: nextVersionNumber,
-            s3Key: targetS3Key,
-            size: BigInt(0),
-            mimeType: sourceVersion.mimeType,
-            status: 'processing',
-          },
-        }),
-        app.prisma.job.create({
-          data: {
-            type: 'pdf-split',
-            status: 'queued',
-            tenantId: user.tenantId,
-            payload: {
-              documentId,
-              sourceVersionId: sourceVersion.id,
-              pages,
+      const { targetVersion, operationJob, targetS3Key } = await app.prisma.$transaction(
+        async (tx) => {
+          const nextVersionNumber = await reserveNextVersionNumber(tx, document.id);
+          const reservedTargetS3Key = buildOriginalKey(
+            document.id,
+            nextVersionNumber,
+            `split-v${sourceVersion.version}.pdf`,
+          );
+          const version = await tx.documentVersion.create({
+            data: {
+              documentId: document.id,
+              version: nextVersionNumber,
+              s3Key: reservedTargetS3Key,
+              size: BigInt(0),
+              mimeType: sourceVersion.mimeType,
+              status: 'processing',
             },
-          },
-        }),
-      ]);
-      await enqueueSplitPagesJob(env, {
-        jobId: `split-pages-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        sourceVersionId: sourceVersion.id,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: sourceVersion.s3Key,
-        targetS3Key,
-        pages,
-        requestId: request.requestId,
-      });
+          });
+          const job = await tx.job.create({
+            data: {
+              type: 'pdf-split',
+              status: 'queued',
+              tenantId: user.tenantId,
+              payload: {
+                documentId,
+                sourceVersionId: sourceVersion.id,
+                pages,
+              },
+            },
+          });
+          return { targetVersion: version, operationJob: job, targetS3Key: reservedTargetS3Key };
+        },
+      );
+      try {
+        await enqueueSplitPagesJob(env, {
+          jobId: `split-pages-${targetVersion.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          sourceVersionId: sourceVersion.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: sourceVersion.s3Key,
+          targetS3Key,
+          pages,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed({
+          operationJobId: operationJob.id,
+          targetVersionId: targetVersion.id,
+          err,
+        });
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_split',
@@ -163,6 +221,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
             versionId: z.string(),
             version: z.number(),
             status: z.literal('processing'),
+            replacedInPlace: z.boolean(),
           }),
           400: errorBody,
           404: errorBody,
@@ -176,7 +235,8 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const pages = [...request.body.pages];
+      const { pages, saveMode } = request.body;
+      const pageList = [...pages];
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
@@ -188,30 +248,59 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       if (!sourceVersion.pageCount || sourceVersion.pageCount <= 0) {
         return reply.code(400).send({ error: 'Source version pageCount is unknown' });
       }
-      for (const page of pages) {
+      for (const page of pageList) {
+        if (page === 0) continue;
         if (page > sourceVersion.pageCount) {
           return reply.code(400).send({ error: 'Page index out of range' });
         }
       }
-      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
-      const targetS3Key = buildOriginalKey(
-        document.id,
-        nextVersionNumber,
-        `reorder-v${sourceVersion.version}.pdf`,
-      );
-      const [targetVersion, operationJob] = await app.prisma.$transaction([
-        app.prisma.documentVersion.create({
-          data: {
-            documentId: document.id,
-            version: nextVersionNumber,
-            s3Key: targetS3Key,
-            size: BigInt(0),
-            mimeType: sourceVersion.mimeType,
-            status: 'processing',
-            sourceVersionId: sourceVersion.id,
-          },
-        }),
-        app.prisma.job.create({
+
+      const replaceInPlace = saveMode === 'replace_current';
+      if (replaceInPlace) {
+        const replaceError = validateReplaceCurrentAllowed(document.versions[0], sourceVersion.id);
+        if (replaceError) {
+          return reply.code(400).send({ error: replaceError });
+        }
+      }
+
+      const operationResult = await app.prisma.$transaction(async (tx) => {
+        let targetS3Key = sourceVersion.s3Key;
+        let targetVersionNumber = sourceVersion.version;
+        let targetVersionId = sourceVersion.id;
+        if (replaceInPlace) {
+          const saveTarget = resolveReplaceCurrentTarget(sourceVersion);
+          const locked = await tx.documentVersion.updateMany({
+            where: { id: sourceVersion.id, status: 'ready' },
+            data: { status: 'processing' },
+          });
+          if (locked.count !== 1) return null;
+          targetS3Key = saveTarget.targetS3Key;
+          targetVersionNumber = saveTarget.targetVersionNumber;
+          targetVersionId = saveTarget.targetVersionId!;
+        }
+        const version = replaceInPlace
+          ? { id: targetVersionId, version: targetVersionNumber }
+          : await (async () => {
+              const nextVersionNumber = await reserveNextVersionNumber(tx, document.id);
+              const reservedTargetS3Key = buildOriginalKey(
+                document.id,
+                nextVersionNumber,
+                `reorder-v${sourceVersion.version}.pdf`,
+              );
+              targetS3Key = reservedTargetS3Key;
+              return tx.documentVersion.create({
+                data: {
+                  documentId: document.id,
+                  version: nextVersionNumber,
+                  s3Key: reservedTargetS3Key,
+                  size: BigInt(0),
+                  mimeType: sourceVersion.mimeType,
+                  status: 'processing',
+                  sourceVersionId: sourceVersion.id,
+                },
+              });
+            })();
+        const job = await tx.job.create({
           data: {
             type: 'pdf-rearrange',
             status: 'queued',
@@ -219,23 +308,41 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
             payload: {
               documentId,
               sourceVersionId: sourceVersion.id,
-              pages,
+              pages: pageList,
+              replaceInPlace,
             },
           },
-        }),
-      ]);
-      await enqueueSplitPagesJob(env, {
-        jobId: `rearrange-pages-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        sourceVersionId: sourceVersion.id,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: sourceVersion.s3Key,
-        targetS3Key,
-        pages,
-        requestId: request.requestId,
+        });
+        return { targetVersion: version, operationJob: job, targetS3Key };
       });
+      if (!operationResult) {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      const { targetVersion, operationJob, targetS3Key } = operationResult;
+
+      try {
+        await enqueueSplitPagesJob(env, {
+          jobId: `rearrange-pages-${operationJob.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          sourceVersionId: sourceVersion.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: sourceVersion.s3Key,
+          targetS3Key,
+          pages: pageList,
+          replaceInPlace,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed({
+          operationJobId: operationJob.id,
+          targetVersionId: targetVersion.id,
+          err,
+          restoreReady: replaceInPlace,
+        });
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_rearrange_pages',
@@ -245,7 +352,8 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           meta: {
             sourceVersionId: sourceVersion.id,
             targetVersionId: targetVersion.id,
-            pages,
+            pages: pageList,
+            replaceInPlace,
             operationJobId: operationJob.id,
           },
         },
@@ -255,6 +363,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         versionId: targetVersion.id,
         version: targetVersion.version,
         status: 'processing',
+        replacedInPlace: replaceInPlace,
       });
     },
   );
@@ -306,46 +415,58 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         return reply.code(400).send({ error: 'Source version pageCount is unknown' });
       }
       const totalPages = readyVersions.reduce((sum, v) => sum + (v.pageCount ?? 0), 0);
-      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
-      const targetS3Key = buildOriginalKey(
-        document.id,
-        nextVersionNumber,
-        `merge-v${readyVersions.map((v) => v.version).join('-')}.pdf`,
-      );
-      const [targetVersion, operationJob] = await app.prisma.$transaction([
-        app.prisma.documentVersion.create({
-          data: {
-            documentId: document.id,
-            version: nextVersionNumber,
-            s3Key: targetS3Key,
-            size: BigInt(0),
-            mimeType: readyVersions[0]!.mimeType,
-            status: 'processing',
-          },
-        }),
-        app.prisma.job.create({
-          data: {
-            type: 'pdf-merge',
-            status: 'queued',
-            tenantId: user.tenantId,
-            payload: {
-              documentId,
-              sourceVersionIds: versionIds,
+      const { targetVersion, operationJob, targetS3Key } = await app.prisma.$transaction(
+        async (tx) => {
+          const nextVersionNumber = await reserveNextVersionNumber(tx, document.id);
+          const reservedTargetS3Key = buildOriginalKey(
+            document.id,
+            nextVersionNumber,
+            `merge-v${readyVersions.map((v) => v.version).join('-')}.pdf`,
+          );
+          const version = await tx.documentVersion.create({
+            data: {
+              documentId: document.id,
+              version: nextVersionNumber,
+              s3Key: reservedTargetS3Key,
+              size: BigInt(0),
+              mimeType: readyVersions[0]!.mimeType,
+              status: 'processing',
             },
-          },
-        }),
-      ]);
-      await enqueueMergeVersionsJob(env, {
-        jobId: `merge-versions-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Keys: readyVersions.map((v) => v.s3Key),
-        sourceVersionIds: versionIds,
-        targetS3Key,
-        requestId: request.requestId,
-      });
+          });
+          const job = await tx.job.create({
+            data: {
+              type: 'pdf-merge',
+              status: 'queued',
+              tenantId: user.tenantId,
+              payload: {
+                documentId,
+                sourceVersionIds: versionIds,
+              },
+            },
+          });
+          return { targetVersion: version, operationJob: job, targetS3Key: reservedTargetS3Key };
+        },
+      );
+      try {
+        await enqueueMergeVersionsJob(env, {
+          jobId: `merge-versions-${targetVersion.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Keys: readyVersions.map((v) => v.s3Key),
+          sourceVersionIds: versionIds,
+          targetS3Key,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed({
+          operationJobId: operationJob.id,
+          targetVersionId: targetVersion.id,
+          err,
+        });
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.versions_merged',
@@ -433,12 +554,10 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
         }),
       ]);
-      const editedPages = new Set(
-        [...baseEditRows, ...compareEditRows].map((row) => row.page),
-      );
+      const editedPages = new Set([...baseEditRows, ...compareEditRows].map((row) => row.page));
       const strictCompare = Boolean(
         (baseVersion as { confidenceLevel?: string | null }).confidenceLevel ||
-          (compareVersion as { confidenceLevel?: string | null }).confidenceLevel,
+        (compareVersion as { confidenceLevel?: string | null }).confidenceLevel,
       );
       const diff = buildVersionCompareResult(basePages, comparePages, {
         editedPages,
@@ -551,56 +670,68 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           error: 'Нет принятых правок для применения',
         });
       }
-      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
-      const targetS3Key = buildOriginalKey(
-        document.id,
-        nextVersionNumber,
-        `final-v${sourceVersion.version}.pdf`,
-      );
-      const [targetVersion, operationJob] = await app.prisma.$transaction([
-        app.prisma.documentVersion.create({
-          data: {
-            documentId: document.id,
-            version: nextVersionNumber,
-            s3Key: targetS3Key,
-            size: BigInt(0),
-            mimeType: sourceVersion.mimeType,
-            status: 'processing',
-            sourceVersionId: sourceVersion.id,
-          },
-        }),
-        app.prisma.job.create({
-          data: {
-            type: 'apply-edits-final',
-            status: 'queued',
-            tenantId: user.tenantId,
-            payload: {
-              documentId,
+      const { targetVersion, operationJob, targetS3Key } = await app.prisma.$transaction(
+        async (tx) => {
+          const nextVersionNumber = await reserveNextVersionNumber(tx, document.id);
+          const reservedTargetS3Key = buildOriginalKey(
+            document.id,
+            nextVersionNumber,
+            `final-v${sourceVersion.version}.pdf`,
+          );
+          const version = await tx.documentVersion.create({
+            data: {
+              documentId: document.id,
+              version: nextVersionNumber,
+              s3Key: reservedTargetS3Key,
+              size: BigInt(0),
+              mimeType: sourceVersion.mimeType,
+              status: 'processing',
               sourceVersionId: sourceVersion.id,
-              editSourceVersionId,
-              rootVersionId: rootVersion.id,
-              acceptedAiCount,
-              manualEditsCount,
-              userSourceDocxKey,
             },
-          },
-        }),
-      ]);
-      await enqueueApplyEditsFinalJob(env, {
-        jobId: `apply-edits-final-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        editSourceVersionId,
-        rootVersionId: rootVersion.id,
-        sourceVersionId: sourceVersion.id,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: resolvedSourceS3Key,
-        editSourceS3Key,
-        targetS3Key,
-        userSourceDocxKey,
-        requestId: request.requestId,
-      });
+          });
+          const job = await tx.job.create({
+            data: {
+              type: 'apply-edits-final',
+              status: 'queued',
+              tenantId: user.tenantId,
+              payload: {
+                documentId,
+                sourceVersionId: sourceVersion.id,
+                editSourceVersionId,
+                rootVersionId: rootVersion.id,
+                acceptedAiCount,
+                manualEditsCount,
+                userSourceDocxKey,
+              },
+            },
+          });
+          return { targetVersion: version, operationJob: job, targetS3Key: reservedTargetS3Key };
+        },
+      );
+      try {
+        await enqueueApplyEditsFinalJob(env, {
+          jobId: `apply-edits-final-${targetVersion.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          editSourceVersionId,
+          rootVersionId: rootVersion.id,
+          sourceVersionId: sourceVersion.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: resolvedSourceS3Key,
+          editSourceS3Key,
+          targetS3Key,
+          userSourceDocxKey,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed({
+          operationJobId: operationJob.id,
+          targetVersionId: targetVersion.id,
+          err,
+        });
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_apply_edits_final',
@@ -668,49 +799,61 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       if (sourceVersion.pageCount > 200) {
         return reply.code(400).send({ error: 'Оптимизация поддерживает PDF до 200 страниц' });
       }
-      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
-      const targetS3Key = buildOriginalKey(
-        document.id,
-        nextVersionNumber,
-        `optimized-${preset}-v${sourceVersion.version}.pdf`,
-      );
-      const [targetVersion, operationJob] = await app.prisma.$transaction([
-        app.prisma.documentVersion.create({
-          data: {
-            documentId: document.id,
-            version: nextVersionNumber,
-            s3Key: targetS3Key,
-            size: BigInt(0),
-            mimeType: sourceVersion.mimeType,
-            status: 'processing',
-            sourceVersionId: sourceVersion.id,
-          },
-        }),
-        app.prisma.job.create({
-          data: {
-            type: 'optimize-pdf',
-            status: 'queued',
-            tenantId: user.tenantId,
-            payload: {
-              documentId,
+      const { targetVersion, operationJob, targetS3Key } = await app.prisma.$transaction(
+        async (tx) => {
+          const nextVersionNumber = await reserveNextVersionNumber(tx, document.id);
+          const reservedTargetS3Key = buildOriginalKey(
+            document.id,
+            nextVersionNumber,
+            `optimized-${preset}-v${sourceVersion.version}.pdf`,
+          );
+          const version = await tx.documentVersion.create({
+            data: {
+              documentId: document.id,
+              version: nextVersionNumber,
+              s3Key: reservedTargetS3Key,
+              size: BigInt(0),
+              mimeType: sourceVersion.mimeType,
+              status: 'processing',
               sourceVersionId: sourceVersion.id,
-              preset,
             },
-          },
-        }),
-      ]);
-      await enqueueOptimizePdfJob(env, {
-        jobId: `optimize-pdf-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        sourceVersionId: sourceVersion.id,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: sourceVersion.s3Key,
-        targetS3Key,
-        preset,
-        requestId: request.requestId,
-      });
+          });
+          const job = await tx.job.create({
+            data: {
+              type: 'optimize-pdf',
+              status: 'queued',
+              tenantId: user.tenantId,
+              payload: {
+                documentId,
+                sourceVersionId: sourceVersion.id,
+                preset,
+              },
+            },
+          });
+          return { targetVersion: version, operationJob: job, targetS3Key: reservedTargetS3Key };
+        },
+      );
+      try {
+        await enqueueOptimizePdfJob(env, {
+          jobId: `optimize-pdf-${targetVersion.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          sourceVersionId: sourceVersion.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: sourceVersion.s3Key,
+          targetS3Key,
+          preset,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed({
+          operationJobId: operationJob.id,
+          targetVersionId: targetVersion.id,
+          err,
+        });
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_optimize_pdf',
@@ -749,6 +892,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
             versionId: z.string(),
             version: z.number(),
             status: z.literal('processing'),
+            replacedInPlace: z.boolean(),
           }),
           400: errorBody,
           404: errorBody,
@@ -762,7 +906,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const { objects } = request.body;
+      const { objects, blankInsertions, saveMode } = request.body;
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
@@ -775,28 +919,60 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         return reply.code(400).send({ error: 'Source version pageCount is unknown' });
       }
       const maxPage = objects.reduce((max, object) => Math.max(max, object.page), 0);
-      if (maxPage > sourceVersion.pageCount) {
-        return reply.code(400).send({ error: `Страница ${maxPage} больше числа страниц PDF` });
+      const insertedPages = blankInsertions.reduce((sum, item) => sum + item.count, 0);
+      const extraPages = Math.max(0, maxPage - sourceVersion.pageCount) + insertedPages;
+      if (extraPages > 50) {
+        return reply
+          .code(400)
+          .send({ error: 'Слишком много новых страниц для макета (максимум +50)' });
       }
-      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
-      const targetS3Key = buildOriginalKey(
-        document.id,
-        nextVersionNumber,
-        `layout-v${sourceVersion.version}.pdf`,
-      );
-      const [targetVersion, operationJob] = await app.prisma.$transaction([
-        app.prisma.documentVersion.create({
-          data: {
-            documentId: document.id,
-            version: nextVersionNumber,
-            s3Key: targetS3Key,
-            size: BigInt(0),
-            mimeType: sourceVersion.mimeType,
-            status: 'processing',
-            sourceVersionId: sourceVersion.id,
-          },
-        }),
-        app.prisma.job.create({
+
+      const replaceInPlace = saveMode === 'replace_current';
+      if (replaceInPlace) {
+        const replaceError = validateReplaceCurrentAllowed(document.versions[0], sourceVersion.id);
+        if (replaceError) {
+          return reply.code(400).send({ error: replaceError });
+        }
+      }
+
+      const operationResult = await app.prisma.$transaction(async (tx) => {
+        let targetS3Key = sourceVersion.s3Key;
+        let targetVersionNumber = sourceVersion.version;
+        let targetVersionId = sourceVersion.id;
+        if (replaceInPlace) {
+          const saveTarget = resolveReplaceCurrentTarget(sourceVersion);
+          const locked = await tx.documentVersion.updateMany({
+            where: { id: sourceVersion.id, status: 'ready' },
+            data: { status: 'processing' },
+          });
+          if (locked.count !== 1) return null;
+          targetS3Key = saveTarget.targetS3Key;
+          targetVersionNumber = saveTarget.targetVersionNumber;
+          targetVersionId = saveTarget.targetVersionId!;
+        }
+        const version = replaceInPlace
+          ? { id: targetVersionId, version: targetVersionNumber }
+          : await (async () => {
+              const nextVersionNumber = await reserveNextVersionNumber(tx, document.id);
+              const reservedTargetS3Key = buildOriginalKey(
+                document.id,
+                nextVersionNumber,
+                `layout-v${sourceVersion.version}.pdf`,
+              );
+              targetS3Key = reservedTargetS3Key;
+              return tx.documentVersion.create({
+                data: {
+                  documentId: document.id,
+                  version: nextVersionNumber,
+                  s3Key: reservedTargetS3Key,
+                  size: BigInt(0),
+                  mimeType: sourceVersion.mimeType,
+                  status: 'processing',
+                  sourceVersionId: sourceVersion.id,
+                },
+              });
+            })();
+        const job = await tx.job.create({
           data: {
             type: 'apply-layout-pdf',
             status: 'queued',
@@ -805,22 +981,41 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
               documentId,
               sourceVersionId: sourceVersion.id,
               objectCount: objects.length,
+              replaceInPlace,
             },
           },
-        }),
-      ]);
-      await enqueueApplyLayoutPdfJob(env, {
-        jobId: `apply-layout-pdf-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        sourceVersionId: sourceVersion.id,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: sourceVersion.s3Key,
-        targetS3Key,
-        layoutObjects: objects,
-        requestId: request.requestId,
+        });
+        return { targetVersion: version, operationJob: job, targetS3Key };
       });
+      if (!operationResult) {
+        return reply.code(400).send({ error: 'Source version is not ready' });
+      }
+      const { targetVersion, operationJob, targetS3Key } = operationResult;
+
+      try {
+        await enqueueApplyLayoutPdfJob(env, {
+          jobId: `apply-layout-pdf-${operationJob.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          sourceVersionId: sourceVersion.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: sourceVersion.s3Key,
+          targetS3Key,
+          layoutObjects: objects,
+          blankInsertions,
+          replaceInPlace,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed({
+          operationJobId: operationJob.id,
+          targetVersionId: targetVersion.id,
+          err,
+          restoreReady: replaceInPlace,
+        });
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_apply_layout_pdf',
@@ -831,6 +1026,8 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
             sourceVersionId: sourceVersion.id,
             targetVersionId: targetVersion.id,
             objectCount: objects.length,
+            extraPages,
+            replaceInPlace,
             operationJobId: operationJob.id,
           },
         },
@@ -840,6 +1037,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         versionId: targetVersion.id,
         version: targetVersion.version,
         status: 'processing',
+        replacedInPlace: replaceInPlace,
       });
     },
   );
@@ -872,7 +1070,12 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         return reply.code(400).send({ error: 'Source version is not ready' });
       }
       const versionRows = document.versions.map(
-        (v: { id: string; sourceVersionId: string | null; s3Key: string; sourceDocxKey: string | null }) => ({
+        (v: {
+          id: string;
+          sourceVersionId: string | null;
+          s3Key: string;
+          sourceDocxKey: string | null;
+        }) => ({
           id: v.id,
           sourceVersionId: v.sourceVersionId,
           s3Key: v.s3Key,
@@ -902,17 +1105,22 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           payload: { documentId, versionId, rootVersionId: rootVersion.id },
         },
       });
-      await enqueueExportHighlightDocxJob(env, {
-        jobId: `export-highlight-docx-${operationJob.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        versionId,
-        rootVersionId: rootVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: rootVersion.s3Key,
-        userSourceDocxKey,
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueExportHighlightDocxJob(env, {
+          jobId: `export-highlight-docx-${operationJob.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          versionId,
+          rootVersionId: rootVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: rootVersion.s3Key,
+          userSourceDocxKey,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markJobEnqueueFailed(operationJob.id, err);
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.export_highlight_docx',
@@ -965,16 +1173,21 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           payload: { documentId, versionId, format: request.body.format },
         },
       });
-      await enqueueExportFormDataJob(env, {
-        jobId: `export-form-data-${operationJob.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        versionId,
-        tenantId: user.tenantId,
-        sourceS3Key: sourceVersion.s3Key,
-        format: request.body.format,
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueExportFormDataJob(env, {
+          jobId: `export-form-data-${operationJob.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          versionId,
+          tenantId: user.tenantId,
+          sourceS3Key: sourceVersion.s3Key,
+          format: request.body.format,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markJobEnqueueFailed(operationJob.id, err);
+        throw err;
+      }
       return reply.status(202).send({ operationJobId: operationJob.id, status: 'processing' });
     },
   );
@@ -1018,51 +1231,63 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       if (!sourceVersion || sourceVersion.status !== 'ready') {
         return reply.code(400).send({ error: 'Source version is not ready' });
       }
-      const nextVersionNumber = (document.versions[0]?.version ?? 0) + 1;
-      const targetS3Key = buildOriginalKey(
-        document.id,
-        nextVersionNumber,
-        `signed-v${sourceVersion.version}.pdf`,
+      const { targetVersion, operationJob, targetS3Key } = await app.prisma.$transaction(
+        async (tx) => {
+          const nextVersionNumber = await reserveNextVersionNumber(tx, document.id);
+          const reservedTargetS3Key = buildOriginalKey(
+            document.id,
+            nextVersionNumber,
+            `signed-v${sourceVersion.version}.pdf`,
+          );
+          const version = await tx.documentVersion.create({
+            data: {
+              documentId: document.id,
+              version: nextVersionNumber,
+              s3Key: reservedTargetS3Key,
+              size: BigInt(0),
+              mimeType: sourceVersion.mimeType,
+              status: 'processing',
+              sourceVersionId: sourceVersion.id,
+            },
+          });
+          const job = await tx.job.create({
+            data: {
+              type: 'apply-visual-signature',
+              status: 'queued',
+              tenantId: user.tenantId,
+              payload: { documentId, sourceVersionId: sourceVersion.id },
+            },
+          });
+          return { targetVersion: version, operationJob: job, targetS3Key: reservedTargetS3Key };
+        },
       );
-      const [targetVersion, operationJob] = await app.prisma.$transaction([
-        app.prisma.documentVersion.create({
-          data: {
-            documentId: document.id,
-            version: nextVersionNumber,
-            s3Key: targetS3Key,
-            size: BigInt(0),
-            mimeType: sourceVersion.mimeType,
-            status: 'processing',
-            sourceVersionId: sourceVersion.id,
-          },
-        }),
-        app.prisma.job.create({
-          data: {
-            type: 'apply-visual-signature',
-            status: 'queued',
-            tenantId: user.tenantId,
-            payload: { documentId, sourceVersionId: sourceVersion.id },
-          },
-        }),
-      ]);
       const { imageS3Key, page, xNorm, yNorm, widthNorm, heightNorm } = request.body;
-      await enqueueApplyVisualSignatureJob(env, {
-        jobId: `apply-visual-signature-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        sourceVersionId: sourceVersion.id,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: sourceVersion.s3Key,
-        targetS3Key,
-        imageS3Key,
-        page,
-        xNorm,
-        yNorm,
-        widthNorm,
-        heightNorm,
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueApplyVisualSignatureJob(env, {
+          jobId: `apply-visual-signature-${targetVersion.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          sourceVersionId: sourceVersion.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: sourceVersion.s3Key,
+          targetS3Key,
+          imageS3Key,
+          page,
+          xNorm,
+          yNorm,
+          widthNorm,
+          heightNorm,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed({
+          operationJobId: operationJob.id,
+          targetVersionId: targetVersion.id,
+          err,
+        });
+        throw err;
+      }
       return reply.status(202).send({
         operationJobId: operationJob.id,
         versionId: targetVersion.id,

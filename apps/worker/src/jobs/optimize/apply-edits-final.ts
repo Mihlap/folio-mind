@@ -49,6 +49,12 @@ function readPageAnchor(meta: unknown): { xNorm: number; yNorm: number } | undef
   return { xNorm: anchor.xNorm, yNorm: anchor.yNorm };
 }
 
+function readSuggestionId(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const suggestionId = (meta as { suggestionId?: unknown }).suggestionId;
+  return typeof suggestionId === 'string' ? suggestionId : null;
+}
+
 type ApplyMethod = 'docx' | 'docx-converted' | 'pdf-overlay' | 'docx-fallback-overlay' | 'docx-hybrid';
 
 type DocxPipelineResult = {
@@ -311,7 +317,10 @@ export async function processApplyEditsFinalJob(
     if (!exists) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }
@@ -326,16 +335,21 @@ export async function processApplyEditsFinalJob(
       }),
     ]);
     const edits: Edit[] = [];
+    const linkedSuggestionIds = new Set<string>();
     for (const ai of aiAccepted) {
+      linkedSuggestionIds.add(ai.id);
       edits.push({ originalText: ai.originalText, suggestion: ai.suggestion, page: ai.page ?? 1 });
     }
     for (const ann of sourceAnnotations) {
       const quote = ann.quote?.trim() ?? '';
-      if (!quote) continue;
+      const content = ann.content.trim();
+      if (!quote || !content) continue;
+      const suggestionId = readSuggestionId(ann.meta);
+      if (suggestionId && linkedSuggestionIds.has(suggestionId)) continue;
       const anchor = readPageAnchor(ann.meta);
       edits.push({
         originalText: quote,
-        suggestion: ann.content,
+        suggestion: content,
         page: ann.page,
         ...(anchor ? { anchor } : {}),
       });
@@ -358,35 +372,15 @@ export async function processApplyEditsFinalJob(
 
     if (docxPipeline) {
       if (!isGotenbergConfigured(env.GOTENBERG_URL)) {
-        await prisma.documentVersion.update({
-          where: { id: targetVersionId },
-          data: { status: 'ready' },
-        });
-        await prisma.job.update({
-          where: { id: operationJobId },
-          data: {
-            status: 'completed',
-            payload: {
-              targetVersionId,
-              applied: docxPipeline.applied,
-              failed: docxPipeline.failed,
-              ambiguous: docxPipeline.ambiguous,
-              docxS3Key: docxPipeline.docxS3Key,
-              method: docxPipeline.method,
-              editResults: docxPipeline.editResults,
-              status: 'docx_only',
-              message:
-                'Правки в DOCX готовы. Запустите Gotenberg (docker compose, :3003) для PDF.',
-            },
-          },
-        });
-        return;
+        throw new Error(
+          'Gotenberg не настроен: DOCX с правками создан, но финальный PDF нельзя пометить готовым без конвертации.',
+        );
       }
       try {
         let pdfBuffer = await convertDocxToPdf(docxPipeline.modifiedDocx);
         let appliedTotal = docxPipeline.applied;
         let failedTotal = docxPipeline.failed;
-        let ambiguousTotal = docxPipeline.ambiguous;
+        const ambiguousTotal = docxPipeline.ambiguous;
         let method: ApplyMethod = docxPipeline.method;
 
         const pendingOverlay = docxPipeline.editResults
@@ -481,7 +475,9 @@ export async function processApplyEditsFinalJob(
     console.error('[apply-edits-final] failed:', message);
     try {
       await deleteObjectByKey(targetS3Key);
-    } catch {}
+    } catch {
+      // Cleanup is best-effort; keep the original job failure visible.
+    }
     try {
       await failOptimizeOperation({
         operationJobId,
@@ -489,7 +485,9 @@ export async function processApplyEditsFinalJob(
         error: message,
         payload: { documentId, editSourceVersionId: resolvedEditVersionId },
       });
-    } catch {}
+    } catch {
+      // Preserve the original error if the failure marker cannot be written.
+    }
     throw err;
   }
 }

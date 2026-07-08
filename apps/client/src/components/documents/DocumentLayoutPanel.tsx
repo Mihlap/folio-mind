@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS, isLayoutImageObject, isLayoutShapeObject, DEFAULT_LAYOUT_SOLID_FILL, DEFAULT_LAYOUT_GRADIENT_FILL, HINT_LAYOUT_SAVE_NEW_VERSION, msgNewVersionStarted, formatProcessingWaitMessage } from '@folio-mind/store';
+import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS, isLayoutImageObject, isLayoutShapeObject, DEFAULT_LAYOUT_SOLID_FILL, DEFAULT_LAYOUT_GRADIENT_FILL, HINT_LAYOUT_SAVE_NEW_VERSION, HINT_LAYOUT_SAVE_REPLACE_CURRENT, msgNewVersionStarted, msgReplaceCurrentStarted, formatProcessingWaitMessage } from '@folio-mind/store';
 import { normalizeLayoutObjectsForPdf, estimateLayoutObjectsBytes } from '../../lib/layout/normalizeLayoutImage.js';
+import { FeatureHelpActionButton, FeatureHelpButton } from '../ui/FeatureHelp.js';
 import {
-  FeatureHelpActionButton,
-  FeatureHelpButton,
   reportActionBtnPrimaryStretch,
   reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+} from '../ui/FeatureHelp.styles.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 import { MediaLibraryInsertPanel } from './MediaLibraryInsertPanel.js';
 import { DocumentLayoutTemplatesSection } from './DocumentLayoutTemplatesSection.js';
+import {
+  OperationSaveModeSelect,
+  type OperationSaveMode,
+} from './OperationSaveModeSelect.js';
 
 type Props = {
   layout: LayoutEditorState;
@@ -18,6 +21,8 @@ type Props = {
   documentId: string;
   versionId: string;
   pageCount?: number;
+  versionNumber?: number;
+  isLatestVersion?: boolean;
   onSelectVersion: (versionId: string) => void;
   onGoToPage: (page: number) => void;
   addNotice?: string | null;
@@ -56,6 +61,8 @@ export function DocumentLayoutPanel({
   documentId,
   versionId,
   pageCount = 0,
+  versionNumber,
+  isLatestVersion = false,
   onSelectVersion,
   onGoToPage,
   addNotice = null,
@@ -70,12 +77,21 @@ export function DocumentLayoutPanel({
   const [operationJobId, setOperationJobId] = useState<string | null>(null);
   const [pollOperation, setPollOperation] = useState(false);
   const [targetVersionId, setTargetVersionId] = useState<string | null>(null);
+  const [saveMode, setSaveMode] = useState<OperationSaveMode>('new_version');
 
   const pagesWithObjects = useMemo(() => {
     return Object.entries(layout.objectCountByPage)
       .map(([page, count]) => ({ page: Number(page), count }))
       .sort((a, b) => a.page - b.page);
   }, [layout.objectCountByPage]);
+
+  const displayPageCount = useMemo(() => {
+    const maxObjectPage = Object.keys(layout.objectCountByPage).reduce(
+      (max, page) => Math.max(max, Number(page)),
+      0,
+    );
+    return Math.max(pageCount, maxObjectPage, viewerPage, 1);
+  }, [layout.objectCountByPage, pageCount, viewerPage]);
 
   const [applyLayoutPdf, { isLoading: saving }] = useApplyLayoutPdfMutation();
   const { data: operationJob } = useGetJobQuery(operationJobId!, {
@@ -100,7 +116,7 @@ export function DocumentLayoutPanel({
       if (targetVersionId) onSelectVersion(targetVersionId);
       setOperationJobId(null);
       setTargetVersionId(null);
-      layout.setEnabled(false);
+      layout.clearDraft();
     }
     if (operationJob.status === 'failed') {
       setPollOperation(false);
@@ -144,6 +160,7 @@ export function DocumentLayoutPanel({
   const selectedImage = selectedObject && isLayoutImageObject(selectedObject) ? selectedObject : null;
   const selectedShape = selectedObject && isLayoutShapeObject(selectedObject) ? selectedObject : null;
   const selectedSolidFill = selectedShape?.fill.type === 'solid' ? selectedShape.fill : null;
+  const selectedLinearFill = selectedShape?.fill.type === 'linear' ? selectedShape.fill : null;
 
   async function handleSaveLayout() {
     if (!versionId || layout.totalObjectCount === 0) return;
@@ -169,11 +186,17 @@ export function DocumentLayoutPanel({
         documentId,
         versionId,
         objects,
+        blankInsertions: layout.blankInsertions,
+        saveMode,
       }).unwrap();
       setOperationJobId(result.operationJobId);
       setTargetVersionId(result.versionId);
       setPollOperation(true);
-      setStatusHint(msgNewVersionStarted(result.version));
+      setStatusHint(
+        saveMode === 'replace_current'
+          ? msgReplaceCurrentStarted(result.version)
+          : msgNewVersionStarted(result.version),
+      );
     } catch (err) {
       setError(getMutationError(err));
     }
@@ -295,7 +318,11 @@ export function DocumentLayoutPanel({
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
           <span className="text-xs text-slate-600">
             Выбрано · стр. {selectedObject.page} · {selectedObject.rotation ?? 0}°
-            {selectedShape ? ' · подложка' : ''}
+            {selectedShape
+              ? selectedShape.fill.type === 'linear'
+                ? ' · градиент'
+                : ' · заливка'
+              : ''}
           </span>
           <button
             type="button"
@@ -436,6 +463,102 @@ export function DocumentLayoutPanel({
               </label>
             </>
           )}
+          {selectedLinearFill && selectedShape && (
+            <>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                Цвет 1
+                <input
+                  type="color"
+                  value={selectedLinearFill.stops[0]?.color ?? '#f8fafc'}
+                  disabled={savePending}
+                  onChange={(e) => {
+                    const first = selectedLinearFill.stops[0] ?? { offset: 0, color: '#f8fafc' };
+                    const last =
+                      selectedLinearFill.stops[selectedLinearFill.stops.length - 1] ?? {
+                        offset: 1,
+                        color: '#94a3b8',
+                      };
+                    layout.updateShapeFill(selectedShape.id, {
+                      type: 'linear',
+                      angleDeg: selectedLinearFill.angleDeg,
+                      opacity: selectedLinearFill.opacity,
+                      stops: [
+                        { ...first, color: e.target.value },
+                        { ...last },
+                      ],
+                    });
+                  }}
+                  className="h-7 w-10 cursor-pointer rounded border border-slate-200"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                Цвет 2
+                <input
+                  type="color"
+                  value={selectedLinearFill.stops[selectedLinearFill.stops.length - 1]?.color ?? '#94a3b8'}
+                  disabled={savePending}
+                  onChange={(e) => {
+                    const first = selectedLinearFill.stops[0] ?? { offset: 0, color: '#f8fafc' };
+                    const last =
+                      selectedLinearFill.stops[selectedLinearFill.stops.length - 1] ?? {
+                        offset: 1,
+                        color: '#94a3b8',
+                      };
+                    layout.updateShapeFill(selectedShape.id, {
+                      type: 'linear',
+                      angleDeg: selectedLinearFill.angleDeg,
+                      opacity: selectedLinearFill.opacity,
+                      stops: [
+                        { ...first },
+                        { ...last, color: e.target.value },
+                      ],
+                    });
+                  }}
+                  className="h-7 w-10 cursor-pointer rounded border border-slate-200"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                Угол
+                <input
+                  type="range"
+                  min={0}
+                  max={360}
+                  step={5}
+                  value={selectedLinearFill.angleDeg}
+                  disabled={savePending}
+                  onChange={(e) =>
+                    layout.updateShapeFill(selectedShape.id, {
+                      type: 'linear',
+                      angleDeg: Number(e.target.value),
+                      opacity: selectedLinearFill.opacity,
+                      stops: selectedLinearFill.stops,
+                    })
+                  }
+                  className="w-24"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                Прозрачность
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={selectedLinearFill.opacity ?? 1}
+                  disabled={savePending}
+                  onChange={(e) =>
+                    layout.updateShapeFill(selectedShape.id, {
+                      type: 'linear',
+                      angleDeg: selectedLinearFill.angleDeg,
+                      stops: selectedLinearFill.stops,
+                      opacity: Number(e.target.value),
+                    })
+                  }
+                  className="w-24"
+                />
+              </label>
+            </>
+          )}
         </div>
       )}
 
@@ -478,7 +601,9 @@ export function DocumentLayoutPanel({
       <DocumentLayoutTemplatesSection
         layout={layout}
         viewerPage={viewerPage}
+        displayPageCount={displayPageCount}
         versionReady={versionReady}
+        onGoToPage={onGoToPage}
       />
 
       <MediaLibraryInsertPanel
@@ -492,6 +617,13 @@ export function DocumentLayoutPanel({
       />
 
       <div className={reportActionsColumnClass}>
+        <OperationSaveModeSelect
+          value={saveMode}
+          onChange={setSaveMode}
+          versionNumber={versionNumber}
+          canReplaceCurrent={isLatestVersion}
+          disabled={savePending}
+        />
         <FeatureHelpActionButton
           helpTitle="Добавить изображение"
           stretch
@@ -512,19 +644,33 @@ export function DocumentLayoutPanel({
           {adding ? 'Загрузка…' : 'Добавить изображение'}
         </FeatureHelpActionButton>
         <FeatureHelpActionButton
-          helpTitle="Сохранить макет в новую версию"
+          helpTitle={
+            saveMode === 'replace_current'
+              ? 'Сохранить макет в текущую версию'
+              : 'Сохранить макет в новую версию'
+          }
           stretch
           disabled={!versionReady || layout.totalObjectCount === 0 || savePending}
           onClick={() => void handleSaveLayout()}
           buttonClassName={reportActionBtnPrimaryStretch}
           helpContent={
             <>
-              <p>{HINT_LAYOUT_SAVE_NEW_VERSION}</p>
+              <p>
+                {saveMode === 'replace_current'
+                  ? HINT_LAYOUT_SAVE_REPLACE_CURRENT
+                  : HINT_LAYOUT_SAVE_NEW_VERSION}
+              </p>
               <p>PNG, JPEG и WebP (WebP автоматически конвертируется в PNG). До 12 МБ суммарно.</p>
             </>
           }
         >
-          {saving ? 'Запуск…' : savePending ? formatProcessingWaitMessage('Сохраняем макет') : 'Сохранить в PDF'}
+          {saving
+            ? 'Запуск…'
+            : savePending
+              ? formatProcessingWaitMessage('Сохраняем макет')
+              : saveMode === 'replace_current'
+                ? 'Сохранить в текущую версию'
+                : 'Сохранить в новую версию'}
         </FeatureHelpActionButton>
         <button
           type="button"
@@ -581,7 +727,7 @@ export function DocumentLayoutPanel({
         </p>
       )}
 
-      {statusHint && <p className="text-sm text-folio-700">{statusHint}</p>}
+      {statusHint && <p className="text-[11px] leading-snug text-folio-700">{statusHint}</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );

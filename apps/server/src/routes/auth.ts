@@ -132,9 +132,9 @@ async function sendVerificationEmailForUser(
   userId: string,
   email: string,
   log: {
-    info: Function;
-    warn: Function;
-    error: Function;
+    info: (obj: unknown, msg?: string) => void;
+    warn: (obj: unknown, msg?: string) => void;
+    error: (obj: unknown, msg?: string) => void;
   },
 ) {
   const { token, tokenHash, expiresAt } = createEmailVerificationToken(env);

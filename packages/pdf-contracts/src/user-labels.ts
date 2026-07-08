@@ -42,11 +42,19 @@ export function msgNewVersionStarted(version: number): string {
   return formatProcessingWaitMessage(`Создана версия ${version}`);
 }
 
+export function msgReplaceCurrentStarted(version: number): string {
+  return formatProcessingWaitMessage(`Обновляем версию ${version}`);
+}
+
 export const HINT_OPTIMIZE_NEW_VERSION =
   'Создаст уменьшенную копию файла и добавит её новой строкой в списке версий слева.';
 export const HINT_OPTIMIZE_REQUIREMENTS = 'Нужна готовая версия документа (до 200 страниц).';
 export const HINT_LAYOUT_SAVE_NEW_VERSION =
   'Все картинки и фигуры из черновика будут встроены в копию PDF. Новая версия появится в списке слева — как после сжатия или объединения.';
+export const HINT_LAYOUT_SAVE_REPLACE_CURRENT =
+  'Встроит макет в открытую версию без создания новой строки в списке. Предыдущий файл этой версии будет заменён.';
+export const HINT_PAGE_ORDER_SAVE_REPLACE_CURRENT =
+  'Соберёт PDF в указанном порядке и заменит текущую версию. Старая копия этой версии будет перезаписана.';
 
 export const MSG_OPERATION_STARTING = formatProcessingWaitMessage('Запускаем операцию');
 export const MSG_OPTIMIZE_RUNNING = formatProcessingWaitMessage('Сжимаем PDF');

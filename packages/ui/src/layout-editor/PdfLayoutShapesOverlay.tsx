@@ -94,11 +94,13 @@ export function PdfLayoutShapesOverlay({
       if (!drag) return;
       const { pageWidthPx: w, pageHeightPx: h } = pageSizeRef.current;
       const step = snapStepRef.current;
-      if (step > 0 && w > 0 && h > 0) {
-        onShapeChangeRef.current(
-          drag.id,
-          snapLayoutRect(rectFromDrag(drag, event, w, h), step),
-        );
+      if (w > 0 && h > 0) {
+        const next = rectFromDrag(drag, event, w, h);
+        if (drag.kind === 'move' && step > 0) {
+          onShapeChangeRef.current(drag.id, snapLayoutRect(next, step));
+        } else {
+          onShapeChangeRef.current(drag.id, next);
+        }
       }
       finishPointer();
     };

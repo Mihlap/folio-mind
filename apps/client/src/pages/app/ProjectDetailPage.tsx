@@ -4,12 +4,15 @@ import {
   isDocumentReviewStatus,
   useDeleteDocumentMutation,
   useGetProjectQuery,
+  useListDocumentsQuery,
   getVersionListStatusLabel,
 } from '@folio-mind/store';
 import { DocumentReviewStatusBadge } from '../../components/documents/DocumentReviewStatusControl.js';
 import { DeleteDocumentButton } from '../../components/documents/DeleteDocumentButton.js';
-import { useBackgroundUpload } from '../../context/background-upload-provider.js';
+import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
 import { ProjectRenameControl } from '../../components/projects/ProjectRenameControl.js';
+import { ProjectDropTarget } from '../../components/projects/ProjectDropTarget.js';
+import { DocumentDragHandle } from '../../components/documents/DocumentDragHandle.js';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 import { useAppSelector } from '../../hooks/index.js';
@@ -21,9 +24,15 @@ function getDisplayStatus(status: string): string {
 export function ProjectDetailPage() {
   const { projectId = '' } = useParams();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { data, refetch, isLoading, error: loadError } = useGetProjectQuery(projectId, {
+  const {
+    data,
+    refetch,
+    isLoading,
+    error: loadError,
+  } = useGetProjectQuery(projectId, {
     skip: !projectId,
   });
+  const { data: allDocuments } = useListDocumentsQuery({ limit: 50 });
   const [deleteDocument] = useDeleteDocumentMutation();
   const [localError, setLocalError] = useState<string | null>(null);
   const uploadState = useAppSelector((s) => s.backgroundUpload);
@@ -63,7 +72,10 @@ export function ProjectDetailPage() {
     return (
       <div className="p-6">
         <p className="text-sm text-red-600">Проект не найден</p>
-        <Link to="/app/projects" className="mt-2 inline-block text-sm text-folio-600 hover:underline">
+        <Link
+          to="/app/projects"
+          className="mt-2 inline-block text-sm text-folio-600 hover:underline"
+        >
           ← К проектам
         </Link>
       </div>
@@ -71,6 +83,8 @@ export function ProjectDetailPage() {
   }
 
   const { project, documents } = data;
+  const attachableDocuments =
+    allDocuments?.items.filter((doc) => doc.projectId !== project.id) ?? [];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -89,9 +103,52 @@ export function ProjectDetailPage() {
         />
       </div>
 
+      <ProjectDropTarget
+        projectId={project.id}
+        projectName={project.name}
+        onAssigned={() => void refetch()}
+        className="mb-8 rounded-2xl border border-dashed border-folio-300 bg-folio-50/40 px-5 py-4 text-center sm:px-6"
+        activeClassName="ring-2 ring-folio-400 bg-folio-50"
+      >
+        <p className="text-sm font-medium text-folio-900">Перетащите сюда существующий документ</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Перетащите документ из списка ниже или с главной страницы (⠿ у строки документа).
+        </p>
+      </ProjectDropTarget>
+
+      {attachableDocuments.length > 0 && (
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+          <h2 className="text-sm font-semibold text-slate-900">Привязать существующий документ</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Возьмите документ за ⠿ и отпустите в зону выше — повторная загрузка не нужна.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {attachableDocuments.map((doc) => (
+              <li
+                key={doc.id}
+                className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-2 py-1.5"
+              >
+                <DocumentDragHandle documentId={doc.id} title={doc.title} />
+                <Link
+                  to={`/app/documents/${doc.id}`}
+                  className="min-w-0 flex-1 truncate text-sm text-slate-800 hover:text-folio-700"
+                >
+                  {doc.title}
+                </Link>
+                {doc.projectName && (
+                  <span className="shrink-0 text-[11px] text-slate-500">{doc.projectName}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mb-8 rounded-2xl border border-dashed border-slate-300 bg-white p-5 sm:p-6">
         <p className="text-sm font-medium text-slate-700">Загрузить документ в этот проект</p>
-        <p className="mt-1 text-xs text-slate-400">PDF или DOCX — как на главной странице документов</p>
+        <p className="mt-1 text-xs text-slate-400">
+          PDF или DOCX — как на главной странице документов
+        </p>
         <input
           ref={inputRef}
           type="file"
@@ -116,16 +173,14 @@ export function ProjectDetailPage() {
         >
           {active ? `Загрузка ${progress}%…` : 'Выбрать файл'}
         </button>
-        {active && (
-          <p className="mt-2 text-xs text-slate-500">{getUploadStage(progress)}</p>
-        )}
+        {active && <p className="mt-2 text-xs text-slate-500">{getUploadStage(progress)}</p>}
         {(localError || uploadState.error) && (
           <p className="mt-2 text-sm text-red-600">{localError ?? uploadState.error}</p>
         )}
         {uploadState.error && (
           <p className="mt-1 text-xs text-slate-500">
-            Если документ уже создан, он может отображаться ниже со статусом «не загружен» — откройте
-            его и загрузите файл повторно.
+            Если документ уже создан, он может отображаться ниже со статусом «не загружен» —
+            откройте его и загрузите файл повторно.
           </p>
         )}
       </div>

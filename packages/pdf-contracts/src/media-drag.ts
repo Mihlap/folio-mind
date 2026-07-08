@@ -12,7 +12,7 @@ export function parseFolioMediaDragPayload(raw: string): FolioMediaDragPayload |
       return { assetId: parsed.assetId.trim(), title: String(parsed.title ?? '') };
     }
   } catch {
- 
+    // Invalid drag payloads are ignored by design.
   }
   return null;
 }

@@ -16,7 +16,9 @@ export function ResetPasswordPage() {
     try {
       await resetPassword({ token, newPassword }).unwrap();
       setDone(true);
-    } catch {}
+    } catch {
+      // The mutation error state renders the message below.
+    }
   }
   return (
     <AuthLayout title="Сброс пароля" subtitle="Задайте новый пароль">

@@ -1,4 +1,5 @@
-import { DocumentPageThumbnail, isThumbnailEager } from './DocumentPageThumbnail.js';
+import { DocumentPageThumbnail } from './DocumentPageThumbnail.js';
+import { isThumbnailEager } from './DocumentPageThumbnail.utils.js';
 import type { PageReviewMarkStatus } from '../../lib/documents/pageReviewMarkers.js';
 
 type PreviewPage = {

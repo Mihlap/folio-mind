@@ -12,9 +12,16 @@ type Props = {
   versionId: string;
   sourceDocxKey?: string | null;
   onAttached?: () => void;
+  onDismiss?: () => void;
 };
 
-export function DocumentSourceDocxBanner({ documentId, versionId, sourceDocxKey, onAttached }: Props) {
+export function DocumentSourceDocxBanner({
+  documentId,
+  versionId,
+  sourceDocxKey,
+  onAttached,
+  onDismiss,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const token = useAppSelector((s) => s.auth.token);
   const [attachSourceDocx] = useAttachSourceDocxMutation();
@@ -42,14 +49,25 @@ export function DocumentSourceDocxBanner({ documentId, versionId, sourceDocxKey,
   };
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-      <p className="font-medium">Для качественного «Применить правки» добавьте исходный DOCX</p>
+    <div className="relative rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+      {onDismiss && (
+        <button
+          type="button"
+          title="Скрыть подсказку"
+          aria-label="Скрыть подсказку"
+          onClick={onDismiss}
+          className="absolute right-1.5 top-1.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded text-lg text-amber-900/40 hover:bg-amber-100 hover:text-amber-900/70"
+        >
+          ✕
+        </button>
+      )}
+      <p className="pr-6 font-medium">Для качественного «Применить правки» добавьте исходный DOCX</p>
       <p className="mt-1 text-amber-900/80">
         Word-файл не заменит PDF в просмотрщике, но улучшит автозамены в договоре.
       </p>
       <button
         type="button"
-        className="mt-2 rounded-md bg-amber-800 px-3 py-1.5 text-white hover:bg-amber-900"
+        className="mt-2 cursor-pointer rounded-md bg-amber-800 px-3 py-1.5 text-white hover:bg-amber-900"
         onClick={() => inputRef.current?.click()}
       >
         Прикрепить DOCX

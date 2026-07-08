@@ -23,10 +23,8 @@ import {
 } from '@folio-mind/store';
 import { DocumentMobileSheet } from '../../components/documents/DocumentMobileSheet.js';
 import { DocumentThumbnailStrip } from '../../components/documents/DocumentThumbnailStrip.js';
-import {
-  DocumentPageHeader,
-  formatVersionStatusLabel,
-} from '../../components/documents/DocumentPageHeader.js';
+import { DocumentPageHeader } from '../../components/documents/DocumentPageHeader.js';
+import { formatVersionStatusLabel } from '../../components/documents/DocumentPageHeader.utils.js';
 import { isDocumentReviewStatus } from '@folio-mind/store';
 import {
   DocumentRightPanel,
@@ -35,7 +33,7 @@ import {
 import { DocumentVersionsSidebar } from '../../components/documents/DocumentVersionsSidebar.js';
 import { DocumentConfidenceNotice } from '../../components/documents/DocumentConfidenceNotice.js';
 import { DocumentSourceDocxBanner } from '../../components/documents/DocumentSourceDocxBanner.js';
-import { useDocumentWorkspace } from '../../context/document-workspace-context.js';
+import { useDocumentWorkspace } from '../../context/useDocumentWorkspace.js';
 import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js';
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
 import { useDocumentPdfLoader, pdfLoadStageLabel } from '../../hooks/useDocumentPdfLoader.js';
@@ -66,6 +64,7 @@ const RIGHT_PANEL = {
   collapseBelow: 260,
   maxWidth: 560,
 } as const;
+const DESKTOP_PANEL_QUERY = '(min-width: 768px)';
 type MobileSheet = null | 'versions' | 'panel';
 export function DocumentPage() {
   const dispatch = useAppDispatch();
@@ -97,9 +96,19 @@ export function DocumentPage() {
   const [updateAnnotation, { isLoading: updatingAnnotation }] = useUpdateAnnotationMutation();
   const [rightTab, setRightTab] = useState<DocumentRightTab>('report');
   const [toolsFocusSection, setToolsFocusSection] = useState<ToolSectionId | null>(null);
+  const [dismissedConfidenceVersions, setDismissedConfidenceVersions] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [dismissedDocxBannerVersions, setDismissedDocxBannerVersions] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [layoutAddNotice, setLayoutAddNotice] = useState<string | null>(null);
   const [presentationOpen, setPresentationOpen] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
+  const [showDockedRightPanel, setShowDockedRightPanel] = useState(() =>
+    typeof window === 'undefined' ? true : window.matchMedia(DESKTOP_PANEL_QUERY).matches,
+  );
+  const appliedUrlVersionIdRef = useRef<string | null>(null);
   const workspaceRowRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLElement>(null);
   const rightPanel = useHorizontalPanelResize({
@@ -107,6 +116,14 @@ export function DocumentPage() {
     ...RIGHT_PANEL,
   });
   const versions = useMemo(() => doc?.versions ?? [], [doc?.versions]);
+  const hasProcessingVersion = versions.some((v) => v.status === 'processing');
+  useEffect(() => {
+    const media = window.matchMedia(DESKTOP_PANEL_QUERY);
+    const sync = () => setShowDockedRightPanel(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
   const reviewStatus =
     doc && isDocumentReviewStatus(doc.reviewStatus) ? doc.reviewStatus : ('draft' as const);
   const reviewStatusChangedAt = doc?.reviewStatusChangedAt ?? null;
@@ -121,8 +138,7 @@ export function DocumentPage() {
   );
   const activeVersion = versions.find((v) => v.id === selectedVersionId) ?? latest;
   const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
-  const layoutPageCount =
-    pdfNumPages > 0 ? pdfNumPages : (activeVersion?.pageCount ?? 0);
+  const layoutPageCount = pdfNumPages > 0 ? pdfNumPages : (activeVersion?.pageCount ?? 0);
   useEffect(() => {
     setPresentationOpen(false);
   }, [activeVersion?.id]);
@@ -131,6 +147,13 @@ export function DocumentPage() {
     viewerPage,
     pageCount: layoutPageCount,
   });
+  const layoutDisplayPageCount = useMemo(() => {
+    const maxObjectPage = layout.objects.reduce(
+      (max, item) => Math.max(max, Number(item.page) || 0),
+      0,
+    );
+    return Math.max(layoutPageCount, maxObjectPage);
+  }, [layout.objects, layoutPageCount]);
   const {
     pdfViewMode,
     pdfUrl,
@@ -158,12 +181,12 @@ export function DocumentPage() {
     navigate(`/app/documents/${documentId}`);
   });
   useEffect(() => {
-    if (!doc?.versions.some((v) => v.status === 'processing')) return;
+    if (!hasProcessingVersion) return;
     const timer = setInterval(() => void refetchDocument(), 2000);
     return () => clearInterval(timer);
-  }, [doc?.versions, refetchDocument]);
+  }, [hasProcessingVersion, refetchDocument]);
   useEffect(() => {
-    if (!doc || selectedVersionId) return;
+    if (!doc?.id || selectedVersionId) return;
     const initial = versions.find(isDocumentVersionSelectable) ?? latest;
     if (initial) setSelectedVersionId(initial.id);
   }, [doc?.id, latest, selectedVersionId, versions]);
@@ -173,7 +196,7 @@ export function DocumentPage() {
       const fallback = versions.find(isDocumentVersionSelectable) ?? latest;
       setSelectedVersionId(fallback.id);
     }
-  }, [versions, selectedVersionId, latest?.id]);
+  }, [versions, selectedVersionId, latest]);
   useEffect(() => {
     if (!activeVersion || isDocumentVersionSelectable(activeVersion)) return;
     const fallback =
@@ -182,7 +205,7 @@ export function DocumentPage() {
     if (fallback) setSelectedVersionId(fallback.id);
   }, [activeVersion, versions]);
   useEffect(() => {
-    if (!doc) {
+    if (!doc?.id) {
       setWorkspace(null);
       return;
     }
@@ -223,9 +246,9 @@ export function DocumentPage() {
   }, [activeVersion?.id, dispatch]);
 
   useEffect(() => {
-    if (pdfNumPages <= 0) return;
-    setViewerPage((page) => Math.min(Math.max(1, page), pdfNumPages));
-  }, [pdfNumPages]);
+    if (layoutDisplayPageCount <= 0) return;
+    setViewerPage((page) => Math.min(Math.max(1, page), layoutDisplayPageCount));
+  }, [layoutDisplayPageCount]);
   const { data: annotationsData } = useListAnnotationsQuery(
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     { skip: !id || !activeVersion?.id },
@@ -284,6 +307,8 @@ export function DocumentPage() {
   useEffect(() => {
     const versionId = searchParams.get('versionId');
     if (!versionId || !versions.some((v) => v.id === versionId)) return;
+    if (appliedUrlVersionIdRef.current === versionId) return;
+    appliedUrlVersionIdRef.current = versionId;
     handleSelectVersion(versionId);
   }, [handleSelectVersion, searchParams, versions]);
 
@@ -322,10 +347,7 @@ export function DocumentPage() {
   };
 
   const handleLayoutAddImages = useCallback(
-    async (
-      files: File[],
-      options?: { distributeAcrossPages?: boolean; startPage?: number },
-    ) => {
+    async (files: File[], options?: { distributeAcrossPages?: boolean; startPage?: number }) => {
       if (!versionReady) {
         throw new Error('Версия документа ещё не готова для макета');
       }
@@ -384,9 +406,7 @@ export function DocumentPage() {
           sourceFileName: mediaTitle,
         });
       } catch (err) {
-        setLayoutAddNotice(
-          err instanceof Error ? err.message : 'Не удалось вставить из медиатеки',
-        );
+        setLayoutAddNotice(err instanceof Error ? err.message : 'Не удалось вставить из медиатеки');
       }
     },
     [layout, token],
@@ -442,10 +462,7 @@ export function DocumentPage() {
       setEditTextInjection({
         key: editInjectionKeyRef.current,
         text,
-        coords:
-          x != null || y != null
-            ? { x, y, pageWidthPx, pageHeightPx }
-            : undefined,
+        coords: x != null || y != null ? { x, y, pageWidthPx, pageHeightPx } : undefined,
       });
       setRightTab('tools');
       handleGoToPage(page);
@@ -518,8 +535,24 @@ export function DocumentPage() {
     setRightTab('tools');
     setToolsFocusSection('diff');
     rightPanel.expand();
-    setMobileSheet('panel');
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      setMobileSheet('panel');
+    }
   }, [rightPanel]);
+  const dismissConfidenceNotice = useCallback((versionId: string) => {
+    setDismissedConfidenceVersions((prev) => {
+      const next = new Set(prev);
+      next.add(versionId);
+      return next;
+    });
+  }, []);
+  const dismissDocxBanner = useCallback((versionId: string) => {
+    setDismissedDocxBannerVersions((prev) => {
+      const next = new Set(prev);
+      next.add(versionId);
+      return next;
+    });
+  }, []);
   const clearToolsFocusSection = useCallback(() => setToolsFocusSection(null), []);
   usePanelToggleCenterY(
     workspaceRowRef,
@@ -539,7 +572,12 @@ export function DocumentPage() {
   );
   const confidenceLevel = activeVersion?.confidenceLevel;
   const showConfidenceNotice =
-    confidenceLevel === 'red' || confidenceLevel === 'yellow';
+    (confidenceLevel === 'red' || confidenceLevel === 'yellow') &&
+    Boolean(activeVersion?.id) &&
+    !dismissedConfidenceVersions.has(activeVersion.id);
+  const showDocxBanner =
+    Boolean(id && activeVersion?.id && activeVersion.status === 'ready') &&
+    !dismissedDocxBannerVersions.has(activeVersion.id);
   const sizeLabel = activeVersion?.size
     ? `${(Number(activeVersion.size) / (1024 * 1024)).toFixed(1)} МБ`
     : null;
@@ -605,16 +643,18 @@ export function DocumentPage() {
                   summary={activeVersion?.confidenceSummary}
                   score={activeVersion?.confidenceScore}
                   onOpenCompare={openCompareTools}
+                  onDismiss={() => dismissConfidenceNotice(activeVersion!.id)}
                 />
               </div>
             )}
-            {id && activeVersion?.id && activeVersion.status === 'ready' && (
+            {showDocxBanner && (
               <div className="mb-2 shrink-0">
                 <DocumentSourceDocxBanner
                   documentId={id}
-                  versionId={activeVersion.id}
-                  sourceDocxKey={activeVersion.sourceDocxKey}
+                  versionId={activeVersion!.id}
+                  sourceDocxKey={activeVersion!.sourceDocxKey}
                   onAttached={() => void refetchDocument()}
+                  onDismiss={() => dismissDocxBanner(activeVersion!.id)}
                 />
               </div>
             )}
@@ -708,7 +748,9 @@ export function DocumentPage() {
                             aria-hidden
                           />
                           <p className="font-medium text-folio-800">
-                            {pdfLoadStageLabel(pdfLoadStage === 'processing' ? 'processing' : pdfLoadStage)}
+                            {pdfLoadStageLabel(
+                              pdfLoadStage === 'processing' ? 'processing' : pdfLoadStage,
+                            )}
                           </p>
                           <p className="max-w-xs text-center text-xs text-slate-500">
                             Это не ошибка — файл ещё собирается. Можно пока смотреть правки в панели
@@ -718,7 +760,9 @@ export function DocumentPage() {
                       ) : (
                         <>
                           <p>Загрузка PDF…</p>
-                          <p className="text-xs text-slate-400">{pdfLoadStageLabel(pdfLoadStage)}</p>
+                          <p className="text-xs text-slate-400">
+                            {pdfLoadStageLabel(pdfLoadStage)}
+                          </p>
                         </>
                       )}
                     </div>
@@ -786,44 +830,46 @@ export function DocumentPage() {
           </div>
         </div>
 
-        <DocumentRightPanel
-          ref={rightPanelRef}
-          documentId={doc.id}
-          versions={versions}
-          activeVersion={activeVersion}
-          versionReady={versionReady}
-          viewerPage={viewerPage}
-          onSelectVersion={handleSelectVersion}
-          onGoToPage={handleGoToPage}
-          focusedAnnotationId={focusedAnnotationId}
-          focusedGuestCommentId={focusedGuestCommentId}
-          onOpenAcceptedEdit={openAcceptedEditsModal}
-          onOpenAllAcceptedEdits={() => {
-            const first = acceptedEditsList[0];
-            if (first) openAcceptedEditsModal(first.page, first.id);
-            else setAcceptedEditsModalOpen(true);
-          }}
-          editTextInjection={editTextInjection}
-          toolsFocusSection={toolsFocusSection}
-          onToolsFocusSectionHandled={clearToolsFocusSection}
-          layout={layout}
-          layoutAddNotice={layoutAddNotice}
-          layoutPageCount={layoutPageCount}
-          onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
-          reviewStatus={reviewStatus}
-          reviewStatusChangedAt={reviewStatusChangedAt}
-          documentTitle={doc.title}
-          projectId={doc.projectId}
-          projectName={doc.projectName}
-          collapsed={rightPanel.collapsed}
-          onToggleCollapsed={rightPanel.toggleCollapsed}
-          onExpand={rightPanel.expand}
-          panelWidth={rightPanel.panelWidth}
-          isResizing={rightPanel.isResizing}
-          onResizeStart={rightPanel.beginResize}
-          activeTab={rightTab}
-          onTabChange={setRightTab}
-        />
+        {showDockedRightPanel && (
+          <DocumentRightPanel
+            ref={rightPanelRef}
+            documentId={doc.id}
+            versions={versions}
+            activeVersion={activeVersion}
+            versionReady={versionReady}
+            viewerPage={viewerPage}
+            onSelectVersion={handleSelectVersion}
+            onGoToPage={handleGoToPage}
+            focusedAnnotationId={focusedAnnotationId}
+            focusedGuestCommentId={focusedGuestCommentId}
+            onOpenAcceptedEdit={openAcceptedEditsModal}
+            onOpenAllAcceptedEdits={() => {
+              const first = acceptedEditsList[0];
+              if (first) openAcceptedEditsModal(first.page, first.id);
+              else setAcceptedEditsModalOpen(true);
+            }}
+            editTextInjection={editTextInjection}
+            toolsFocusSection={toolsFocusSection}
+            onToolsFocusSectionHandled={clearToolsFocusSection}
+            layout={layout}
+            layoutAddNotice={layoutAddNotice}
+            layoutPageCount={layoutPageCount}
+            onAddLayoutImages={(files, options) => handleLayoutAddImages(files, options)}
+            reviewStatus={reviewStatus}
+            reviewStatusChangedAt={reviewStatusChangedAt}
+            documentTitle={doc.title}
+            projectId={doc.projectId}
+            projectName={doc.projectName}
+            collapsed={rightPanel.collapsed}
+            onToggleCollapsed={rightPanel.toggleCollapsed}
+            onExpand={rightPanel.expand}
+            panelWidth={rightPanel.panelWidth}
+            isResizing={rightPanel.isResizing}
+            onResizeStart={rightPanel.beginResize}
+            activeTab={rightTab}
+            onTabChange={setRightTab}
+          />
+        )}
       </div>
 
       <nav
@@ -843,24 +889,22 @@ export function DocumentPage() {
               ? mobileSheet === 'versions'
               : mobileSheet === 'panel' && rightTab === item.id;
           return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => {
-              if (item.id === 'versions') {
-                setMobileSheet('versions');
-                return;
-              }
-              openMobilePanel(item.id);
-            }}
-            className={`flex flex-1 cursor-pointer flex-col items-center py-2.5 text-[11px] font-medium transition ${
-              isActive
-                ? 'bg-folio-50 text-folio-700'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            {item.label}
-          </button>
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                if (item.id === 'versions') {
+                  setMobileSheet('versions');
+                  return;
+                }
+                openMobilePanel(item.id);
+              }}
+              className={`flex flex-1 cursor-pointer flex-col items-center py-2.5 text-[11px] font-medium transition ${
+                isActive ? 'bg-folio-50 text-folio-700' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {item.label}
+            </button>
           );
         })}
       </nav>

@@ -1,4 +1,4 @@
-import { baseApi } from './baseApi.js';
+import { apiBaseUrl, baseApi } from './baseApi.js';
 export type RagSourceItem = {
   id: string;
   title: string;
@@ -62,7 +62,6 @@ export const ragApi = baseApi.injectEndpoints({
       }
     >({
       async queryFn({ sourceId, file }, { getState }) {
-        const { apiBaseUrl } = await import('./baseApi.js');
         const token = (
           getState() as {
             auth: {

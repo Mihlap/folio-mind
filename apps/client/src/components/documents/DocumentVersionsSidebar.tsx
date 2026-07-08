@@ -6,7 +6,7 @@ import {
   useUpdateVersionLabelMutation,
 } from '@folio-mind/store';
 import { isDocumentVersionSelectable, TITLE_VERSION_PREPARING } from '../../lib/documents/versionSelection.js';
-import { useDocumentWorkspaceOptional } from '../../context/document-workspace-context.js';
+import { useDocumentWorkspaceOptional } from '../../context/useDocumentWorkspace.js';
 import { useAppSelector } from '../../hooks/index.js';
 import { ConfirmDangerDialog } from '../ui/ConfirmDangerDialog.js';
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';

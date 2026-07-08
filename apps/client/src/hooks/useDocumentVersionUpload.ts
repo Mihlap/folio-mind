@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useAppSelector } from '../hooks/index.js';
-import { useBackgroundUpload } from '../context/background-upload-provider.js';
+import { useBackgroundUpload } from '../context/useBackgroundUpload.js';
 import { getUploadStage } from '../lib/uploads/uploadStage.js';
 
 export function useDocumentVersionUpload(
@@ -13,9 +13,7 @@ export function useDocumentVersionUpload(
   const uploadState = useAppSelector((s) => s.backgroundUpload);
   const { uploadDocumentVersion, uploadDocumentVersionFromDocx } = useBackgroundUpload();
   const uploading =
-    uploadState.active &&
-    uploadState.kind === 'version' &&
-    uploadState.documentId === documentId;
+    uploadState.active && uploadState.kind === 'version' && uploadState.documentId === documentId;
   const progress = uploading ? uploadState.progress : 0;
   const showDone = uploading && uploadState.showDone;
 

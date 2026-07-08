@@ -67,7 +67,10 @@ export async function processApplyAcceptedSuggestionsJob(
     if (!exists) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }
@@ -143,7 +146,9 @@ export async function processApplyAcceptedSuggestionsJob(
     const message = err instanceof Error ? err.message : 'Apply accepted suggestions failed';
     try {
       await deleteObjectByKey(targetS3Key);
-    } catch {}
+    } catch {
+      // Cleanup is best-effort; keep the original job failure visible.
+    }
     try {
       await failOptimizeOperation({
         operationJobId,
@@ -151,7 +156,9 @@ export async function processApplyAcceptedSuggestionsJob(
         error: message,
         payload: { documentId, sourceVersionId },
       });
-    } catch {}
+    } catch {
+      // Preserve the original error if the failure marker cannot be written.
+    }
     throw err;
   }
 }

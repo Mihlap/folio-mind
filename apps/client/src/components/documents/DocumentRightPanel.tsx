@@ -167,8 +167,15 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
           </button>
         ))}
       </div>
-      <div className="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-        <div className={activeTab === 'report' ? 'block' : 'hidden'}>
+      <div
+        className={
+          isDrawer
+            ? 'relative min-h-0 flex-1 overflow-visible'
+            : 'scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain'
+        }
+      >
+        {activeTab === 'report' && (
+        <div>
           {activeVersion ? (
             <DocumentReportPanel
               documentId={documentId}
@@ -179,7 +186,9 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             <EmptyTab text="Выберите версию" />
           )}
         </div>
-        <div className={activeTab === 'tools' ? 'block' : 'hidden'}>
+        )}
+        {activeTab === 'tools' && (
+        <div>
           <DocumentPdfOperationsPanel
             embedded
             documentId={documentId}
@@ -207,7 +216,9 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             projectName={projectName}
           />
         </div>
-        <div className={activeTab === 'chat' ? 'block' : 'hidden'}>
+        )}
+        {activeTab === 'chat' && (
+        <div>
           {activeVersion ? (
             <DocumentAiPanel
               embedded
@@ -219,6 +230,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             <EmptyTab text="Выберите версию" />
           )}
         </div>
+        )}
       </div>
       </div>
     </aside>

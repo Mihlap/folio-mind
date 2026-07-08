@@ -2,23 +2,29 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   useGetVersionPreviewsQuery,
   useRearrangePagesMutation,
+  HINT_PAGE_ORDER_SAVE_REPLACE_CURRENT,
 } from '@folio-mind/store';
 import { DocumentPageThumbnail } from './DocumentPageThumbnail.js';
+import { FeatureHelpActionButton } from '../ui/FeatureHelp.js';
+import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 import {
-  FeatureHelpActionButton,
-  reportActionBtnPrimary,
-  reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+  OperationSaveModeSelect,
+  type OperationSaveMode,
+} from './OperationSaveModeSelect.js';
 
 type OperationResult = {
   operationJobId: string;
   versionId: string;
   version: number;
+  saveMode?: OperationSaveMode;
 };
 
 type Props = {
   documentId: string;
   versionId: string | undefined;
+  versionNumber?: number;
+  isLatestVersion?: boolean;
+  versionsStamp: string;
   pageCount: number;
   versionReady: boolean;
   operationPending: boolean;
@@ -26,8 +32,14 @@ type Props = {
   onError: (message: string) => void;
 };
 
+const BLANK_PAGE = 0;
+
 function buildDefaultOrder(pageCount: number): number[] {
   return Array.from({ length: pageCount }, (_, index) => index + 1);
+}
+
+function pageSlotLabel(sourcePage: number): string {
+  return sourcePage === BLANK_PAGE ? 'Чистый лист' : `Стр. ${sourcePage}`;
 }
 
 function getMutationError(err: unknown): string {
@@ -44,6 +56,9 @@ function getMutationError(err: unknown): string {
 export function DocumentPageOrderPanel({
   documentId,
   versionId,
+  versionNumber,
+  isLatestVersion = false,
+  versionsStamp,
   pageCount,
   versionReady,
   operationPending,
@@ -51,6 +66,7 @@ export function DocumentPageOrderPanel({
   onError,
 }: Props) {
   const [pageOrder, setPageOrder] = useState<number[]>([]);
+  const [saveMode, setSaveMode] = useState<OperationSaveMode>('new_version');
   const [rearrangePages, { isLoading: rearrangeLoading }] = useRearrangePagesMutation();
 
   const previewTo = Math.min(pageCount, 40);
@@ -74,7 +90,7 @@ export function DocumentPageOrderPanel({
 
   useEffect(() => {
     setPageOrder(pageCount > 0 ? buildDefaultOrder(pageCount) : []);
-  }, [versionId, pageCount]);
+  }, [versionId, pageCount, versionsStamp]);
 
   const pending = operationPending || rearrangeLoading;
   const blockedReason = (() => {
@@ -113,6 +129,10 @@ export function DocumentPageOrderPanel({
     setPageOrder(buildDefaultOrder(pageCount));
   }
 
+  function addBlankPage() {
+    setPageOrder((prev) => (prev.length >= 500 ? prev : [...prev, BLANK_PAGE]));
+  }
+
   async function handleApply() {
     if (!versionId || !versionReady || pageOrder.length === 0) return;
     try {
@@ -120,8 +140,9 @@ export function DocumentPageOrderPanel({
         documentId,
         versionId,
         pages: pageOrder,
+        saveMode,
       }).unwrap();
-      onOperationStarted(result);
+      onOperationStarted({ ...result, saveMode });
       resetOrder();
     } catch (err) {
       onError(getMutationError(err));
@@ -138,8 +159,8 @@ export function DocumentPageOrderPanel({
   return (
     <div className="space-y-3">
       <p className="text-[11px] leading-snug text-slate-500">
-        Измените порядок страниц или продублируйте лист. Исходная версия не меняется — будет
-        создана новая.
+        Измените порядок, продублируйте лист или добавьте чистый лист кнопкой ниже. Исходная версия
+        не меняется — будет создана новая.
       </p>
 
       {pageOrder.length > 0 ? (
@@ -153,7 +174,11 @@ export function DocumentPageOrderPanel({
                 {index + 1}
               </span>
               <div className="h-12 w-9 shrink-0 overflow-hidden rounded border border-slate-200 bg-white">
-                {thumbByPage.get(sourcePage) ? (
+                {sourcePage === BLANK_PAGE ? (
+                  <div className="flex h-full items-center justify-center bg-white text-[9px] font-medium text-slate-400">
+                    пусто
+                  </div>
+                ) : thumbByPage.get(sourcePage) ? (
                   <DocumentPageThumbnail
                     src={thumbByPage.get(sourcePage)!}
                     alt={`Стр. ${sourcePage}`}
@@ -166,7 +191,7 @@ export function DocumentPageOrderPanel({
                   </div>
                 )}
               </div>
-              <span className="min-w-0 flex-1 text-xs text-slate-700">Стр. {sourcePage}</span>
+              <span className="min-w-0 flex-1 text-xs text-slate-700">{pageSlotLabel(sourcePage)}</span>
               <span className="flex shrink-0 items-center gap-0.5">
                 <button
                   type="button"
@@ -199,7 +224,7 @@ export function DocumentPageOrderPanel({
                   type="button"
                   disabled={pending || pageOrder.length <= 1}
                   onClick={() => removeSlot(index)}
-                  className="cursor-pointer rounded px-1.5 text-xs text-rose-600 hover:bg-white disabled:opacity-40"
+                  className="cursor-pointer rounded px-2 py-0.5 text-sm font-semibold leading-none text-rose-600 hover:bg-white disabled:opacity-40"
                   title="Убрать из итога"
                 >
                   ×
@@ -215,6 +240,14 @@ export function DocumentPageOrderPanel({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
+          disabled={pending || pageCount <= 0 || pageOrder.length >= 500}
+          onClick={addBlankPage}
+          className="cursor-pointer rounded-lg border border-folio-200 bg-folio-50 px-3 py-1.5 text-xs font-medium text-folio-800 hover:bg-folio-100 disabled:opacity-50"
+        >
+          + Чистый лист
+        </button>
+        <button
+          type="button"
           disabled={pending || pageCount <= 0}
           onClick={resetOrder}
           className="cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
@@ -228,19 +261,44 @@ export function DocumentPageOrderPanel({
       </div>
 
       <div className={reportActionsColumnClass}>
+        <OperationSaveModeSelect
+          value={saveMode}
+          onChange={setSaveMode}
+          versionNumber={versionNumber}
+          canReplaceCurrent={isLatestVersion}
+          disabled={pending}
+        />
         <FeatureHelpActionButton
-          helpTitle="Сохранить порядок в новую версию"
+          helpTitle={
+            saveMode === 'replace_current'
+              ? 'Обновить текущую версию'
+              : 'Сохранить порядок в новую версию'
+          }
           disabled={!versionReady || pending || pageOrder.length === 0 || !orderChanged}
           onClick={() => void handleApply()}
           buttonClassName={reportActionBtnPrimary}
           helpContent={
-            <>
-              <p>Соберёт PDF в указанном порядке. Дубликаты останутся отдельными листами.</p>
-              <p>Нужна готовая версия с известным числом страниц (до 500 в итоге).</p>
-            </>
+            saveMode === 'replace_current' ? (
+              <>
+                <p>{HINT_PAGE_ORDER_SAVE_REPLACE_CURRENT}</p>
+                <p>Дубликаты и чистые листы останутся отдельными страницами.</p>
+              </>
+            ) : (
+              <>
+                <p>
+                  Соберёт PDF в указанном порядке. Дубликаты и чистые листы останутся отдельными
+                  страницами.
+                </p>
+                <p>Нужна готовая версия с известным числом страниц (до 500 в итоге).</p>
+              </>
+            )
           }
         >
-          {rearrangeLoading ? 'Запуск…' : 'Сохранить в новую версию'}
+          {rearrangeLoading
+            ? 'Запуск…'
+            : saveMode === 'replace_current'
+              ? 'Обновить текущую версию'
+              : 'Сохранить в новую версию'}
         </FeatureHelpActionButton>
       </div>
 

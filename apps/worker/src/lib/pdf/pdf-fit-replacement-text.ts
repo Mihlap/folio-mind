@@ -46,7 +46,7 @@ export function fitReplacementOnPage(params: {
   pageWidth: number;
   pageHeight: number;
 }): { lines: FittedTextLine[]; lineHeight: number } {
-  const { font, text, startX, startY, pageWidth, pageHeight } = params;
+  const { font, text, startX, startY, pageWidth } = params;
   const maxWidth = Math.max(40, pageWidth - startX - PAGE_MARGIN);
   let fontSize = Math.max(MIN_FONT_SIZE, params.baseFontSize);
 

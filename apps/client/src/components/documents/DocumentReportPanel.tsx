@@ -5,13 +5,13 @@ import {
   useGetJobQuery,
   useRequestSummaryMutation,
 } from '@folio-mind/store';
+import { FeatureHelpButton } from '../ui/FeatureHelp.js';
 import {
-  FeatureHelpButton,
   reportActionBtnSoft,
   reportIconCirclePdf,
   reportIconCircleWord,
   reportToolbarRowClass,
-} from '../ui/FeatureHelp.js';
+} from '../ui/FeatureHelp.styles.js';
 import { DocumentRagComparePanel } from './DocumentRagComparePanel.js';
 import { ReportTextBlock } from './ReportTextBlock.js';
 
@@ -27,11 +27,7 @@ type Props = {
   versionId: string;
   versionReady: boolean;
 };
-export function DocumentReportPanel({
-  documentId,
-  versionId,
-  versionReady,
-}: Props) {
+export function DocumentReportPanel({ documentId, versionId, versionReady }: Props) {
   const { data: providersData } = useGetAiProvidersQuery();
   const [requestSummary, { isLoading: summaryRequestLoading }] = useRequestSummaryMutation();
   const [exportReport, { isLoading: exportLoading }] = useExportReportMutation();

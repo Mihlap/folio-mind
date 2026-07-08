@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAiSuggestionsFromLlm } from './suggestions.js';
+import { parseAiSuggestionsFromLlm, toUserFacingAiSuggestionsError } from './suggestions.js';
 describe('parseAiSuggestionsFromLlm', () => {
   it('parses fenced JSON', () => {
     const items = parseAiSuggestionsFromLlm(
@@ -20,10 +20,23 @@ describe('parseAiSuggestionsFromLlm', () => {
     );
     expect(items).toHaveLength(1);
   });
-  it('extracts object when model adds text after json', () => {
+  it('repairs truncated json with jsonrepair fallback', () => {
     const items = parseAiSuggestionsFromLlm(
-      'Вот результат:\n{"suggestions":[{"fragmentId":"f4","originalText":"текст","suggestion":"правка","reason":"риск"}]}\nГотово.',
+      'Анализ:\n{"suggestions":[{"fragmentId":"f5","originalText":"текст","suggestion":"правка","reason":"риск","page":2}',
     );
-    expect(items[0]?.fragmentId).toBe('f4');
+    expect(items).toHaveLength(1);
+    expect(items[0]?.page).toBe(2);
+  });
+});
+
+describe('toUserFacingAiSuggestionsError', () => {
+  it('hides JSON technical detail from legacy messages', () => {
+    expect(
+      toUserFacingAiSuggestionsError(
+        new Error('ИИ вернул ответ в неверном формате. (JSON not found in model response)'),
+      ),
+    ).toBe(
+      'ИИ не смог оформить ответ как список правок. Попробуйте ещё раз или выберите анализ одной страницы.',
+    );
   });
 });

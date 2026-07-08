@@ -168,8 +168,6 @@ async function rasterizeLayoutShape(
   return canvas.toDataURL('image/png');
 }
 
-type LayoutObjectForPdf = { imageSrc: string; crop?: LayoutRect };
-
 export async function normalizeLayoutObjectsForPdf(
   objects: LayoutPageObject[],
   pageWidthPt = 595,

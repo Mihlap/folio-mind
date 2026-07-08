@@ -40,7 +40,10 @@ export async function processImportFromDocxJob(
     if (!version) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'completed', payload: { skipped: 'version_deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }

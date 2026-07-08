@@ -12,6 +12,7 @@ function discoverInDirectory(rootDir: string, binName: string): string | null {
       if (existsSync(candidate)) return candidate;
     }
   } catch {
+    // Optional discovery path; callers will try other locations.
   }
   return null;
 }
@@ -35,6 +36,7 @@ function discoverBinaryOnWindows(dirPrefix: string, binName: string): string | n
       const nested = discoverInDirectory(gsRoot, binName);
       if (nested) return nested;
     } catch {
+      // Optional discovery path; callers will try other locations.
     }
   }
   return null;

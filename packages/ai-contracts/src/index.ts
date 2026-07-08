@@ -1,8 +1,10 @@
 export {
   aiSuggestionItemSchema,
   aiSuggestionsResponseSchema,
+  AI_SUGGESTIONS_USER_ERROR,
   extractJsonFromLlm,
   parseAiSuggestionsFromLlm,
+  toUserFacingAiSuggestionsError,
   type AiSuggestionItem,
 } from './suggestions.js';
 export { extractRagSearchTerms } from './rag-search-terms.js';

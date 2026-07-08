@@ -4,6 +4,7 @@ import { OPTIMIZE_PRESETS, DOCUMENT_REVIEW_STATUSES } from '@folio-mind/pdf-cont
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 export const uploadRateLimit = { rateLimit: UPLOAD_RATE_LIMIT };
 export const errorBody = z.object({ error: z.string() });
+export const operationSaveModeSchema = z.enum(['new_version', 'replace_current']).default('new_version');
 export const documentReviewStatusSchema = z.enum(DOCUMENT_REVIEW_STATUSES);
 export const documentSchema = z.object({
   id: z.string(),
@@ -36,7 +37,8 @@ export const splitPagesSchema = z.object({
     ),
 });
 export const rearrangePagesSchema = z.object({
-  pages: z.array(z.number().int().min(1)).min(1).max(500),
+  pages: z.array(z.number().int().min(0)).min(1).max(500),
+  saveMode: operationSaveModeSchema,
 });
 export const mergeVersionsSchema = z.object({
   versionIds: z
@@ -57,6 +59,7 @@ const layoutRectSchema = z.object({
 });
 
 const layoutImageObjectSchema = z.object({
+  kind: z.literal('image').optional(),
   id: z.string().min(1),
   page: z.number().int().min(1).max(500),
   rect: layoutRectSchema,
@@ -71,11 +74,24 @@ const layoutImageObjectSchema = z.object({
       'Изображения: только PNG или JPEG (data URL)',
     ),
   rotation: z.number().default(0),
+  crop: layoutRectSchema.optional(),
+  sourceFileName: z.string().max(255).optional(),
+  caption: z.string().max(500).optional(),
 });
 
 export const applyLayoutPdfSchema = z
   .object({
     objects: z.array(layoutImageObjectSchema).min(1).max(30),
+    blankInsertions: z
+      .array(
+        z.object({
+          afterPage: z.number().int().min(0),
+          count: z.number().int().min(1).max(50),
+        }),
+      )
+      .optional()
+      .default([]),
+    saveMode: operationSaveModeSchema,
   })
   .superRefine((body, ctx) => {
     const totalBytes = body.objects.reduce((sum, object) => {

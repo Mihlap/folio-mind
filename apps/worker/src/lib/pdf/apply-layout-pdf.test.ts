@@ -40,6 +40,31 @@ describe('applyLayoutToPdfBuffer', () => {
     expect(out.getPageCount()).toBe(2);
   });
 
+  it('inserts blank pages in the middle before drawing layout', async () => {
+    const source = await PDFDocument.create();
+    source.addPage([300, 400]);
+    source.addPage([300, 400]);
+    source.addPage([300, 400]);
+    const sourceBuffer = Buffer.from(await source.save());
+
+    const objects: LayoutImageObject[] = [
+      {
+        id: 'a',
+        page: 2,
+        imageSrc: TINY_PNG_DATA_URL,
+        rotation: 0,
+        rect: { x: 0.1, y: 0.1, width: 0.3, height: 0.3 },
+      },
+    ];
+
+    const result = await applyLayoutToPdfBuffer(sourceBuffer, objects, [{ afterPage: 1, count: 1 }]);
+    expect(result.appliedCount).toBe(1);
+    expect(result.pageCount).toBe(4);
+
+    const out = await PDFDocument.load(result.buffer);
+    expect(out.getPageCount()).toBe(4);
+  });
+
   it('rejects empty object list', async () => {
     const source = await PDFDocument.create();
     source.addPage([200, 200]);

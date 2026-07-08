@@ -63,6 +63,23 @@ export class YandexGPTProvider implements LLMProvider {
   }
   async complete(params: CompletionRequest): Promise<CompletionResponse> {
     if (!this.config?.folderId || !this.config?.iamToken) {
+      if (params.system?.includes('"suggestions"')) {
+        return {
+          text: JSON.stringify({
+            suggestions: [
+              {
+                fragmentId: 'stub-1',
+                originalText: 'пример исходного текста',
+                suggestion: 'пример улучшенной формулировки',
+                reason: 'тестовая правка (stub)',
+                page: 1,
+              },
+            ],
+          }),
+          model: 'yandexgpt-stub',
+          usage: { promptTokens: 0, completionTokens: 0 },
+        };
+      }
       return {
         text: `[YandexGPT stub] ${params.prompt.slice(0, 120)}…`,
         model: 'yandexgpt-stub',
