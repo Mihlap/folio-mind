@@ -160,6 +160,7 @@ export async function enqueueSplitPagesJob(
     sourceS3Key: string;
     targetS3Key: string;
     pages: number[];
+    replaceInPlace?: boolean;
     requestId?: string;
   },
 ): Promise<void> {
@@ -335,6 +336,8 @@ export async function enqueueApplyLayoutPdfJob(
       imageSrc: string;
       rotation: number;
     }>;
+    blankInsertions?: Array<{ afterPage: number; count: number }>;
+    replaceInPlace?: boolean;
     requestId?: string;
   },
 ): Promise<void> {

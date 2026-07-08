@@ -44,7 +44,9 @@ export function RegisterPage() {
         captchaToken: captchaToken ?? undefined,
       }).unwrap();
       navigate('/check-email', { state: { email: res.email } });
-    } catch {}
+    } catch {
+      // The mutation error state renders the message below.
+    }
   }
   const displayError =
     clientError ?? (error ? getAuthErrorMessage(error, 'Не удалось зарегистрироваться') : null);

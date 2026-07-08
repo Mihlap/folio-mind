@@ -6,6 +6,7 @@ import {
   useListProjectsQuery,
 } from '@folio-mind/store';
 import { ProjectRenameControl } from '../../components/projects/ProjectRenameControl.js';
+import { ProjectDropTarget } from '../../components/projects/ProjectDropTarget.js';
 
 export function ProjectsPage() {
   const { data, refetch } = useListProjectsQuery();
@@ -41,8 +42,8 @@ export function ProjectsPage() {
       </div>
 
       <p className="mb-6 max-w-2xl text-sm leading-relaxed text-slate-500">
-        Папки для группировки документов одного объекта или заказа. Привязку можно менять на
-        странице документа или при загрузке внутри проекта.
+        Папки для группировки документов одного объекта или заказа. Перетащите документ с главной
+        страницы на проект или выберите проект в карточке документа.
       </p>
 
       <form
@@ -72,47 +73,51 @@ export function ProjectsPage() {
 
       <ul className="space-y-3">
         {data?.items.map((project) => (
-          <li
-            key={project.id}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 sm:pr-2 sm:pl-0 sm:py-0"
-          >
-            <Link
-              to={`/app/projects/${project.id}`}
-              className="min-w-0 flex-1 px-2 py-2 sm:px-4 sm:py-3"
+          <li key={project.id}>
+            <ProjectDropTarget
+              projectId={project.id}
+              projectName={project.name}
+              onAssigned={() => void refetch()}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 sm:pr-2 sm:pl-0 sm:py-0"
             >
-              <span className="font-medium text-slate-900">{project.name}</span>
-              <span className="mt-0.5 block text-xs text-slate-400">
-                {project.documentCount}{' '}
-                {project.documentCount === 1
-                  ? 'документ'
-                  : project.documentCount >= 2 && project.documentCount <= 4
-                    ? 'документа'
-                    : 'документов'}
-              </span>
-            </Link>
-            <ProjectRenameControl projectId={project.id} name={project.name} />
-            <button
-              type="button"
-              title="Удалить проект"
-              className="shrink-0 cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50"
-              onClick={async () => {
-                if (
-                  !window.confirm(
-                    `Удалить проект «${project.name}»?\n\nДокументы останутся, привязка к проекту снимется.`,
-                  )
-                ) {
-                  return;
-                }
-                try {
-                  await deleteProject(project.id).unwrap();
-                  await refetch();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : 'Ошибка удаления');
-                }
-              }}
-            >
-              Удалить
-            </button>
+              <Link
+                to={`/app/projects/${project.id}`}
+                className="min-w-0 flex-1 px-2 py-2 sm:px-4 sm:py-3"
+              >
+                <span className="font-medium text-slate-900">{project.name}</span>
+                <span className="mt-0.5 block text-xs text-slate-400">
+                  {project.documentCount}{' '}
+                  {project.documentCount === 1
+                    ? 'документ'
+                    : project.documentCount >= 2 && project.documentCount <= 4
+                      ? 'документа'
+                      : 'документов'}
+                </span>
+              </Link>
+              <ProjectRenameControl projectId={project.id} name={project.name} />
+              <button
+                type="button"
+                title="Удалить проект"
+                className="shrink-0 cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      `Удалить проект «${project.name}»?\n\nДокументы останутся, привязка к проекту снимется.`,
+                    )
+                  ) {
+                    return;
+                  }
+                  try {
+                    await deleteProject(project.id).unwrap();
+                    await refetch();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Ошибка удаления');
+                  }
+                }}
+              >
+                Удалить
+              </button>
+            </ProjectDropTarget>
           </li>
         ))}
         {data?.items.length === 0 && (

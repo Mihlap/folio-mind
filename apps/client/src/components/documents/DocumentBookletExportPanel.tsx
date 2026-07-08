@@ -13,12 +13,8 @@ import {
   usePrintReadinessMutation,
   type PrintReadinessReport,
 } from '@folio-mind/store';
-import {
-  FeatureHelpActionButton,
-  FeatureHelpButton,
-  reportActionBtnPrimary,
-  reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+import { FeatureHelpActionButton, FeatureHelpButton } from '../ui/FeatureHelp.js';
+import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 import { BookletStepHeading } from './BookletStepHeading.js';
 
 type Props = {
@@ -211,12 +207,14 @@ export function DocumentBookletExportPanel({
         <span className="text-xs font-medium text-slate-800">Чеклист перед печатью</span>
         <FeatureHelpButton title="Проверка перед печатью">
           <p>Оценка резкости картинок (DPI) и того, встроены ли шрифты в PDF.</p>
-          <p>Это подсказка, не гарантия типографии. Ориентир для печати A4: от {PRINT_MIN_DPI} dpi.</p>
+          <p>
+            Это подсказка, не гарантия типографии. Ориентир для печати A4: от {PRINT_MIN_DPI} dpi.
+          </p>
         </FeatureHelpButton>
       </div>
       <p className="text-[11px] leading-snug text-slate-500">
-        Автоматическая оценка по PDF. «Стоит проверить» не значит, что печать невозможна — откройте файл
-        и посмотрите глазами.
+        Автоматическая оценка по PDF. «Стоит проверить» не значит, что печать невозможна — откройте
+        файл и посмотрите глазами.
       </p>
       <FeatureHelpActionButton
         helpTitle="Проверить"
@@ -225,7 +223,9 @@ export function DocumentBookletExportPanel({
         onClick={() => void handlePrintReadiness()}
         buttonClassName={reportActionBtnPrimary}
       >
-        {checkingReadiness || (activeJobId && jobKind === 'readiness') ? 'Проверка…' : 'Проверить перед печатью'}
+        {checkingReadiness || (activeJobId && jobKind === 'readiness')
+          ? 'Проверка…'
+          : 'Проверить перед печатью'}
       </FeatureHelpActionButton>
       {readiness && (
         <div className="space-y-2 text-xs">
@@ -247,7 +247,10 @@ export function DocumentBookletExportPanel({
           )}
           <ul className="max-h-40 space-y-1 overflow-y-auto">
             {readiness.pages.map((page) => (
-              <li key={page.page} className="flex justify-between gap-2 border-b border-slate-100 pb-1">
+              <li
+                key={page.page}
+                className="flex justify-between gap-2 border-b border-slate-100 pb-1"
+              >
                 <span>Стр. {page.page}</span>
                 <span className={levelClass(page.level).split(' ')[0]}>
                   {page.minEstimatedDpi != null ? `${page.minEstimatedDpi} dpi` : '—'} ·{' '}
@@ -267,7 +270,10 @@ export function DocumentBookletExportPanel({
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-slate-800">ZIP: PDF + JPG всех страниц</span>
           <FeatureHelpButton title="Пакет для заказчика">
-            <p>В архиве: PDF документа, папка pages/ с JPG каждой страницы и отчёт о готовности к печати.</p>
+            <p>
+              В архиве: PDF документа, папка pages/ с JPG каждой страницы и отчёт о готовности к
+              печати.
+            </p>
             <p>После сборки можно дать ссылку клиенту в разделе «Ссылка для заказчика».</p>
           </FeatureHelpButton>
         </div>
@@ -306,7 +312,9 @@ export function DocumentBookletExportPanel({
             onClick={() => void handleExportBooklet()}
             buttonClassName={reportActionBtnPrimary}
           >
-            {exportingBooklet || (activeJobId && jobKind === 'booklet') ? 'Сборка…' : 'Собрать ZIP для заказчика'}
+            {exportingBooklet || (activeJobId && jobKind === 'booklet')
+              ? 'Сборка…'
+              : 'Собрать ZIP для заказчика'}
           </FeatureHelpActionButton>
           <button
             type="button"
@@ -356,7 +364,9 @@ export function DocumentBookletExportPanel({
               max={600}
               value={pagesDpi}
               disabled={busy || !versionReady}
-              onChange={(e) => setPagesDpi(Number(e.target.value) || BOOKLET_EXPORT_DEFAULT_JPEG_DPI)}
+              onChange={(e) =>
+                setPagesDpi(Number(e.target.value) || BOOKLET_EXPORT_DEFAULT_JPEG_DPI)
+              }
               className="w-20 rounded border border-slate-200 px-2 py-1"
             />
           </label>
@@ -368,7 +378,9 @@ export function DocumentBookletExportPanel({
           onClick={() => void handleExportPages()}
           buttonClassName={reportActionBtnPrimary}
         >
-          {exportingPages || (activeJobId && jobKind === 'pages') ? 'Экспорт…' : 'Экспорт выбранных страниц'}
+          {exportingPages || (activeJobId && jobKind === 'pages')
+            ? 'Экспорт…'
+            : 'Экспорт выбранных страниц'}
         </FeatureHelpActionButton>
       </div>
     </>

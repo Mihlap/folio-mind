@@ -5,16 +5,23 @@ import {
   getVersionListStatusLabel,
 } from '@folio-mind/store';
 import { useAppSelector } from '../../hooks/index.js';
-import { useBackgroundUpload } from '../../context/background-upload-provider.js';
+import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { ConfirmDangerDialog } from '../ui/ConfirmDangerDialog.js';
-import { docxDownloadLabel, docxDownloadTitle, versionHasDocxDownload } from '../../lib/documents/sourceDocx.js';
+import {
+  docxDownloadLabel,
+  docxDownloadTitle,
+  versionHasDocxDownload,
+} from '../../lib/documents/sourceDocx.js';
 import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
 import { DeleteDocumentButton } from './DeleteDocumentButton.js';
 import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.js';
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
-import { isDocumentVersionSelectable, TITLE_VERSION_PREPARING } from '../../lib/documents/versionSelection.js';
+import {
+  isDocumentVersionSelectable,
+  TITLE_VERSION_PREPARING,
+} from '../../lib/documents/versionSelection.js';
 
 function getDisplayStatus(status: string): string {
   return getVersionListStatusLabel(status);
@@ -59,9 +66,7 @@ export function DocumentVersionsPanel({
   const uploadState = useAppSelector((s) => s.backgroundUpload);
   const { uploadDocumentVersion } = useBackgroundUpload();
   const uploading =
-    uploadState.active &&
-    uploadState.kind === 'version' &&
-    uploadState.documentId === documentId;
+    uploadState.active && uploadState.kind === 'version' && uploadState.documentId === documentId;
   const uploadProgress = uploading ? uploadState.progress : null;
   const showUploadDone = uploading && uploadState.showDone;
   const [error, setError] = useState<string | null>(null);
@@ -259,7 +264,9 @@ export function DocumentVersionsPanel({
                       }
                       disabled={deleteBlocked}
                       busy={deletingVersionId === v.id}
-                      onClick={() => setPendingDelete({ versionId: v.id, versionNumber: v.version })}
+                      onClick={() =>
+                        setPendingDelete({ versionId: v.id, versionNumber: v.version })
+                      }
                       variant="list"
                     />
                   </span>

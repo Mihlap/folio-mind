@@ -336,6 +336,7 @@ export function GuestSharePage() {
       const savedEmail = sessionStorage.getItem(AUTHOR_EMAIL_KEY);
       if (savedEmail) setAuthorEmail(savedEmail);
     } catch {
+      // Session storage is optional for guest author hints.
     }
   }, []);
 
@@ -345,6 +346,7 @@ export function GuestSharePage() {
       const saved = sessionStorage.getItem(sharePasswordKey(token));
       if (saved) setSharePassword(saved);
     } catch {
+      // Session storage is optional; the guest can re-enter the password.
     }
   }, [token]);
 
@@ -530,6 +532,7 @@ export function GuestSharePage() {
     try {
       sessionStorage.setItem(AUTHOR_NAME_KEY, value);
     } catch {
+      // Session storage is optional for guest author hints.
     }
   }
 
@@ -538,6 +541,7 @@ export function GuestSharePage() {
     try {
       sessionStorage.setItem(AUTHOR_EMAIL_KEY, value);
     } catch {
+      // Session storage is optional for guest author hints.
     }
   }
 
@@ -586,6 +590,7 @@ export function GuestSharePage() {
       try {
         sessionStorage.setItem(sharePasswordKey(token), pwd);
       } catch {
+        // Session storage is optional; keep the password only in component state.
       }
       setSharePassword(pwd);
       await loadShare(pwd);

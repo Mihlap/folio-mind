@@ -11,6 +11,49 @@ export const aiSuggestionsResponseSchema = z.object({
   suggestions: z.array(aiSuggestionItemSchema).max(30),
 });
 export type AiSuggestionItem = z.infer<typeof aiSuggestionItemSchema>;
+
+export const AI_SUGGESTIONS_USER_ERROR = {
+  invalidFormat:
+    'ИИ не смог оформить ответ как список правок. Попробуйте ещё раз или выберите анализ одной страницы.',
+  invalidStructure: 'ИИ вернул неполный список правок. Попробуйте запрос ещё раз.',
+  noSuggestions:
+    'ИИ не смог сформировать предложения по документу. Попробуйте снова или укажите одну страницу.',
+} as const;
+
+/** Сообщение для UI без технических подробностей (JSON, stack, коды API). */
+export function toUserFacingAiSuggestionsError(err: unknown): string {
+  if (!(err instanceof Error)) return AI_SUGGESTIONS_USER_ERROR.noSuggestions;
+  const msg = err.message.trim();
+  if (
+    msg.includes('JSON') ||
+    msg.includes('неверном формате') ||
+    msg.includes('структур') ||
+    msg.includes('валидным JSON')
+  ) {
+    return AI_SUGGESTIONS_USER_ERROR.invalidFormat;
+  }
+  if (msg.includes('неполный список')) {
+    return AI_SUGGESTIONS_USER_ERROR.invalidStructure;
+  }
+  if (msg.includes('нет текста для анализа')) {
+    return msg;
+  }
+  if (msg.includes('не смог сформировать предложения')) {
+    return AI_SUGGESTIONS_USER_ERROR.noSuggestions;
+  }
+  const withoutTechnicalSuffix = msg.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if (
+    withoutTechnicalSuffix.includes('JSON') ||
+    withoutTechnicalSuffix.includes('неверном формате')
+  ) {
+    return AI_SUGGESTIONS_USER_ERROR.invalidFormat;
+  }
+  if (/[а-яА-ЯёЁ]/.test(withoutTechnicalSuffix)) {
+    return withoutTechnicalSuffix;
+  }
+  return AI_SUGGESTIONS_USER_ERROR.noSuggestions;
+}
+
 function parseJsonLenient(jsonStr: string): unknown {
   const trimmed = jsonStr.trim();
   try {
@@ -109,7 +152,17 @@ export function extractJsonFromLlm(text: string): unknown {
     seen.add(candidate);
     try {
       return parseJsonLenient(candidate);
-    } catch {}
+    } catch {
+      // Try the next candidate; LLM responses can include prose around malformed JSON.
+    }
+  }
+  const repairStart = trimmed.indexOf('{');
+  if (repairStart >= 0) {
+    try {
+      return parseJsonLenient(jsonrepair(trimmed.slice(repairStart)));
+    } catch {
+      // Fall through to the explicit "not found" error below.
+    }
   }
   throw new Error('JSON not found in model response');
 }
@@ -117,17 +170,15 @@ export function parseAiSuggestionsFromLlm(text: string): AiSuggestionItem[] {
   let raw: unknown;
   try {
     raw = extractJsonFromLlm(text);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : 'неизвестная ошибка';
-    throw new Error(`ИИ вернул ответ в неверном формате. Попробуйте ещё раз. (${detail})`);
+  } catch {
+    throw new Error(AI_SUGGESTIONS_USER_ERROR.invalidFormat);
   }
   const asObject =
     typeof raw === 'object' && raw !== null && 'suggestions' in raw ? raw : { suggestions: raw };
   try {
     const parsed = aiSuggestionsResponseSchema.parse(asObject);
     return parsed.suggestions;
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : 'неизвестная ошибка';
-    throw new Error(`Ответ ИИ не прошёл проверку структуры. (${detail})`);
+  } catch {
+    throw new Error(AI_SUGGESTIONS_USER_ERROR.invalidStructure);
   }
 }

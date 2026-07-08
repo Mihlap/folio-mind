@@ -1,30 +1,8 @@
 import type { ReactNode } from 'react';
 import { FeatureHelpButton } from './FeatureHelp.js';
+import type { ToolSectionId } from './ToolAccordionSection.ids.js';
 
-export type ToolSectionId =
-  | 'optimize'
-  | 'split'
-  | 'pages'
-  | 'merge'
-  | 'annotations'
-  | 'edits'
-  | 'diff'
-  | 'layout'
-  | 'booklet'
-  | 'share';
-
-export const TOOL_SECTION_IDS: ToolSectionId[] = [
-  'optimize',
-  'split',
-  'pages',
-  'merge',
-  'layout',
-  'booklet',
-  'share',
-  'annotations',
-  'edits',
-  'diff',
-];
+export type { ToolSectionId } from './ToolAccordionSection.ids.js';
 
 type Props = {
   title: string;
@@ -34,6 +12,8 @@ type Props = {
   isOpen: boolean;
   onToggle: () => void;
   keepMounted?: boolean;
+  sectionId?: ToolSectionId;
+  sectionRef?: (el: HTMLDivElement | null) => void;
   children: ReactNode;
 };
 
@@ -45,10 +25,16 @@ export function ToolAccordionSection({
   isOpen,
   onToggle,
   keepMounted = false,
+  sectionId,
+  sectionRef,
   children,
 }: Props) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div
+      ref={sectionRef}
+      data-tool-section={sectionId}
+      className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+    >
       <div className="flex w-full items-start gap-2 px-3 py-2.5">
         <button
           type="button"

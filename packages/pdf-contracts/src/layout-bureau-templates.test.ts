@@ -22,6 +22,13 @@ describe('layout-bureau-templates', () => {
     expect(objects.every((o) => o.kind === 'shape')).toBe(true);
   });
 
+  it('applyLayoutTemplateObjects can target a page beyond PDF when pageCount=0', () => {
+    const cover = BUILTIN_LAYOUT_TEMPLATES.find((t) => t.id === 'builtin-cover')!;
+    const objects = applyLayoutTemplateObjects(cover.objects, 6, 0);
+    expect(objects.length).toBeGreaterThan(0);
+    expect(objects.every((o) => o.page === 6)).toBe(true);
+  });
+
   it('serializePageToTemplate strips image src to slots', () => {
     const pageObjects: LayoutPageObject[] = [
       {

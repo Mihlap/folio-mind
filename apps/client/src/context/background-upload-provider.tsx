@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from 'react';
+import { useCallback, useMemo, useRef, type ReactNode } from 'react';
 import {
   uploadPdfVersion,
   uploadRagSource,
@@ -32,42 +25,14 @@ import {
 } from '@folio-mind/store';
 import { useAppDispatch, useAppSelector } from '../hooks/index.js';
 import { uploadFileLabel } from '../lib/uploads/uploadStage.js';
+import {
+  BackgroundUploadContext,
+  type VersionUploadSuccess,
+} from './background-upload-context-value.js';
 
 async function waitMs(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-type VersionUploadSuccess = {
-  documentId: string;
-  versionId: string;
-};
-
-type BackgroundUploadContextValue = {
-  active: boolean;
-  progress: number;
-  fileLabel: string;
-  showDone: boolean;
-  error: string | null;
-  clearError: () => void;
-  uploadFromDashboard: (pdfFile: File, docxFile?: File, projectId?: string) => void;
-  uploadFromDocxOnly: (docxFile: File, projectId?: string) => void;
-  uploadNewDocument: (pdfFile: File, onCreated?: (documentId: string) => void) => void;
-  uploadDocumentVersion: (
-    documentId: string,
-    pdfFile: File,
-    docxFile?: File,
-    onSuccess?: (result: VersionUploadSuccess) => void,
-  ) => void;
-  uploadDocumentVersionFromDocx: (
-    documentId: string,
-    docxFile: File,
-    onSuccess?: (result: VersionUploadSuccess) => void,
-  ) => void;
-  uploadRegulation: (file: File, onSuccess?: () => void) => void;
-  kind: BackgroundUploadKind | null;
-};
-
-const BackgroundUploadContext = createContext<BackgroundUploadContextValue | null>(null);
 
 export function BackgroundUploadProvider({ children }: { children: ReactNode }) {
   const dispatch = useAppDispatch();
@@ -294,11 +259,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   );
 
   const uploadDocumentVersionFromDocx = useCallback(
-    (
-      documentId: string,
-      docxFile: File,
-      onSuccess?: (result: VersionUploadSuccess) => void,
-    ) => {
+    (documentId: string, docxFile: File, onSuccess?: (result: VersionUploadSuccess) => void) => {
       void runUpload({
         kind: 'version',
         fileLabel: docxFile.name,
@@ -341,8 +302,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
           onProgress(5);
           const lower = file.name.toLowerCase();
           const title = file.name.replace(/\.(pdf|txt)$/i, '');
-          const mimeType =
-            file.type || (lower.endsWith('.pdf') ? 'application/pdf' : 'text/plain');
+          const mimeType = file.type || (lower.endsWith('.pdf') ? 'application/pdf' : 'text/plain');
           const created = await createRagSource({
             title,
             fileName: file.name,
@@ -404,12 +364,4 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   return (
     <BackgroundUploadContext.Provider value={value}>{children}</BackgroundUploadContext.Provider>
   );
-}
-
-export function useBackgroundUpload() {
-  const ctx = useContext(BackgroundUploadContext);
-  if (!ctx) {
-    throw new Error('useBackgroundUpload must be used within BackgroundUploadProvider');
-  }
-  return ctx;
 }

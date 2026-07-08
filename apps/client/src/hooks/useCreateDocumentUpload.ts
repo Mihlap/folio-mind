@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useAppSelector } from '../hooks/index.js';
-import { useBackgroundUpload } from '../context/background-upload-provider.js';
+import { useBackgroundUpload } from '../context/useBackgroundUpload.js';
 import { getUploadStage } from '../lib/uploads/uploadStage.js';
 
 export function useCreateDocumentUpload(onDocumentCreated: (documentId: string) => void) {

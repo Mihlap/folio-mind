@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  DEFAULT_LAYOUT_GRADIENT_FILL,
-  DEFAULT_LAYOUT_SOLID_FILL,
   applyLayoutTemplateObjects,
   isLayoutImageObject,
   layoutStepFraction,
+  mergeBlankInsertion,
   pdfPointsToMm,
   rotateLayoutPageObject,
+  sourceAfterFromDisplayAfter,
+  templatePageSpan,
   layoutGuidesForPreset,
   clampLayoutRect,
   normalizeLayoutCrop,
@@ -18,11 +19,34 @@ import {
   type LayoutRect,
   type LayoutTemplateStoredObject,
   type LayoutShapeObject,
+  type LayoutBlankInsertion,
 } from '@folio-mind/store';
 import { filterImageFiles, isImageFile } from '../lib/layout/isImageFile.js';
 import { compressLayoutImageSrcForDraft } from '../lib/layout/normalizeLayoutImage.js';
 
 const STORAGE_PREFIX = 'folio-layout-draft:';
+
+type StoredLayoutDraft = {
+  objects: LayoutPageObject[];
+  blankInsertions: LayoutBlankInsertion[];
+};
+
+function readStoredDraft(versionId: string): StoredLayoutDraft {
+  try {
+    const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${versionId}`);
+    if (!raw) return { objects: [], blankInsertions: [] };
+    const parsed = JSON.parse(raw) as StoredLayoutDraft | LayoutPageObject[];
+    if (Array.isArray(parsed)) {
+      return { objects: parsed, blankInsertions: [] };
+    }
+    return {
+      objects: Array.isArray(parsed.objects) ? parsed.objects : [],
+      blankInsertions: Array.isArray(parsed.blankInsertions) ? parsed.blankInsertions : [],
+    };
+  } catch {
+    return { objects: [], blankInsertions: [] };
+  }
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -68,6 +92,7 @@ export function useLayoutEditor({
 }: Options) {
   const [enabled, setEnabled] = useState(false);
   const [objects, setObjects] = useState<LayoutPageObject[]>([]);
+  const [blankInsertions, setBlankInsertions] = useState<LayoutBlankInsertion[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [showRulers, setShowRulers] = useState(true);
@@ -90,16 +115,14 @@ export function useLayoutEditor({
   useEffect(() => {
     if (!versionId) {
       setObjects([]);
+      setBlankInsertions([]);
       setSelectedId(null);
       return;
     }
     skipSaveRef.current = true;
-    try {
-      const raw = sessionStorage.getItem(`${STORAGE_PREFIX}${versionId}`);
-      setObjects(raw ? (JSON.parse(raw) as LayoutPageObject[]) : []);
-    } catch {
-      setObjects([]);
-    }
+    const draft = readStoredDraft(versionId);
+    setObjects(draft.objects);
+    setBlankInsertions(draft.blankInsertions);
     setSelectedId(null);
   }, [versionId]);
 
@@ -109,11 +132,16 @@ export function useLayoutEditor({
       return;
     }
     if (!versionId) return;
-    try {
-      sessionStorage.setItem(`${STORAGE_PREFIX}${versionId}`, JSON.stringify(objects));
-    } catch {
-    }
-  }, [versionId, objects]);
+    const saveTimer = window.setTimeout(() => {
+      try {
+        const payload: StoredLayoutDraft = { objects, blankInsertions };
+        sessionStorage.setItem(`${STORAGE_PREFIX}${versionId}`, JSON.stringify(payload));
+      } catch {
+        // Session storage is best-effort; layout editing should keep working if it is unavailable.
+      }
+    }, 350);
+    return () => window.clearTimeout(saveTimer);
+  }, [versionId, objects, blankInsertions]);
 
   const addImageFromDataUrl = useCallback(
     async (
@@ -201,6 +229,48 @@ export function useLayoutEditor({
       return created;
     },
     [pageCount, viewerPage],
+  );
+
+  const applyTemplateOnBlankPage = useCallback(
+    (
+      templateObjects: LayoutTemplateStoredObject[],
+      options: { insertAfterPage?: number } = {},
+    ) => {
+      const maxObjectPage = objects.reduce(
+        (max, item) => Math.max(max, Number(item.page) || 0),
+        0,
+      );
+      const displayPageCount = Math.max(pageCount, maxObjectPage, viewerPage);
+      const displayInsertAfter = Math.min(
+        Math.max(1, Math.floor(options.insertAfterPage ?? displayPageCount)),
+        displayPageCount,
+      );
+      const templatePages = templatePageSpan(templateObjects);
+      const targetPage = displayInsertAfter + 1;
+      const sourceAfter = sourceAfterFromDisplayAfter(
+        displayInsertAfter,
+        pageCount,
+        blankInsertions,
+      );
+
+      const created = applyLayoutTemplateObjects(templateObjects, targetPage, 0);
+      if (created.length === 0) return { created, targetPage, displayInsertAfter };
+
+      setObjects((prev) => {
+        const shifted = prev.map((item) => {
+          const itemPage = Number(item.page);
+          if (itemPage > displayInsertAfter) {
+            return { ...item, page: itemPage + templatePages };
+          }
+          return item;
+        });
+        return [...shifted, ...created];
+      });
+      setBlankInsertions((prev) => mergeBlankInsertion(prev, sourceAfter, templatePages));
+      setSelectedId(created[0]!.id);
+      return { created, targetPage, displayInsertAfter };
+    },
+    [blankInsertions, objects, pageCount, viewerPage],
   );
 
   const addImagesFromFiles = useCallback(
@@ -397,6 +467,12 @@ export function useLayoutEditor({
   );
 
   const pageObjectCount = objects.filter((item) => Number(item.page) === viewerPage).length;
+  const clearDraft = useCallback(() => {
+    setObjects([]);
+    setBlankInsertions([]);
+    setSelectedId(null);
+    setEnabled(false);
+  }, []);
   const objectCountByPage = useMemo(() => {
     const counts: Record<number, number> = {};
     for (const item of objects) {
@@ -410,6 +486,7 @@ export function useLayoutEditor({
     enabled,
     setEnabled,
     objects,
+    blankInsertions,
     selectedId,
     setSelectedId,
     showGrid,
@@ -436,6 +513,7 @@ export function useLayoutEditor({
     addShape,
     updateShapeFill,
     applyTemplate,
+    applyTemplateOnBlankPage,
     updateObjectRect,
     updateObjectCrop,
     resetSelectedCrop,
@@ -447,6 +525,7 @@ export function useLayoutEditor({
     autoCaptionSelected,
     autoFillCaptionsFromFilenames,
     alignSelected,
+    clearDraft,
     pageObjectCount,
     totalObjectCount: objects.length,
     objectCountByPage,

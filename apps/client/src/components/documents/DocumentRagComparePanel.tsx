@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGetJobQuery, useRequestRagCompareMutation } from '@folio-mind/store';
-import {
-  FeatureHelpActionButton,
-  PanelSectionHeader,
-  reportActionBtnSoft,
-  reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+import { FeatureHelpActionButton, PanelSectionHeader } from '../ui/FeatureHelp.js';
+import { reportActionBtnSoft, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 import { ReportTextBlock } from './ReportTextBlock.js';
 type Props = {
   documentId: string;

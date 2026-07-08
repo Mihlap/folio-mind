@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
-import { computeLayoutImageDrawParams, type LayoutImageObject } from '@folio-mind/pdf-contracts';
+import { computeLayoutImageDrawParams, type LayoutImageObject, type LayoutBlankInsertion } from '@folio-mind/pdf-contracts';
 
 export type ApplyLayoutPdfResult = {
   buffer: Buffer;
@@ -7,6 +7,31 @@ export type ApplyLayoutPdfResult = {
   appliedCount: number;
   skippedCount: number;
 };
+
+function insertBlankPages(
+  pdfDoc: PDFDocument,
+  insertions: LayoutBlankInsertion[],
+  pageSize: { width: number; height: number },
+): void {
+  const sorted = [...insertions].sort((a, b) => b.afterPage - a.afterPage);
+  for (const insertion of sorted) {
+    for (let index = 0; index < insertion.count; index += 1) {
+      pdfDoc.insertPage(insertion.afterPage, [pageSize.width, pageSize.height]);
+    }
+  }
+}
+
+function appendTrailingBlankPages(
+  pdfDoc: PDFDocument,
+  initialPageCount: number,
+  maxObjectPage: number,
+  pageSize: { width: number; height: number },
+): void {
+  if (initialPageCount <= 0) return;
+  for (let page = initialPageCount + 1; page <= maxObjectPage; page += 1) {
+    pdfDoc.addPage([pageSize.width, pageSize.height]);
+  }
+}
 
 function parseImageDataUrl(dataUrl: string): { mime: string; bytes: Uint8Array } {
   const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl.trim());
@@ -23,12 +48,23 @@ function parseImageDataUrl(dataUrl: string): { mime: string; bytes: Uint8Array }
 export async function applyLayoutToPdfBuffer(
   sourceBuffer: Buffer,
   objects: LayoutImageObject[],
+  blankInsertions: LayoutBlankInsertion[] = [],
 ): Promise<ApplyLayoutPdfResult> {
   if (objects.length === 0) {
     throw new Error('Нет объектов макета для сохранения');
   }
 
   const pdfDoc = await PDFDocument.load(sourceBuffer, { ignoreEncryption: true });
+  const initialPageCount = pdfDoc.getPageCount();
+  const firstPage = initialPageCount > 0 ? pdfDoc.getPage(0) : null;
+  const pageSize = firstPage?.getSize() ?? { width: 595, height: 842 };
+
+  if (blankInsertions.length > 0) {
+    insertBlankPages(pdfDoc, blankInsertions, pageSize);
+  }
+
+  const maxObjectPage = objects.reduce((max, object) => Math.max(max, object.page), 0);
+  appendTrailingBlankPages(pdfDoc, pdfDoc.getPageCount(), maxObjectPage, pageSize);
   const pageCount = pdfDoc.getPageCount();
   const captionFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   let appliedCount = 0;

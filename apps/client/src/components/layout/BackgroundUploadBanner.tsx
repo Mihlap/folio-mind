@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
-import { useBackgroundUpload } from '../../context/background-upload-provider.js';
+import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
 
 /** Ошибки фоновой загрузки. Прогресс — на странице, где начали upload. */
 export function BackgroundUploadBanner() {
@@ -19,7 +19,8 @@ export function BackgroundUploadBanner() {
   if (kind === 'regulation') return null;
   if (!error) return null;
 
-  const onDocumentsPage = location.pathname === '/app' || location.pathname.startsWith('/app/documents/');
+  const onDocumentsPage =
+    location.pathname === '/app' || location.pathname.startsWith('/app/documents/');
 
   return (
     <div

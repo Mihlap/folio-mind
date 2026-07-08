@@ -16,7 +16,6 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   FILES_ROOT,
-  S3_PREFIX,
   appliedDocxKey,
   assertS3KeyUnderFilesRoot,
   exportReportKey,

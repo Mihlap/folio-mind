@@ -196,7 +196,9 @@ export const ragRoutes: FastifyPluginAsync<{
       if (source.s3Key && source.s3Key !== 'pending') {
         try {
           await deleteObjectByKey(source.s3Key);
-        } catch {}
+        } catch {
+          // Keep source deletion available even if object cleanup has already happened.
+        }
       }
       await app.prisma.ragSource.delete({ where: { id: source.id } });
       return reply.status(204).send(null);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   OPTIMIZE_PRESET_INFO,
   OPTIMIZE_PRESETS,
@@ -16,25 +16,23 @@ import {
   MSG_PROCESSING_WAIT,
   formatOptimizeWaitHint,
   msgNewVersionStarted,
+  msgReplaceCurrentStarted,
   readJobProgressLabel,
 } from '@folio-mind/store';
+import type { OperationSaveMode } from './OperationSaveModeSelect.js';
 import {
   estimateOptimizeSize,
   formatFileSize,
   formatOptimizeSizeRange,
 } from '@folio-mind/store';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
-import {
-  FeatureHelpActionButton,
-  FeatureHelpButton,
-  reportActionBtnPrimary,
-  reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+import { FeatureHelpActionButton, FeatureHelpButton } from '../ui/FeatureHelp.js';
+import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
+import { ToolAccordionSection } from '../ui/ToolAccordionSection.js';
 import {
   TOOL_SECTION_IDS,
-  ToolAccordionSection,
   type ToolSectionId,
-} from '../ui/ToolAccordionSection.js';
+} from '../ui/ToolAccordionSection.ids.js';
 import { DocumentPageOrderPanel } from './DocumentPageOrderPanel.js';
 import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
@@ -81,6 +79,50 @@ function getMutationError(err: unknown): string {
     }
   }
   return 'Не удалось выполнить операцию';
+}
+type ToolGroupId = 'pdf' | 'layout' | 'approval' | 'edits';
+const TOOL_GROUP_IDS: ToolGroupId[] = ['pdf', 'layout', 'approval', 'edits'];
+
+function getSectionGroup(sectionId: ToolSectionId): ToolGroupId {
+  if (sectionId === 'layout' || sectionId === 'booklet') return 'layout';
+  if (sectionId === 'share' || sectionId === 'annotations') return 'approval';
+  if (sectionId === 'edits') return 'edits';
+  return 'pdf';
+}
+
+function ToolGroupHeader({
+  title,
+  description,
+  isOpen,
+  onToggle,
+}: {
+  title: string;
+  description: string;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="pt-1 first:pt-0">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/70">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isOpen}
+          className="flex w-full items-start gap-2 px-2.5 py-2 text-left"
+        >
+          <span className="mt-0.5 shrink-0 text-[10px] text-slate-400" aria-hidden>
+            {isOpen ? '▼' : '▶'}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {title}
+            </p>
+            <p className="hidden text-[11px] leading-snug text-slate-500 sm:block">{description}</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
 }
 type Props = {
   documentId: string;
@@ -139,6 +181,17 @@ export function DocumentPdfOperationsPanel({
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
   const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
+  const [openGroups, setOpenGroups] = useState<Set<ToolGroupId>>(() => new Set(['pdf']));
+  const sectionRefs = useRef<Partial<Record<ToolSectionId, HTMLDivElement | null>>>({});
+  const sectionRefCallbacks = useMemo(() => {
+    const callbacks = {} as Record<ToolSectionId, (el: HTMLDivElement | null) => void>;
+    for (const id of TOOL_SECTION_IDS) {
+      callbacks[id] = (el: HTMLDivElement | null) => {
+        sectionRefs.current[id] = el;
+      };
+    }
+    return callbacks;
+  }, []);
   const [pagesInput, setPagesInput] = useState('');
   const [mergeOrder, setMergeOrder] = useState<string[]>([]);
   const [optimizePreset, setOptimizePreset] = useState<OptimizePreset>('archive');
@@ -172,6 +225,7 @@ export function DocumentPdfOperationsPanel({
   );
   const readyVersions = useMemo(() => versions.filter((v) => v.status === 'ready'), [versions]);
   const activeReady = activeVersion?.status === 'ready';
+  const isLatestVersion = Boolean(activeVersion && versions[0]?.id === activeVersion.id);
   const effectivePageCount =
     (activeVersion?.pageCount && activeVersion.pageCount > 0
       ? activeVersion.pageCount
@@ -270,7 +324,7 @@ export function DocumentPdfOperationsPanel({
       setTargetVersionId(null);
       setPollOperation(false);
     }
-  }, [onSelectVersion, targetVersion?.id, targetVersion?.status, targetVersion?.version]);
+  }, [onSelectVersion, targetVersion]);
   useEffect(() => {
     if (!statusHintVersionId) return;
     const exists = versions.some((v) => v.id === statusHintVersionId);
@@ -304,12 +358,21 @@ export function DocumentPdfOperationsPanel({
       return next;
     });
   }
-  function beginOperation(result: { operationJobId: string; versionId: string; version: number }) {
+  function beginOperation(result: {
+    operationJobId: string;
+    versionId: string;
+    version: number;
+    saveMode?: OperationSaveMode;
+  }) {
     setOperationJobId(result.operationJobId);
     setTargetVersionId(result.versionId);
     setPollOperation(true);
     setOperationError(null);
-    setStatusHint(msgNewVersionStarted(result.version));
+    setStatusHint(
+      result.saveMode === 'replace_current'
+        ? msgReplaceCurrentStarted(result.version)
+        : msgNewVersionStarted(result.version),
+    );
   }
   async function handleSplit() {
     if (!activeVersion || !activeReady) return;
@@ -384,6 +447,10 @@ export function DocumentPdfOperationsPanel({
     readyVersions.length < 2
       ? 'Нужно минимум две готовые версии'
       : `${readyVersions.length} готовых версий`;
+  const versionsStamp = useMemo(
+    () => versions.map((v) => `${v.id}:${v.version}:${v.pageCount ?? 0}:${v.status}`).join('|'),
+    [versions],
+  );
   const sourceBytes = activeVersion?.size ? Number(activeVersion.size) : 0;
   const optimizeWaitHint = useMemo(
     () => (sourceBytes > 0 ? formatOptimizeWaitHint(sourceBytes) : null),
@@ -393,8 +460,14 @@ export function DocumentPdfOperationsPanel({
     if (!activeReady || sourceBytes <= 0) return null;
     return estimateOptimizeSize(sourceBytes, effectivePageCount, optimizePreset);
   }, [activeReady, effectivePageCount, optimizePreset, sourceBytes]);
-  const allSectionsOpen = openSections.size === TOOL_SECTION_IDS.length;
-  const noSectionsOpen = openSections.size === 0;
+  const hasLayoutTools = Boolean(layout);
+  const visibleToolSectionIds = useMemo(
+    () => TOOL_SECTION_IDS.filter((id) => id !== 'layout' || hasLayoutTools),
+    [hasLayoutTools],
+  );
+  const allSectionsOpen =
+    visibleToolSectionIds.length > 0 && visibleToolSectionIds.every((id) => openSections.has(id));
+  const noSectionsOpen = visibleToolSectionIds.every((id) => !openSections.has(id));
   function isSectionOpen(id: ToolSectionId) {
     return openSections.has(id);
   }
@@ -407,30 +480,55 @@ export function DocumentPdfOperationsPanel({
     });
   }
   function expandAllSections() {
-    setOpenSections(new Set(TOOL_SECTION_IDS));
+    setOpenSections(new Set(visibleToolSectionIds));
+    setOpenGroups(new Set(TOOL_GROUP_IDS));
   }
   function collapseAllSections() {
     setOpenSections(new Set());
+    setOpenGroups(new Set(['pdf']));
+  }
+  function toggleGroup(groupId: ToolGroupId) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
   }
   useEffect(() => {
     if (!editTextInjection) return;
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      next.add('edits');
+      return next;
+    });
     setOpenSections((prev) => {
       if (prev.has('edits')) return prev;
       const next = new Set(prev);
       next.add('edits');
       return next;
     });
-  }, [editTextInjection?.key]);
+  }, [editTextInjection]);
   useEffect(() => {
     if (!focusSection) return;
-    setExpanded(true);
-    setOpenSections((prev) => {
-      if (prev.has(focusSection)) return prev;
+    const section = focusSection;
+    const group = getSectionGroup(section);
+    setOpenGroups((prev) => {
       const next = new Set(prev);
-      next.add(focusSection);
+      next.add(group);
       return next;
     });
-    onFocusSectionHandled?.();
+    setExpanded(true);
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      next.add(section);
+      return next;
+    });
+    const frameId = window.requestAnimationFrame(() => {
+      sectionRefs.current[section]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      onFocusSectionHandled?.();
+    });
+    return () => window.cancelAnimationFrame(frameId);
   }, [focusSection, onFocusSectionHandled]);
   const annotationsSharedProps = {
     documentId,
@@ -472,12 +570,21 @@ export function DocumentPdfOperationsPanel({
       {progressLabel && <p className="text-sm text-folio-700">{progressLabel}</p>}
       {operationError && <p className="text-sm text-red-600">{operationError}</p>}
 
-      <div className="space-y-2">
-        <ToolAccordionSection
+      <div className="space-y-1.5">
+        <ToolGroupHeader
+          title="PDF и страницы"
+          description="Быстрые операции с текущей версией и сравнение готовых версий."
+          isOpen={openGroups.has('pdf')}
+          onToggle={() => toggleGroup('pdf')}
+        />
+        <div className={openGroups.has('pdf') ? 'space-y-2' : 'hidden'}>
+          <ToolAccordionSection
           title="Сжать PDF"
           subtitle="Меньший файл для почты и чатов"
           isOpen={isSectionOpen('optimize')}
           onToggle={() => toggleSection('optimize')}
+          sectionId="optimize"
+          sectionRef={sectionRefCallbacks.optimize}
           helpTitle="Пресеты сжатия"
           helpContent={
             <>
@@ -488,8 +595,8 @@ export function DocumentPdfOperationsPanel({
               <p>До 200 страниц. Исходная версия не изменяется.</p>
             </>
           }
-        >
-          <div className="space-y-2">
+          >
+            <div className="space-y-2">
             {OPTIMIZE_PRESETS.map((presetId) => {
               const info = OPTIMIZE_PRESET_INFO[presetId];
               return (
@@ -517,7 +624,7 @@ export function DocumentPdfOperationsPanel({
                 </label>
               );
             })}
-          </div>
+            </div>
           {sourceBytes > 0 && (
             <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
               <p>
@@ -562,11 +669,13 @@ export function DocumentPdfOperationsPanel({
         </ToolAccordionSection>
 
         <ToolAccordionSection
-          title="Вырезать страницы"
+          title="Извлечь страницы"
           subtitle={versionSubtitle}
           isOpen={isSectionOpen('split')}
           onToggle={() => toggleSection('split')}
-          helpTitle="Вырезать страницы"
+          sectionId="split"
+          sectionRef={sectionRefCallbacks.split}
+          helpTitle="Извлечь страницы"
           helpContent={
             <>
               <p>
@@ -617,7 +726,7 @@ export function DocumentPdfOperationsPanel({
           </div>
           <div className={`mt-3 ${reportActionsColumnClass}`}>
             <FeatureHelpActionButton
-              helpTitle="Вырезать в новую версию"
+              helpTitle="Извлечь в новую версию"
               disabled={!activeReady || operationPending || effectivePageCount <= 0}
               onClick={() => void handleSplit()}
               buttonClassName={reportActionBtnPrimary}
@@ -631,7 +740,7 @@ export function DocumentPdfOperationsPanel({
                 </>
               }
             >
-              {splitLoading ? 'Запуск…' : 'Вырезать в новую версию'}
+              {splitLoading ? 'Запуск…' : 'Извлечь в новую версию'}
             </FeatureHelpActionButton>
           </div>
           {splitBlockedReason && (
@@ -640,10 +749,12 @@ export function DocumentPdfOperationsPanel({
         </ToolAccordionSection>
 
         <ToolAccordionSection
-          title="Порядок страниц"
+          title="Страницы: порядок и листы"
           subtitle={versionSubtitle}
           isOpen={isSectionOpen('pages')}
           onToggle={() => toggleSection('pages')}
+          sectionId="pages"
+          sectionRef={sectionRefCallbacks.pages}
           helpTitle="Порядок и дубликаты страниц"
           helpContent={
             <>
@@ -655,6 +766,9 @@ export function DocumentPdfOperationsPanel({
           <DocumentPageOrderPanel
             documentId={documentId}
             versionId={activeVersion?.id}
+            versionNumber={activeVersion?.version}
+            isLatestVersion={isLatestVersion}
+            versionsStamp={versionsStamp}
             pageCount={effectivePageCount}
             versionReady={activeReady}
             operationPending={operationPending}
@@ -668,6 +782,8 @@ export function DocumentPdfOperationsPanel({
           subtitle={mergeSubtitle}
           isOpen={isSectionOpen('merge')}
           onToggle={() => toggleSection('merge')}
+          sectionId="merge"
+          sectionRef={sectionRefCallbacks.merge}
           helpTitle="Объединить версии"
           helpContent={
             <>
@@ -757,148 +873,13 @@ export function DocumentPdfOperationsPanel({
           </div>
         </ToolAccordionSection>
 
-        {layout && (
-          <ToolAccordionSection
-            title="Макет"
-            subtitle="Изображения на листе, линейки и сетка"
-            isOpen={isSectionOpen('layout')}
-            onToggle={() => toggleSection('layout')}
-            helpTitle="Режим макета"
-            helpContent={
-              <>
-                <p>Для буклетов и альбомов: разместите рендер или фото на странице PDF.</p>
-                <p>Линейки в миллиметрах, сетка и привязка помогают выровнять картинку на листе.</p>
-              </>
-            }
-          >
-            <DocumentLayoutPanel
-              layout={layout}
-              viewerPage={viewerPage}
-              versionReady={versionReady}
-              documentId={documentId}
-              versionId={activeVersion?.id ?? ''}
-              pageCount={layoutPageCount}
-              onSelectVersion={onSelectVersion}
-              onGoToPage={onGoToPage}
-              addNotice={layoutAddNotice}
-              onAddImages={onAddLayoutImages}
-            />
-          </ToolAccordionSection>
-        )}
-
-        <ToolAccordionSection
-          title="Буклет"
-          subtitle="Подготовка, проверка печати, ZIP для заказчика"
-          isOpen={isSectionOpen('booklet')}
-          onToggle={() => toggleSection('booklet')}
-          helpTitle="Буклет для заказчика"
-          helpContent={
-            <>
-              <p>Три шага: подписи и материалы → проверка DPI и шрифтов → ZIP с PDF и JPG.</p>
-              <p>Готовый пакет можно отдать по ссылке в разделе «Ссылка для заказчика».</p>
-            </>
-          }
-        >
-          <DocumentBookletPanel
-            documentId={documentId}
-            documentTitle={documentTitle}
-            projectId={projectId}
-            projectName={projectName}
-            versionReady={versionReady}
-            layout={layout}
-            versionId={activeVersion?.id ?? ''}
-            pageCount={effectivePageCount}
-            viewerPage={viewerPage}
-          />
-        </ToolAccordionSection>
-
-        <ToolAccordionSection
-          title="Ссылка для заказчика"
-          subtitle="Просмотр в браузере и скачивание ZIP"
-          isOpen={isSectionOpen('share')}
-          onToggle={() => toggleSection('share')}
-          helpTitle="Гостевой просмотр"
-          helpContent={
-            <>
-              <p>
-                Создайте ссылку с ограниченным сроком действия. Заказчик видит превью страниц в
-                браузере. Опционально — скачивание ZIP с PDF и JPG (если пакет уже собран).
-              </p>
-              <p>Ссылку можно отозвать в любой момент.</p>
-            </>
-          }
-        >
-          <DocumentSharePanel
-            documentId={documentId}
-            activeVersion={activeVersion}
-            versionReady={versionReady}
-            reviewStatus={reviewStatus}
-            reviewStatusChangedAt={reviewStatusChangedAt}
-            viewerPage={viewerPage}
-          />
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <p className="mb-2 text-xs font-medium text-slate-700">Замечания заказчика</p>
-            <DocumentGuestCommentsPanel
-              documentId={documentId}
-              versionId={activeVersion?.id ?? ''}
-              versionReady={versionReady}
-              focusedCommentId={focusedGuestCommentId}
-              onGoToComment={(page, commentId) => {
-                if (!isSectionOpen('share')) toggleSection('share');
-                onGoToPage(page, commentId);
-              }}
-            />
-          </div>
-        </ToolAccordionSection>
-
-        <DocumentAnnotationsControllerProvider value={annotationsController}>
-          <ToolAccordionSection
-            title="Аннотации"
-            subtitle="Комментарии к страницам PDF"
-            isOpen={isSectionOpen('annotations')}
-            onToggle={() => toggleSection('annotations')}
-            helpTitle="Аннотации"
-            helpContent={
-              <p>
-                <strong>Заметка</strong> — комментарий к странице без изменения текста договора.
-              </p>
-            }
-          >
-            <DocumentAnnotationsPanel variant="notes" hideSectionHeader />
-          </ToolAccordionSection>
-
-          <ToolAccordionSection
-            title="Правки в PDF"
-            subtitle="Ручные и ИИ-правки, сборка новой версии"
-            isOpen={isSectionOpen('edits')}
-            onToggle={() => toggleSection('edits')}
-            helpTitle="Правки в PDF"
-            helpContent={
-              <>
-                <p>
-                  Зафиксируйте «было / стало» вручную или запросите предложения ИИ в этом же
-                  разделе.
-                </p>
-                <p>Затем соберите PDF с реестром правок, примените изменения в текст или выгрузите DOCX.</p>
-              </>
-            }
-          >
-            <DocumentAnnotationsPanel variant="edits" hideSectionHeader />
-            <DocumentAiSuggestionsPanel
-              documentId={documentId}
-              versionId={activeVersion?.id ?? ''}
-              versionReady={versionReady}
-              onGoToPage={onGoToPage}
-              onSelectVersion={onSelectVersion}
-            />
-          </ToolAccordionSection>
-        </DocumentAnnotationsControllerProvider>
-
         <ToolAccordionSection
           title="Сравнение версий"
           subtitle="Текст и правки между версиями"
           isOpen={isSectionOpen('diff')}
           onToggle={() => toggleSection('diff')}
+          sectionId="diff"
+          sectionRef={sectionRefCallbacks.diff}
           helpTitle="Сравнение версий"
           helpContent={
             <>
@@ -917,6 +898,191 @@ export function DocumentPdfOperationsPanel({
             hideSectionHeader
           />
         </ToolAccordionSection>
+        </div>
+
+        <ToolGroupHeader
+          title="Макет и печать"
+          description="Размещение материалов на листах и подготовка пакета для передачи заказчику."
+          isOpen={openGroups.has('layout')}
+          onToggle={() => toggleGroup('layout')}
+        />
+        <div className={openGroups.has('layout') ? 'space-y-2' : 'hidden'}>
+          {layout && (
+            <ToolAccordionSection
+              title="Макет страниц"
+              subtitle="Добавить изображения, сетка и линейки"
+              isOpen={isSectionOpen('layout')}
+              onToggle={() => toggleSection('layout')}
+              sectionId="layout"
+              sectionRef={sectionRefCallbacks.layout}
+              helpTitle="Режим макета"
+              helpContent={
+                <>
+                  <p>Для буклетов и альбомов: разместите рендер или фото на странице PDF.</p>
+                  <p>Линейки в миллиметрах, сетка и привязка помогают выровнять картинку на листе.</p>
+                </>
+              }
+            >
+              <DocumentLayoutPanel
+                layout={layout}
+                viewerPage={viewerPage}
+                versionReady={versionReady}
+                documentId={documentId}
+                versionId={activeVersion?.id ?? ''}
+                pageCount={layoutPageCount}
+                versionNumber={activeVersion?.version}
+                isLatestVersion={isLatestVersion}
+                onSelectVersion={onSelectVersion}
+                onGoToPage={onGoToPage}
+                addNotice={layoutAddNotice}
+                onAddImages={onAddLayoutImages}
+              />
+            </ToolAccordionSection>
+          )}
+
+          <ToolAccordionSection
+            title="Буклет"
+            subtitle="Подготовка, проверка печати, ZIP для заказчика"
+            isOpen={isSectionOpen('booklet')}
+            onToggle={() => toggleSection('booklet')}
+            sectionId="booklet"
+            sectionRef={sectionRefCallbacks.booklet}
+            helpTitle="Буклет для заказчика"
+            helpContent={
+              <>
+                <p>Три шага: подписи и материалы → проверка DPI и шрифтов → ZIP с PDF и JPG.</p>
+                <p>Готовый пакет можно отдать по ссылке в разделе «Ссылка для заказчика».</p>
+              </>
+            }
+          >
+            <DocumentBookletPanel
+              documentId={documentId}
+              documentTitle={documentTitle}
+              projectId={projectId}
+              projectName={projectName}
+              versionReady={versionReady}
+              layout={layout}
+              versionId={activeVersion?.id ?? ''}
+              pageCount={effectivePageCount}
+              viewerPage={viewerPage}
+            />
+          </ToolAccordionSection>
+        </div>
+
+        <ToolGroupHeader
+          title="Согласование"
+          description="Ссылка для заказчика, статусы согласования и комментарии по страницам."
+          isOpen={openGroups.has('approval')}
+          onToggle={() => toggleGroup('approval')}
+        />
+        <div className={openGroups.has('approval') ? '' : 'hidden'}>
+          <ToolAccordionSection
+            title="Ссылка для заказчика"
+            subtitle="Просмотр в браузере и скачивание ZIP"
+            isOpen={isSectionOpen('share')}
+            onToggle={() => toggleSection('share')}
+            sectionId="share"
+            sectionRef={sectionRefCallbacks.share}
+            helpTitle="Гостевой просмотр"
+            helpContent={
+              <>
+                <p>
+                  Создайте ссылку с ограниченным сроком действия. Заказчик видит превью страниц в
+                  браузере. Опционально — скачивание ZIP с PDF и JPG (если пакет уже собран).
+                </p>
+                <p>Ссылку можно отозвать в любой момент.</p>
+              </>
+            }
+          >
+            <DocumentSharePanel
+              documentId={documentId}
+              activeVersion={activeVersion}
+              versionReady={versionReady}
+              reviewStatus={reviewStatus}
+              reviewStatusChangedAt={reviewStatusChangedAt}
+              viewerPage={viewerPage}
+            />
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <p className="mb-2 text-xs font-medium text-slate-700">Замечания заказчика</p>
+              <DocumentGuestCommentsPanel
+                documentId={documentId}
+                versionId={activeVersion?.id ?? ''}
+                versionReady={versionReady}
+                focusedCommentId={focusedGuestCommentId}
+                onGoToComment={(page, commentId) => {
+                  setOpenGroups((prev) => {
+                    const next = new Set(prev);
+                    next.add('approval');
+                    return next;
+                  });
+                  if (!isSectionOpen('share')) toggleSection('share');
+                  onGoToPage(page, commentId);
+                }}
+              />
+            </div>
+          </ToolAccordionSection>
+        </div>
+
+        <DocumentAnnotationsControllerProvider value={annotationsController}>
+          <div className={openGroups.has('approval') ? '' : 'hidden'}>
+            <ToolAccordionSection
+              title="Комментарии на PDF"
+              subtitle="Комментарии к страницам PDF"
+              isOpen={isSectionOpen('annotations')}
+              onToggle={() => toggleSection('annotations')}
+              sectionId="annotations"
+              sectionRef={sectionRefCallbacks.annotations}
+              helpTitle="Комментарии на PDF"
+              helpContent={
+                <p>
+                  <strong>Заметка</strong> — комментарий к странице без изменения текста договора.
+                </p>
+              }
+            >
+              <DocumentAnnotationsPanel variant="notes" hideSectionHeader />
+            </ToolAccordionSection>
+          </div>
+
+          <ToolGroupHeader
+            title="Правки"
+            description="Ручные замены, ИИ-предложения и сборка новой версии с правками."
+            isOpen={openGroups.has('edits')}
+            onToggle={() => toggleGroup('edits')}
+          />
+          <div className={openGroups.has('edits') ? '' : 'hidden'}>
+            <ToolAccordionSection
+              title="Правки в PDF"
+              subtitle="Ручные и ИИ-правки, сборка новой версии"
+              isOpen={isSectionOpen('edits')}
+              onToggle={() => toggleSection('edits')}
+              sectionId="edits"
+              sectionRef={sectionRefCallbacks.edits}
+              helpTitle="Правки в PDF"
+              helpContent={
+                <>
+                  <p>
+                    Зафиксируйте «было / стало» вручную или запросите предложения ИИ в этом же
+                    разделе.
+                  </p>
+                  <p>
+                    Затем соберите PDF с реестром правок, примените изменения в текст или выгрузите
+                    DOCX.
+                  </p>
+                </>
+              }
+            >
+              <DocumentAnnotationsPanel variant="edits" hideSectionHeader />
+              <DocumentAiSuggestionsPanel
+                documentId={documentId}
+                versionId={activeVersion?.id ?? ''}
+                versionReady={versionReady}
+                viewerPage={viewerPage}
+                pageCount={effectivePageCount}
+                onGoToPage={onGoToPage}
+              />
+            </ToolAccordionSection>
+          </div>
+        </DocumentAnnotationsControllerProvider>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { FastifyRequest } from 'fastify';
+import type { PrismaClient } from '@prisma/client';
 export function getAuthUser(request: FastifyRequest) {
   return request.user as {
     sub: string;
@@ -7,11 +8,7 @@ export function getAuthUser(request: FastifyRequest) {
   };
 }
 export async function findDocumentForUser(
-  prisma: {
-    document: {
-      findFirst: Function;
-    };
-  },
+  prisma: Pick<PrismaClient, 'document'>,
   documentId: string,
   user: {
     sub: string;

@@ -201,14 +201,17 @@ export function useDocumentAnnotationsPanel({
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [focusedAnnotationId]);
 
+  const injectedEditKey = editTextInjection?.key;
+  const injectedEditText = editTextInjection?.text;
+  const injectedEditCoords = editTextInjection?.coords;
   useEffect(() => {
-    if (!editTextInjection) return;
-    setEditBefore(editTextInjection.text);
-    if (editTextInjection.coords) {
-      pendingCoordsRef.current = editTextInjection.coords;
+    if (injectedEditText == null) return;
+    setEditBefore(injectedEditText);
+    if (injectedEditCoords) {
+      pendingCoordsRef.current = injectedEditCoords;
     }
     setError(null);
-  }, [editTextInjection?.key, editTextInjection?.text, editTextInjection?.coords]);
+  }, [injectedEditKey, injectedEditText, injectedEditCoords]);
 
   const items = data?.items ?? [];
   const userComments = items.filter((a) => a.kind === 'comment' || a.kind === 'highlight');

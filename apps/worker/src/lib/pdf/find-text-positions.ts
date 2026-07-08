@@ -429,7 +429,6 @@ function searchConcatenatedItems(items: TextItem[], needle: string): TextBoxPosi
   for (let i = 0; i < items.length; i++) {
     let built = '';
     let startItem: TextItem | null = null;
-    let endItem: TextItem | null = null;
     let lastY = items[i]!.y;
     const lineH = (items[i]!.height || items[i]!.fontSize || 10) * 1.5;
     for (let j = i; j < items.length; j++) {
@@ -441,7 +440,6 @@ function searchConcatenatedItems(items: TextItem[], needle: string): TextBoxPosi
         if (yGap > lineH * 0.4 && sameColumn) built += ' ';
       }
       if (!startItem) startItem = item;
-      endItem = item;
       lastY = item.y;
       built += item.str;
       const normalized = norm(built);

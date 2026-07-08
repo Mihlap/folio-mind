@@ -11,7 +11,7 @@ import { PdfLayoutGrid } from '../layout-editor/PdfLayoutGrid.js';
 import { PdfLayoutMarginsOverlay } from '../layout-editor/PdfLayoutMarginsOverlay.js';
 import { PdfLayoutObjectsOverlay } from '../layout-editor/PdfLayoutObjectsOverlay.js';
 import { PdfLayoutShapesOverlay } from '../layout-editor/PdfLayoutShapesOverlay.js';
-import type { LayoutImageObject, LayoutMarginPresetId, LayoutPageObject, LayoutRect } from '@folio-mind/pdf-contracts';
+import type { LayoutMarginPresetId, LayoutPageObject, LayoutRect } from '@folio-mind/pdf-contracts';
 import { highlightTextLayer, isRenderCancelled } from './utils.js';
 import { collectImageFilesFromDataTransfer } from '../layout/collectDropImageFiles.js';
 import { pdfPointsToMm, layoutStepFraction, layoutGuidesForPreset, isLayoutImageObject, isLayoutShapeObject, FOLIO_MEDIA_DRAG_MIME, parseFolioMediaDragPayload } from '@folio-mind/pdf-contracts';
@@ -37,6 +37,8 @@ export type PdfViewerLayoutProps = {
 };
 export type PdfViewerPageProps = {
   pdf: pdfjs.PDFDocumentProxy | null;
+  pdfPageCount?: number;
+  referencePageSizePt?: { width: number; height: number };
   pageNumber: number;
   containerWidth: number;
   computeScale: (pageWidth: number) => number;
@@ -61,6 +63,8 @@ const EMPTY_METRICS = { widthPx: 0, heightPx: 0, widthPt: 0, heightPt: 0 };
 
 export function PdfViewerPage({
   pdf,
+  pdfPageCount = 0,
+  referencePageSizePt = { width: 595, height: 842 },
   pageNumber,
   containerWidth,
   computeScale,
@@ -110,6 +114,8 @@ export function PdfViewerPage({
   const [dropFileCount, setDropFileCount] = useState(0);
   const [dropMediaTitle, setDropMediaTitle] = useState<string | null>(null);
   const layoutDropEnabled = Boolean(onLayoutFilesDrop || onLayoutMediaAssetDrop);
+  const isVirtualBlankPage =
+    pdfReady && pdfPageCount > 0 && pageNumber > pdfPageCount;
 
   function layoutDropFiles(dataTransfer: DataTransfer): File[] {
     return Array.from(dataTransfer.files).filter(
@@ -119,9 +125,25 @@ export function PdfViewerPage({
   }
 
   useEffect(() => {
+    if (!isVirtualBlankPage) return;
+    const widthPt = referencePageSizePt.width;
+    const heightPt = referencePageSizePt.height;
+    const cssScale = computeScale(widthPt);
+    const widthPx = widthPt * cssScale;
+    const heightPx = heightPt * cssScale;
+    setPageError(null);
+    setPageMetrics({
+      widthPx,
+      heightPx,
+      widthPt,
+      heightPt,
+    });
+  }, [computeScale, isVirtualBlankPage, referencePageSizePt.height, referencePageSizePt.width]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     const textLayer = textLayerRef.current;
-    if (!canvas || !textLayer || !pdf || !pdfReady) return;
+    if (isVirtualBlankPage || !canvas || !textLayer || !pdf || !pdfReady) return;
     const generation = ++renderGenRef.current;
     let cancelled = false;
     let renderTask: pdfjs.RenderTask | null = null;
@@ -195,6 +217,7 @@ export function PdfViewerPage({
     searchQuery,
     highlight,
     showTextLayer,
+    isVirtualBlankPage,
   ]);
 
   const layoutMetricsReady =
@@ -287,7 +310,18 @@ export function PdfViewerPage({
           Стр. {pageNumber}
         </span>
       )}
-      <canvas ref={canvasRef} className="block" />
+      <canvas
+        ref={canvasRef}
+        className={isVirtualBlankPage ? 'hidden' : 'block'}
+        aria-hidden={isVirtualBlankPage}
+      />
+      {isVirtualBlankPage && layoutMetricsReady && (
+        <div
+          className="block bg-white"
+          style={{ width: pageMetrics.widthPx, height: pageMetrics.heightPx }}
+          aria-hidden
+        />
+      )}
       <div
         ref={textLayerRef}
         className={[

@@ -13,10 +13,7 @@ import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import type { DocumentReviewStatus } from '@folio-mind/store';
 import { DocumentReviewStatusControl } from './DocumentReviewStatusControl.js';
 import { DocumentPageReviewBar } from './DocumentPageReviewBar.js';
-import {
-  reportActionBtnPrimary,
-  reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 
 type Props = {
   documentId: string;

@@ -133,6 +133,7 @@ export async function optimizePdfBuffer(
       const packed = await packWithPdfLib(sourceBuffer);
       candidates.push({ buffer: packed, method: 'pack' });
     } catch {
+      // Packing is an optional last attempt; keep earlier candidates.
     }
   }
 

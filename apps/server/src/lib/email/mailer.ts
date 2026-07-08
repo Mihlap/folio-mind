@@ -34,8 +34,8 @@ function isSmtpConfigured(env: Env): boolean {
 export function createMailer(
   env: Env,
   logger: {
-    info: Function;
-    warn: Function;
+    info: (obj: unknown, msg?: string) => void;
+    warn: (obj: unknown, msg?: string) => void;
   },
 ): Mailer {
   if (!isSmtpConfigured(env)) {

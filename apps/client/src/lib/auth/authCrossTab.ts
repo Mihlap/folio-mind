@@ -8,7 +8,9 @@ export function notifyEmailVerified(): void {
     const channel = new BroadcastChannel(AUTH_CHANNEL);
     channel.postMessage({ type: 'email-verified' } satisfies AuthCrossTabMessage);
     channel.close();
-  } catch {}
+  } catch {
+    // BroadcastChannel is optional; storage events still cover auth updates across tabs.
+  }
 }
 export function subscribeToAuthFromOtherTabs(onVerified: () => void): () => void {
   const handleStorage = (event: StorageEvent) => {
@@ -24,7 +26,9 @@ export function subscribeToAuthFromOtherTabs(onVerified: () => void): () => void
         onVerified();
       }
     };
-  } catch {}
+  } catch {
+    // Some browsers can block BroadcastChannel; storage fallback remains active.
+  }
   window.addEventListener('storage', handleStorage);
   return () => {
     window.removeEventListener('storage', handleStorage);

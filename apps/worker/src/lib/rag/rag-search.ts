@@ -91,6 +91,8 @@ export async function searchRagChunks(
   try {
     const vectorHits = await searchRagChunksByVector(prisma, tenantId, query, limit);
     if (vectorHits && vectorHits.length > 0) return vectorHits;
-  } catch {}
+  } catch {
+    // Vector search is optional; keyword fallback keeps RAG usable without pgvector.
+  }
   return searchRagChunksByKeyword(prisma, tenantId, query, limit);
 }

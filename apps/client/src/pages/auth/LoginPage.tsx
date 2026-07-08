@@ -39,7 +39,9 @@ export function LoginPage() {
       }).unwrap();
       dispatch(setCredentials(res));
       navigate('/app');
-    } catch {}
+    } catch {
+      // The mutation error state renders the message below.
+    }
   }
   return (
     <AuthLayout title="Вход" subtitle="Продолжите работу с документами">

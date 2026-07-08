@@ -11,7 +11,12 @@ import {
 } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
 import { getCachedSummary } from '../lib/ai/ai-cache.js';
-import { AiLimitError, checkAndIncrementAiUsage, getAiUsageToday } from '../lib/ai/ai-limits.js';
+import {
+  AiLimitError,
+  checkAndIncrementAiUsage,
+  decrementAiUsage,
+  getAiUsageToday,
+} from '../lib/ai/ai-limits.js';
 import type { Env } from '../lib/config/env.js';
 import {
   createLLMFromEnv,
@@ -172,6 +177,33 @@ export const aiRoutes: FastifyPluginAsync<{
 }> = async (app, opts) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   const env = opts.env;
+
+  async function markAiEnqueueFailed(jobId: string, tenantId: string, err: unknown): Promise<void> {
+    const message = err instanceof Error ? err.message : 'Failed to enqueue AI job';
+    await decrementAiUsage(env, tenantId);
+    await app.prisma.job.update({
+      where: { id: jobId },
+      data: { status: 'failed', payload: { error: message } },
+    });
+  }
+
+  async function markVersionOperationEnqueueFailed(
+    operationJobId: string,
+    targetVersionId: string,
+    err: unknown,
+  ): Promise<void> {
+    const message = err instanceof Error ? err.message : 'Failed to enqueue operation job';
+    await app.prisma.$transaction([
+      app.prisma.documentVersion.update({
+        where: { id: targetVersionId },
+        data: { status: 'failed' },
+      }),
+      app.prisma.job.update({
+        where: { id: operationJobId },
+        data: { status: 'failed', payload: { error: message } },
+      }),
+    ]);
+  }
   r.get(
     '/ai/providers',
     {
@@ -320,14 +352,19 @@ export const aiRoutes: FastifyPluginAsync<{
           },
         },
       });
-      await enqueueAiJob(env, {
-        jobId: job.id,
-        documentId,
-        versionId,
-        tenantId: user.tenantId,
-        type: 'summary',
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueAiJob(env, {
+          jobId: job.id,
+          documentId,
+          versionId,
+          tenantId: user.tenantId,
+          type: 'summary',
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markAiEnqueueFailed(job.id, user.tenantId, err);
+        throw err;
+      }
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
@@ -387,15 +424,20 @@ export const aiRoutes: FastifyPluginAsync<{
           },
         },
       });
-      await enqueueAiJob(env, {
-        jobId: job.id,
-        documentId,
-        versionId,
-        tenantId: user.tenantId,
-        type: 'chat',
-        prompt: request.body.prompt,
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueAiJob(env, {
+          jobId: job.id,
+          documentId,
+          versionId,
+          tenantId: user.tenantId,
+          type: 'chat',
+          prompt: request.body.prompt,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markAiEnqueueFailed(job.id, user.tenantId, err);
+        throw err;
+      }
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
@@ -428,6 +470,9 @@ export const aiRoutes: FastifyPluginAsync<{
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
+      if (!document.versions.some((v: { id: string }) => v.id === versionId)) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
       const items = await app.prisma.aiSuggestion.findMany({
         where: { documentId, versionId, tenantId: user.tenantId },
         orderBy: { createdAt: 'asc' },
@@ -452,7 +497,15 @@ export const aiRoutes: FastifyPluginAsync<{
       preHandler: [app.authenticate],
       schema: {
         params: z.object({ documentId: z.string(), versionId: z.string() }),
-        body: z.object({ provider: z.enum(['gigachat', 'yandex']).optional() }),
+        body: z
+          .object({
+            provider: z.enum(['gigachat', 'yandex']).optional(),
+            scope: z.enum(['document', 'page']).optional(),
+            page: z.number().int().min(1).optional(),
+          })
+          .refine((body) => body.scope !== 'page' || body.page != null, {
+            message: 'page is required when scope is page',
+          }),
         response: {
           202: z.object({ jobId: z.string(), status: z.string() }),
           400: errorBody,
@@ -465,6 +518,8 @@ export const aiRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
+      const scope = request.body.scope ?? 'document';
+      const page = request.body.page;
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
@@ -472,6 +527,16 @@ export const aiRoutes: FastifyPluginAsync<{
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status !== 'ready') {
         return reply.code(400).send({ error: 'Version not ready' });
+      }
+      if (scope === 'page') {
+        if (!page) {
+          return reply.code(400).send({ error: 'Укажите номер страницы' });
+        }
+        if (version.pageCount && page > version.pageCount) {
+          return reply
+            .code(400)
+            .send({ error: `Страница ${page} больше числа страниц (${version.pageCount})` });
+        }
       }
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
@@ -486,17 +551,28 @@ export const aiRoutes: FastifyPluginAsync<{
           type: 'ai-suggestions',
           status: 'queued',
           tenantId: user.tenantId,
-          payload: { documentId, versionId, provider },
+          payload: {
+            documentId,
+            versionId,
+            provider,
+            scope,
+            ...(scope === 'page' ? { page } : {}),
+          },
         },
       });
-      await enqueueAiJob(env, {
-        jobId: job.id,
-        documentId,
-        versionId,
-        tenantId: user.tenantId,
-        type: 'suggestions',
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueAiJob(env, {
+          jobId: job.id,
+          documentId,
+          versionId,
+          tenantId: user.tenantId,
+          type: 'suggestions',
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markAiEnqueueFailed(job.id, user.tenantId, err);
+        throw err;
+      }
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
@@ -531,23 +607,49 @@ export const aiRoutes: FastifyPluginAsync<{
       if (!suggestion) {
         return reply.code(404).send({ error: 'Suggestion not found' });
       }
+      if (suggestion.status === request.body.status) {
+        return {
+          id: suggestion.id,
+          fragmentId: suggestion.fragmentId,
+          originalText: suggestion.originalText,
+          suggestion: suggestion.suggestion,
+          reason: suggestion.reason,
+          page: suggestion.page,
+          status: suggestion.status,
+          createdAt: suggestion.createdAt.toISOString(),
+        };
+      }
       const updated = await app.prisma.aiSuggestion.update({
         where: { id: suggestionId },
         data: { status: request.body.status },
       });
       if (request.body.status === 'accepted') {
-        await app.prisma.documentAnnotation.create({
-          data: {
+        const page = suggestion.page ?? 1;
+        const existingAnnotation = await app.prisma.documentAnnotation.findFirst({
+          where: {
             documentId,
             versionId,
-            userId: user.sub,
-            page: suggestion.page ?? 1,
+            page,
             kind: 'accepted_edit',
-            content: suggestion.suggestion,
             quote: suggestion.originalText,
-            meta: { suggestionId: suggestion.id, reason: suggestion.reason },
+            content: suggestion.suggestion,
           },
+          select: { id: true },
         });
+        if (!existingAnnotation) {
+          await app.prisma.documentAnnotation.create({
+            data: {
+              documentId,
+              versionId,
+              userId: user.sub,
+              page,
+              kind: 'accepted_edit',
+              content: suggestion.suggestion,
+              quote: suggestion.originalText,
+              meta: { suggestionId: suggestion.id, reason: suggestion.reason },
+            },
+          });
+        }
       }
       await app.prisma.auditLog.create({
         data: {
@@ -651,17 +753,22 @@ export const aiRoutes: FastifyPluginAsync<{
           },
         }),
       ]);
-      await enqueueApplyAcceptedSuggestionsJob(env, {
-        jobId: `apply-edits-${targetVersion.id}`,
-        operationJobId: operationJob.id,
-        documentId,
-        sourceVersionId: sourceVersion.id,
-        targetVersionId: targetVersion.id,
-        tenantId: user.tenantId,
-        sourceS3Key: sourceVersion.s3Key,
-        targetS3Key,
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueApplyAcceptedSuggestionsJob(env, {
+          jobId: `apply-edits-${targetVersion.id}`,
+          operationJobId: operationJob.id,
+          documentId,
+          sourceVersionId: sourceVersion.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          sourceS3Key: sourceVersion.s3Key,
+          targetS3Key,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markVersionOperationEnqueueFailed(operationJob.id, targetVersion.id, err);
+        throw err;
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_apply_ai_edits',
@@ -736,15 +843,20 @@ export const aiRoutes: FastifyPluginAsync<{
           },
         },
       });
-      await enqueueAiJob(env, {
-        jobId: job.id,
-        documentId,
-        versionId,
-        tenantId: user.tenantId,
-        type: 'rag-compare',
-        prompt: request.body.query,
-        requestId: request.requestId,
-      });
+      try {
+        await enqueueAiJob(env, {
+          jobId: job.id,
+          documentId,
+          versionId,
+          tenantId: user.tenantId,
+          type: 'rag-compare',
+          prompt: request.body.query,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markAiEnqueueFailed(job.id, user.tenantId, err);
+        throw err;
+      }
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );

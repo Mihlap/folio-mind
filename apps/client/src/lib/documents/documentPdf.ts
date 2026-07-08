@@ -24,6 +24,7 @@ function cachePdfBytes(key: string, bytes: Uint8Array): void {
       sessionStorage.setItem(`${SESSION_CACHE_PREFIX}${key}`, btoa(binary));
     }
   } catch {
+    // Session cache is optional; in-memory cache still keeps the viewer usable.
   }
 }
 
@@ -108,7 +109,6 @@ async function loadDocumentPdfBytesOnce(params: {
   signal?: AbortSignal;
   preferProxy?: boolean;
 }): Promise<Uint8Array> {
-  const cacheKey = `${params.documentId}/${params.versionId}`;
   const fileUrl = getDocumentPdfFileUrl(params.documentId, params.versionId);
   const fileHeaders = documentPdfAuthHeaders(params.token);
 

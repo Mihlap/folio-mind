@@ -30,6 +30,13 @@ export async function checkAndIncrementAiUsage(env: Env, tenantId: string): Prom
     );
   }
 }
+export async function decrementAiUsage(env: Env, tenantId: string): Promise<void> {
+  const key = `${USAGE_PREFIX}${tenantId}:${dayKey()}:requests`;
+  const count = await getRedis(env).decr(key);
+  if (count < 0) {
+    await getRedis(env).set(key, 0, 'EX', 86400 * 2);
+  }
+}
 export async function getAiUsageToday(env: Env, tenantId: string): Promise<number> {
   const raw = await getRedis(env).get(`${USAGE_PREFIX}${tenantId}:${dayKey()}:requests`);
   return raw ? Number(raw) : 0;

@@ -130,10 +130,22 @@ export {
   type LayoutTemplateStoredObject,
 } from './layout-bureau-templates.js';
 export {
+  mergeBlankInsertion,
+  sourceAfterFromDisplayAfter,
+  templatePageSpan,
+  totalBlankPages,
+  type LayoutBlankInsertion,
+} from './layout-blank-insertions.js';
+export {
   FOLIO_MEDIA_DRAG_MIME,
   parseFolioMediaDragPayload,
   type FolioMediaDragPayload,
 } from './media-drag.js';
+export {
+  FOLIO_DOCUMENT_DRAG_MIME,
+  parseFolioDocumentDragPayload,
+  type FolioDocumentDragPayload,
+} from './document-drag.js';
 export {
   MEDIA_MAX_FILE_BYTES,
   MEDIA_TENANT_QUOTA_BYTES_DEFAULT,
@@ -199,9 +211,12 @@ export {
   getVersionListStatusLabel,
   formatProcessingWaitMessage,
   msgNewVersionStarted,
+  msgReplaceCurrentStarted,
   HINT_OPTIMIZE_NEW_VERSION,
   HINT_OPTIMIZE_REQUIREMENTS,
   HINT_LAYOUT_SAVE_NEW_VERSION,
+  HINT_LAYOUT_SAVE_REPLACE_CURRENT,
+  HINT_PAGE_ORDER_SAVE_REPLACE_CURRENT,
   MSG_OPERATION_STARTING,
   MSG_OPTIMIZE_RUNNING,
   MSG_OPTIMIZE_DONE_SUFFIX,

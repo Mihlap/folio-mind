@@ -1,10 +1,14 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FeatureHelpButton } from '../../components/ui/FeatureHelp.js';
-import { useBackgroundUpload } from '../../context/background-upload-provider.js';
+import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
 import { useAppSelector } from '../../hooks/index.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
-import { useDeleteRagSourceMutation, useListRagSourcesQuery, VERSION_STATUS_LABELS } from '@folio-mind/store';
+import {
+  useDeleteRagSourceMutation,
+  useListRagSourcesQuery,
+  VERSION_STATUS_LABELS,
+} from '@folio-mind/store';
 
 const STATUS_LABEL: Record<string, string> = {
   pending_upload: 'ожидает файл',
@@ -107,9 +111,7 @@ export function RegulationsPage() {
           </div>
         )}
 
-        {displayError && (
-          <p className="mt-3 break-words text-sm text-red-600">{displayError}</p>
-        )}
+        {displayError && <p className="mt-3 break-words text-sm text-red-600">{displayError}</p>}
       </div>
 
       <ul className="mt-8 max-w-2xl space-y-2">

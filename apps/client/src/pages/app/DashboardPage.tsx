@@ -9,8 +9,10 @@ import {
 } from '@folio-mind/store';
 import { DocumentReviewStatusBadge } from '../../components/documents/DocumentReviewStatusControl.js';
 import { useAppSelector } from '../../hooks/index.js';
-import { useBackgroundUpload } from '../../context/background-upload-provider.js';
+import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
 import { DeleteDocumentButton } from '../../components/documents/DeleteDocumentButton.js';
+import { DocumentDragHandle } from '../../components/documents/DocumentDragHandle.js';
+import { ProjectDropTarget } from '../../components/projects/ProjectDropTarget.js';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 
@@ -31,6 +33,7 @@ export function DashboardPage() {
   const showDone = active && uploadState.showDone;
   const uploadError = active ? uploadState.error : null;
   const [filterProjectId, setFilterProjectId] = useState<string>('');
+  const [draggingDocumentId, setDraggingDocumentId] = useState<string | null>(null);
   const { data: list, refetch } = useListDocumentsQuery({
     limit: 20,
     ...(filterProjectId ? { projectId: filterProjectId } : {}),
@@ -90,7 +93,10 @@ export function DashboardPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Документы</h1>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-slate-600" title="Фильтр списка и проект для новых загрузок">
+          <label
+            className="flex items-center gap-2 text-sm text-slate-600"
+            title="Фильтр списка и проект для новых загрузок"
+          >
             <span className="sr-only sm:not-sr-only">Проект</span>
             <select
               value={filterProjectId}
@@ -351,12 +357,53 @@ export function DashboardPage() {
         {error && <p className="mx-auto mt-4 max-w-md text-center text-sm text-red-600">{error}</p>}
       </div>
 
+      {draggingDocumentId && (projects?.items.length ?? 0) > 0 && (
+        <div className="mt-6 rounded-xl border border-folio-200 bg-folio-50/60 px-4 py-3">
+          <p className="mb-2 text-sm font-medium text-folio-900">Отпустите документ на проект</p>
+          <div className="flex flex-wrap gap-2">
+            <ProjectDropTarget
+              projectId={null}
+              projectName="Без проекта"
+              onAssigned={() => {
+                setDraggingDocumentId(null);
+                void refetch();
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+            >
+              Без проекта
+            </ProjectDropTarget>
+            {projects?.items.map((project) => (
+              <ProjectDropTarget
+                key={project.id}
+                projectId={project.id}
+                projectName={project.name}
+                onAssigned={() => {
+                  setDraggingDocumentId(null);
+                  void refetch();
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+              >
+                {project.name}
+              </ProjectDropTarget>
+            ))}
+          </div>
+        </div>
+      )}
+
       <ul className="mt-8 space-y-3 sm:mt-10">
+        <p className="text-xs text-slate-500">
+          У документа слева есть ⠿ — перетащите его на проект, не загружая файл повторно.
+        </p>
         {list?.items.map((doc) => (
           <li
             key={doc.id}
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 hover:border-folio-300 sm:pr-2 sm:pl-0 sm:py-0"
           >
+            <DocumentDragHandle
+              documentId={doc.id}
+              title={doc.title}
+              onDragStateChange={(dragging) => setDraggingDocumentId(dragging ? doc.id : null)}
+            />
             <Link
               to={`/app/documents/${doc.id}`}
               className="min-w-0 flex-1 px-2 py-2 sm:px-4 sm:py-3"

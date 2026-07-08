@@ -1,11 +1,10 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import { FeatureHelpActionButton, PanelSectionHeader } from '../ui/FeatureHelp.js';
 import {
-  FeatureHelpActionButton,
-  PanelSectionHeader,
   reportActionBtnHighlight,
   reportActionBtnPrimary,
   reportActionsColumnClass,
-} from '../ui/FeatureHelp.js';
+} from '../ui/FeatureHelp.styles.js';
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { ExpandableEditField } from './ExpandableEditField.js';
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
@@ -25,7 +24,9 @@ export function DocumentAnnotationsControllerProvider({
   children: ReactNode;
 }) {
   return (
-    <DocumentAnnotationsContext.Provider value={value}>{children}</DocumentAnnotationsContext.Provider>
+    <DocumentAnnotationsContext.Provider value={value}>
+      {children}
+    </DocumentAnnotationsContext.Provider>
   );
 }
 
@@ -169,7 +170,9 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
                       onClick={() => onGoToPage(item.page, item.id)}
                       className="min-w-0 flex-1 cursor-pointer text-left"
                     >
-                      <span className="text-[11px] font-medium text-folio-700">стр. {item.page}</span>
+                      <span className="text-[11px] font-medium text-folio-700">
+                        стр. {item.page}
+                      </span>
                       <p className="mt-0.5 text-xs text-slate-700">{item.content}</p>
                     </button>
                     <button
@@ -260,6 +263,32 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
                   Открыть все
                 </button>
               </div>
+              <ul className="space-y-1.5">
+                {acceptedEdits.map((item) => (
+                  <li
+                    key={item.id}
+                    ref={(el) => {
+                      if (el) itemRefs.current.set(item.id, el);
+                      else itemRefs.current.delete(item.id);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onOpenAcceptedEdit(item.page, item.id)}
+                      className={`w-full cursor-pointer rounded-lg border px-2 py-1.5 text-left text-xs transition ${
+                        focusedAnnotationId === item.id
+                          ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200'
+                          : 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
+                      }`}
+                    >
+                      <span className="font-medium text-folio-700">стр. {item.page}</span>
+                      <span className="mt-0.5 block line-clamp-3 text-slate-600">
+                        {item.content || item.quote || '—'}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
 
               <div className={reportActionsColumnClass}>
                 <FeatureHelpActionButton
@@ -312,7 +341,8 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
                   buttonClassName={reportActionBtnPrimary}
                   helpContent={
                     <p>
-                      Word с подсветкой принятых правок — для ручной доработки без автозамены текста.
+                      Word с подсветкой принятых правок — для ручной доработки без автозамены
+                      текста.
                     </p>
                   }
                 >
@@ -372,33 +402,6 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
                   )}
                 </div>
               )}
-
-              <ul className="space-y-1.5">
-                {acceptedEdits.map((item) => (
-                  <li
-                    key={item.id}
-                    ref={(el) => {
-                      if (el) itemRefs.current.set(item.id, el);
-                      else itemRefs.current.delete(item.id);
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onOpenAcceptedEdit(item.page, item.id)}
-                      className={`w-full cursor-pointer rounded-lg border px-2 py-1.5 text-left text-xs transition ${
-                        focusedAnnotationId === item.id
-                          ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200'
-                          : 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
-                      }`}
-                    >
-                      <span className="font-medium text-folio-700">стр. {item.page}</span>
-                      <span className="mt-0.5 block line-clamp-3 text-slate-600">
-                        {item.content || item.quote || '—'}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
             </div>
           ) : (
             <p className="text-[11px] text-slate-400">

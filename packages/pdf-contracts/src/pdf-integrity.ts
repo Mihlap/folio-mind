@@ -26,7 +26,7 @@ const EDITOR_PRODUCER_PATTERN =
   /adobe acrobat|adobe pdf library|foxit|nitro|pdf-xchange|pdfsam|qpdf|pdf-lib|folio-mind/i;
 export function sanitizePostgresText(value: string | null | undefined): string | null {
   if (value == null) return null;
-  const cleaned = value.replace(/\u0000/g, '');
+  const cleaned = value.split('\0').join('');
   return cleaned.length > 0 ? cleaned : null;
 }
 export function sanitizeIntegrityResult(result: PdfIntegrityResult): PdfIntegrityResult {
@@ -54,7 +54,9 @@ function decodePdfString(raw: string): string {
         s = Buffer.from(hex, 'hex').toString('utf8');
         return sanitizePostgresText(s) ?? '';
       }
-    } catch {}
+    } catch {
+      // Fall back to the raw hex body below if decoding fails.
+    }
     return s.slice(1, -1);
   }
   s = s.replace(/\\([\\()nrtbf])/g, (_, ch: string) => {

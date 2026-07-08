@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useCreateLayoutTemplateMutation,
   useDeleteLayoutTemplateMutation,
@@ -24,10 +24,18 @@ function defaultSaveName(viewerPage: number): string {
 type Props = {
   layout: LayoutEditorState;
   viewerPage: number;
+  displayPageCount: number;
   versionReady: boolean;
+  onGoToPage?: (page: number) => void;
 };
 
-export function DocumentLayoutTemplatesSection({ layout, viewerPage, versionReady }: Props) {
+export function DocumentLayoutTemplatesSection({
+  layout,
+  viewerPage,
+  displayPageCount,
+  versionReady,
+  onGoToPage,
+}: Props) {
   const { data, isLoading } = useListLayoutTemplatesQuery();
   const [createTemplate, { isLoading: saving }] = useCreateLayoutTemplateMutation();
   const [deleteTemplate] = useDeleteLayoutTemplateMutation();
@@ -37,6 +45,13 @@ export function DocumentLayoutTemplatesSection({ layout, viewerPage, versionRead
   const [applyError, setApplyError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [insertAfterPage, setInsertAfterPage] = useState(viewerPage);
+
+  const blankPageOptions = Math.max(1, displayPageCount);
+
+  useEffect(() => {
+    setInsertAfterPage((prev) => Math.min(Math.max(1, prev), blankPageOptions));
+  }, [blankPageOptions]);
 
   const items = data?.items ?? [];
   const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
@@ -74,6 +89,29 @@ export function DocumentLayoutTemplatesSection({ layout, viewerPage, versionRead
       );
     } catch (err) {
       setApplyError(err instanceof Error ? err.message : 'Не удалось применить шаблон');
+    }
+  }
+
+  async function handleApplyOnBlankPage(template: LayoutTemplateItem) {
+    if (!versionReady) return;
+    setApplyError(null);
+    setSaveError(null);
+    setStatus(null);
+    closeSaveForm();
+    try {
+      if (!layout.enabled) layout.setEnabled(true);
+      const objects = template.objects as LayoutTemplateStoredObject[];
+      const result = layout.applyTemplateOnBlankPage(objects, { insertAfterPage });
+      if (result.created.length === 0) {
+        setApplyError('Шаблон пуст');
+        return;
+      }
+      onGoToPage?.(result.targetPage);
+      setStatus(
+        `Шаблон «${template.name}» на новом листе после стр. ${result.displayInsertAfter} (стр. ${result.targetPage}). Нажмите «Сохранить в PDF», чтобы вставить страницу в документ.`,
+      );
+    } catch (err) {
+      setApplyError(err instanceof Error ? err.message : 'Не удалось применить на чистый лист');
     }
   }
 
@@ -150,6 +188,23 @@ export function DocumentLayoutTemplatesSection({ layout, viewerPage, versionRead
             <p className="text-[11px] text-slate-500">{selected.description}</p>
           )}
 
+          <label className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[10px] font-medium text-slate-600">Вставить чистый лист после</span>
+            <select
+              value={insertAfterPage}
+              onChange={(e) => setInsertAfterPage(Number(e.target.value))}
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800"
+            >
+              {Array.from({ length: blankPageOptions }, (_, index) => index + 1).map((page) => (
+                <option key={page} value={page}>
+                  стр. {page}
+                  {page === viewerPage ? ' (сейчас открыта)' : ''}
+                  {page === blankPageOptions ? ' — в конец' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -158,6 +213,15 @@ export function DocumentLayoutTemplatesSection({ layout, viewerPage, versionRead
               className="rounded border border-folio-300 bg-folio-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-folio-700 disabled:opacity-50"
             >
               Применить на стр. {viewerPage}
+            </button>
+            <button
+              type="button"
+              disabled={!versionReady || !selected}
+              onClick={() => selected && void handleApplyOnBlankPage(selected)}
+              className="rounded border border-folio-200 bg-white px-3 py-1.5 text-[11px] font-medium text-folio-700 hover:bg-folio-50 disabled:opacity-50"
+              title="Добавит чистый лист в выбранное место при сохранении в PDF"
+            >
+              Применить на чистый лист
             </button>
             {selected && !selected.builtin && (
               <button

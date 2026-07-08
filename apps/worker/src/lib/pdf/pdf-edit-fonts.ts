@@ -80,6 +80,7 @@ export async function collectEmbeddedFontBytes(
         out.set(fontName, font.data);
       }
     } catch {
+      // Some embedded fonts are not exposed by pdf.js; skip them.
     }
   }
   return out;

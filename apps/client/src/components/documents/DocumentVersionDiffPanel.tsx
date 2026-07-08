@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   useLazyCompareVersionsQuery,
-  useCompareVersionIntegrityQuery,
   useGetVersionPreviewsQuery,
 } from '@folio-mind/store';
 import { IntegrityCompareBadge } from './DocumentVersionIntegrityBadge.js';
