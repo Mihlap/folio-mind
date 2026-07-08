@@ -36,3 +36,64 @@ body {
 .textLayer mark {
   color: transparent;
 }
+
+.textLayer.textLayer--quote {
+  opacity: 1;
+}
+
+.textLayer.textLayer--quote span::selection,
+.textLayer.select-text span::selection {
+  background-color: rgba(254, 226, 226, 0.38);
+  color: transparent;
+}
+
+.textLayer.textLayer--quote span::-moz-selection,
+.textLayer.select-text span::-moz-selection {
+  background-color: rgba(254, 226, 226, 0.38);
+  color: transparent;
+}
+
+@keyframes sidebarFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-button,
+.scrollbar-thin::-webkit-scrollbar-button:single-button,
+.scrollbar-thin::-webkit-scrollbar-button:vertical:start:decrement,
+.scrollbar-thin::-webkit-scrollbar-button:vertical:end:increment,
+.scrollbar-thin::-webkit-scrollbar-button:horizontal:start:decrement,
+.scrollbar-thin::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(203 213 225);
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184);
+}

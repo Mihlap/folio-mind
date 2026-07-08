@@ -1,15 +1,12 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-
 type UiState = {
   sidebarOpen: boolean;
   theme: 'light' | 'dark';
 };
-
 const initialState: UiState = {
   sidebarOpen: true,
   theme: 'light',
 };
-
 export const uiSlice = createSlice({
   name: 'ui',
   initialState,
@@ -22,5 +19,4 @@ export const uiSlice = createSlice({
     },
   },
 });
-
 export const { toggleSidebar, setTheme } = uiSlice.actions;

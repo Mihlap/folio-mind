@@ -14,6 +14,7 @@
   "dependencies": {
     "@folio-mind/store": "workspace:*",
     "@folio-mind/ui": "workspace:*",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0",

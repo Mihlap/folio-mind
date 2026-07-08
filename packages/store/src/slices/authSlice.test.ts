@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { authSlice, logout, setCredentials } from './authSlice.js';
-
 describe('authSlice', () => {
   it('sets credentials', () => {
     const state = authSlice.reducer(
@@ -13,7 +12,6 @@ describe('authSlice', () => {
     expect(state.token).toBe('t');
     expect(state.user?.email).toBe('a@b.c');
   });
-
   it('logs out', () => {
     const state = authSlice.reducer(
       {

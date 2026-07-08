@@ -4,6 +4,7 @@ const PARALLEL = Number(process.env.SMOKE_PARALLEL ?? 1);
 const PREVIEW_TIMEOUT_MS = Number(process.env.SMOKE_PREVIEW_TIMEOUT_MS ?? 180_000);
 const META_SAMPLES = Number(process.env.SMOKE_META_SAMPLES ?? 20);
 const P95_LIMIT_MS = Number(process.env.SMOKE_P95_LIMIT_MS ?? 500);
+const SMOKE_PASSWORD = 'Smoke-test-pass-123';
 
 function esc(s) {
   return s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
@@ -73,13 +74,40 @@ async function api(path, options = {}) {
 }
 
 async function register() {
-  const email = `smoke-${Date.now()}@folio-mind.test`;
+  const email = `smoke.${Date.now()}@gmail.com`;
   const data = await api('/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'smoke-test-pass-123', name: 'Smoke' }),
+    body: JSON.stringify({ email, password: SMOKE_PASSWORD, name: 'Smoke' }),
   });
-  return { token: data.token, email };
+  return { email, data };
+}
+
+async function markEmailVerified(email) {
+  const { createRequire } = await import('node:module');
+  const serverRequire = createRequire(new URL('../apps/server/package.json', import.meta.url));
+  const { PrismaClient } = serverRequire('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    await prisma.user.update({
+      where: { email: email.toLowerCase() },
+      data: { emailVerifiedAt: new Date() },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function login(email) {
+  const data = await api('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: SMOKE_PASSWORD }),
+  });
+  if (!data?.token) {
+    throw new Error('Login did not return JWT token');
+  }
+  return data.token;
 }
 
 async function uploadDocument(token, pdfBuffer, title) {
@@ -189,10 +217,9 @@ async function runOneUpload(token, pdfBuffer, index) {
   const targetThumbs = Math.min(PAGE_COUNT, 60);
   const previews = await waitForPreviewRange(token, documentId, versionId, targetThumbs);
 
-  const fileRes = await fetch(
-    `${API}/documents/${documentId}/versions/${versionId}/file`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const fileRes = await fetch(`${API}/documents/${documentId}/versions/${versionId}/file`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (!fileRes.ok) {
     throw new Error(`file download failed: ${fileRes.status}`);
   }
@@ -224,7 +251,12 @@ async function main() {
   const pdf = buildSmokePdf(PAGE_COUNT);
   console.log(`Generated PDF: ${PAGE_COUNT} pages, ${pdf.length} bytes`);
 
-  const { token } = await register();
+  const { email, data } = await register();
+  let token = data?.token;
+  if (!token) {
+    await markEmailVerified(email);
+    token = await login(email);
+  }
   console.log('Registered smoke user');
 
   const results = [];
@@ -255,7 +287,9 @@ async function main() {
   }
 
   const meta = await measureMetaLatency(token, results[0].documentId);
-  console.log(`\nAPI latency p95: GET /documents ${meta.listP95.toFixed(0)} ms, GET /documents/:id ${meta.getP95.toFixed(0)} ms`);
+  console.log(
+    `\nAPI latency p95: GET /documents ${meta.listP95.toFixed(0)} ms, GET /documents/:id ${meta.getP95.toFixed(0)} ms`,
+  );
 
   const failedMeta = meta.listP95 > P95_LIMIT_MS || meta.getP95 > P95_LIMIT_MS;
   if (failedMeta) {

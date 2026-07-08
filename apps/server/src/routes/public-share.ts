@@ -1,0 +1,478 @@
+import { previewPageKeyForVariant, exportBookletZipKey } from '@folio-mind/pdf-contracts';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
+import { fetchVersionPreviews } from '../lib/documents/fetch-version-previews.js';
+import {
+  createGuestShareCommentSchema,
+  guestShareCommentSchema,
+  serializeGuestShareComment,
+} from '../lib/share/guest-comment.js';
+import { guestPreviewPageUrl } from '../lib/share/guest-preview-url.js';
+import {
+  hashShareToken,
+  isShareLinkActive,
+} from '../lib/share/share-link.js';
+import { resolveShareLinkByToken } from '../lib/share/resolve-share-link.js';
+import { notifyGuestCommentOwner } from '../lib/share/notify-guest-comment.js';
+import { createMailer } from '../lib/email/mailer.js';
+import type { Env } from '../lib/config/env.js';
+import { getObjectWithBuffer, isS3Configured, s3ObjectExists, getPresignedGetUrl } from '../lib/storage/s3.js';
+import { readSharePasswordHeader, verifySharePassword } from '../lib/share/share-password.js';
+import { errorBody } from './documents/schemas.js';
+
+async function assertSharePassword(
+  request: { headers: Record<string, string | string[] | undefined> },
+  passwordHash: string | null,
+  reply: FastifyReply,
+): Promise<boolean> {
+  if (!passwordHash) return true;
+  const ok = await verifySharePassword(readSharePasswordHeader(request.headers), passwordHash);
+  if (!ok) {
+    reply.code(401).send({ error: 'Требуется пароль', requiresPassword: true });
+    return false;
+  }
+  return true;
+}
+
+export const PUBLIC_SHARE_RATE_LIMIT = {
+  max: 60,
+  timeWindow: '1 minute',
+} as const;
+
+export const PUBLIC_SHARE_COMMENT_RATE_LIMIT = {
+  max: 20,
+  timeWindow: '1 minute',
+} as const;
+
+export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { env }) => {
+  const r = app.withTypeProvider<ZodTypeProvider>();
+
+  r.get(
+    '/public/share/:token',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          200: z.object({
+            title: z.string(),
+            version: z.number(),
+            pageCount: z.number().nullable(),
+            expiresAt: z.string(),
+            allowDownload: z.boolean(),
+            allowBookletZip: z.boolean(),
+            bookletZipAvailable: z.boolean(),
+            previewStatus: z.enum(['processing', 'ready', 'partial', 'unavailable']),
+          }),
+          404: errorBody,
+          410: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Просмотр временно недоступен' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        const existing = await app.prisma.documentShareLink.findUnique({
+          where: { tokenHash: hashShareToken(request.params.token) },
+        });
+        if (existing && !isShareLinkActive(existing)) {
+          return reply.code(410).send({ error: 'Ссылка истекла или отозвана' });
+        }
+        return reply.code(404).send({ error: 'Ссылка не найдена' });
+      }
+
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
+      void app.prisma.auditLog.create({
+        data: {
+          action: 'document.share_view',
+          tenantId: resolved.document.tenantId,
+          documentId: resolved.document.id,
+          meta: {
+            shareLinkId: resolved.link.id,
+            versionId: resolved.link.versionId,
+          },
+        },
+      });
+
+      const previewStatus =
+        resolved.version.status === 'processing'
+          ? ('processing' as const)
+          : resolved.version.pageCount === 0
+            ? ('unavailable' as const)
+            : ('ready' as const);
+
+      const zipKey = exportBookletZipKey(resolved.document.id, resolved.version.id);
+      const bookletZipAvailable =
+        resolved.link.allowBookletZip && (await s3ObjectExists(zipKey));
+
+      return {
+        title: resolved.document.title,
+        version: resolved.version.version,
+        pageCount: resolved.version.pageCount,
+        expiresAt: resolved.link.expiresAt.toISOString(),
+        allowDownload: resolved.link.allowDownload,
+        allowBookletZip: resolved.link.allowBookletZip,
+        bookletZipAvailable,
+        previewStatus,
+      };
+    },
+  );
+
+  r.get(
+    '/public/share/:token/previews',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        querystring: z.object({
+          from: z.coerce.number().int().min(1).optional(),
+          to: z.coerce.number().int().min(1).optional(),
+        }),
+        response: {
+          200: z.object({
+            pageCount: z.number(),
+            pages: z.array(
+              z.object({
+                page: z.number(),
+                url: z.string(),
+              }),
+            ),
+            status: z.enum(['processing', 'ready', 'partial', 'unavailable']),
+            pendingPages: z.array(z.number()).optional(),
+          }),
+          404: errorBody,
+          410: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Просмотр временно недоступен' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
+      const result = await fetchVersionPreviews({
+        env,
+        prisma: app.prisma,
+        documentId: resolved.document.id,
+        versionId: resolved.version.id,
+        version: resolved.version,
+        tenantId: resolved.document.tenantId,
+        from: request.query.from,
+        to: request.query.to,
+        requestId: request.requestId,
+        enqueueMissing: true,
+        variant: 'view',
+        allowThumbFallback: true,
+      });
+
+      const token = request.params.token;
+      return {
+        ...result,
+        pages: result.pages.map((item) => ({
+          page: item.page,
+          url: guestPreviewPageUrl({ env, request, token, page: item.page }),
+        })),
+      };
+    },
+  );
+
+  r.get(
+    '/public/share/:token/page-review-marks',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          200: z.object({
+            items: z.array(
+              z.object({
+                page: z.number(),
+                status: z.enum(['ok', 'needs_fix']),
+              }),
+            ),
+          }),
+          404: errorBody,
+          410: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
+      const items = await app.prisma.documentPageReviewMark.findMany({
+        where: {
+          documentId: resolved.document.id,
+          versionId: resolved.version.id,
+          tenantId: resolved.document.tenantId,
+        },
+        orderBy: { page: 'asc' },
+      });
+
+      return {
+        items: items.map((item) => ({
+          page: item.page,
+          status: item.status as 'ok' | 'needs_fix',
+        })),
+      };
+    },
+  );
+
+  r.get(
+    '/public/share/:token/comments',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          200: z.object({ items: z.array(guestShareCommentSchema) }),
+          404: errorBody,
+          410: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Просмотр временно недоступен' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
+      const items = await app.prisma.guestShareComment.findMany({
+        where: {
+          documentId: resolved.document.id,
+          versionId: resolved.version.id,
+        },
+        orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
+      });
+
+      return { items: items.map(serializeGuestShareComment) };
+    },
+  );
+
+  r.post(
+    '/public/share/:token/comments',
+    {
+      config: { rateLimit: PUBLIC_SHARE_COMMENT_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        body: createGuestShareCommentSchema,
+        response: {
+          201: guestShareCommentSchema,
+          400: errorBody,
+          404: errorBody,
+          410: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Просмотр временно недоступен' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
+      const maxPage = resolved.version.pageCount ?? 0;
+      if (maxPage > 0 && request.body.page > maxPage) {
+        return reply.code(400).send({ error: `Страница ${request.body.page} не существует` });
+      }
+
+      const created = await app.prisma.guestShareComment.create({
+        data: {
+          shareLinkId: resolved.link.id,
+          documentId: resolved.document.id,
+          versionId: resolved.version.id,
+          page: request.body.page,
+          content: request.body.content.trim(),
+          authorName: request.body.authorName?.trim() || null,
+          authorEmail: request.body.authorEmail?.trim().toLowerCase() || null,
+          x: request.body.x ?? null,
+          y: request.body.y ?? null,
+        },
+      });
+
+      void app.prisma.auditLog.create({
+        data: {
+          action: 'document.guest_comment_created',
+          tenantId: resolved.document.tenantId,
+          documentId: resolved.document.id,
+          meta: {
+            commentId: created.id,
+            shareLinkId: resolved.link.id,
+            versionId: resolved.version.id,
+            page: created.page,
+          },
+        },
+      });
+
+      void notifyGuestCommentOwner(
+        app.prisma,
+        env,
+        createMailer(env, request.log),
+        request.log,
+        {
+          documentId: resolved.document.id,
+          documentTitle: resolved.document.title,
+          versionId: resolved.version.id,
+          versionNumber: resolved.version.version,
+          comment: {
+            id: created.id,
+            page: created.page,
+            content: created.content,
+            authorName: created.authorName,
+            createdAt: created.createdAt,
+          },
+        },
+      ).catch((err) => {
+        request.log.warn({ err }, 'guest comment owner notification failed');
+      });
+
+      return reply.status(201).send(serializeGuestShareComment(created));
+    },
+  );
+
+  r.get(
+    '/public/share/:token/booklet-download',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          200: z.object({ url: z.string(), expiresInSeconds: z.number() }),
+          403: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Скачивание временно недоступно' });
+      }
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+      if (!resolved.link.allowBookletZip) {
+        return reply.code(403).send({ error: 'Скачивание пакета по этой ссылке не разрешено' });
+      }
+      const zipKey = exportBookletZipKey(resolved.document.id, resolved.version.id);
+      if (!(await s3ObjectExists(zipKey))) {
+        return reply.code(404).send({ error: 'Пакет ещё не подготовлен автором документа' });
+      }
+      const expiresInSeconds = 3600;
+      const url = await getPresignedGetUrl({ key: zipKey, expiresInSeconds });
+      void app.prisma.auditLog.create({
+        data: {
+          action: 'document.share_booklet_download',
+          tenantId: resolved.document.tenantId,
+          documentId: resolved.document.id,
+          meta: { shareLinkId: resolved.link.id, versionId: resolved.link.versionId },
+        },
+      });
+      return { url, expiresInSeconds };
+    },
+  );
+
+  r.get(
+    '/public/share/:token/pages/:page',
+    {
+      config: { rateLimit: PUBLIC_SHARE_RATE_LIMIT },
+      schema: {
+        params: z.object({
+          token: z.string().min(16),
+          page: z.coerce.number().int().min(1),
+        }),
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'Просмотр временно недоступен' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+        return reply;
+      }
+
+      const page = request.params.page;
+      const maxPage = resolved.version.pageCount ?? 0;
+      if (maxPage > 0 && page > maxPage) {
+        return reply.code(404).send({ error: 'Страница не найдена' });
+      }
+
+      const viewKey = previewPageKeyForVariant(
+        resolved.document.id,
+        resolved.version.id,
+        page,
+        'view',
+      );
+      const thumbKey = previewPageKeyForVariant(
+        resolved.document.id,
+        resolved.version.id,
+        page,
+        'thumb',
+      );
+      try {
+        const { buffer, contentType } = await getObjectWithBuffer(viewKey);
+        return reply
+          .header('Content-Type', contentType || 'image/png')
+          .header('Cache-Control', 'private, max-age=300')
+          .send(buffer);
+      } catch {
+        try {
+          const { buffer, contentType } = await getObjectWithBuffer(thumbKey);
+          return reply
+            .header('Content-Type', contentType || 'image/png')
+            .header('Cache-Control', 'private, max-age=120')
+            .send(buffer);
+        } catch {
+          return reply.code(404).send({ error: 'Превью страницы ещё не готово' });
+        }
+      }
+    },
+  );
+};

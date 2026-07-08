@@ -13,19 +13,97 @@ model Tenant {
   createdAt DateTime   @default(now())
   users     User[]
   documents Document[]
+  projects  Project[]
+  ragSources RagSource[]
+  mediaAssets MediaAsset[]
+  layoutTemplates LayoutTemplate[]
+  apiKeys ApiKey[]
+  webhookEndpoints WebhookEndpoint[]
+}
+
+model LayoutTemplate {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  category    String   @default("custom")
+  objects     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, updatedAt])
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  name         String?
-  tenantId     String
-  tenant       Tenant     @relation(fields: [tenantId], references: [id])
-  createdAt    DateTime   @default(now())
-  documents    Document[]
-  auditLogs    AuditLog[]
+  id                String     @id @default(cuid())
+  email             String     @unique
+  phone             String?    @unique
+  passwordHash      String
+  name              String?
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+  tenantId          String
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime   @default(now())
+  documents         Document[]
+  auditLogs         AuditLog[]
   passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  magicLinkTokens   MagicLinkToken[]
+  oauthAccounts     OAuthAccount[]
+  annotations       DocumentAnnotation[]
+  shareLinks        DocumentShareLink[]
+}
+
+model SmsCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone, code])
+  @@index([expiresAt])
+}
+
+model MagicLinkToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model OAuthAccount {
+  id             String   @id @default(cuid())
+  provider       String
+  providerUserId String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
 }
 
 model PasswordResetToken {
@@ -42,18 +120,116 @@ model PasswordResetToken {
   @@unique([tokenHash])
 }
 
-model Document {
-  id        String            @id @default(cuid())
-  title     String
+model Project {
+  id        String     @id @default(cuid())
   tenantId  String
-  ownerId   String
-  tenant    Tenant            @relation(fields: [tenantId], references: [id])
-  owner     User              @relation(fields: [ownerId], references: [id])
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  versions  DocumentVersion[]
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  documents Document[]
 
   @@index([tenantId, updatedAt])
+}
+
+model Document {
+  id                      String            @id @default(cuid())
+  title                   String
+  tenantId                String
+  ownerId                 String
+  projectId               String?
+  reviewStatus            String            @default("draft")
+  reviewStatusChangedAt   DateTime?
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id])
+  owner                   User              @relation(fields: [ownerId], references: [id])
+  project                 Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  versions                DocumentVersion[]
+  shareLinks              DocumentShareLink[]
+  mediaAssets             MediaAsset[]
+
+  @@index([tenantId, updatedAt])
+  @@index([tenantId, reviewStatus])
+  @@index([tenantId, projectId, updatedAt])
+}
+
+model DocumentShareLink {
+  id            String    @id @default(cuid())
+  documentId    String
+  document      Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionId     String
+  tokenHash     String    @unique
+  createdById   String
+  createdBy     User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  allowDownload Boolean   @default(false)
+  allowBookletZip Boolean @default(false)
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  guestComments GuestShareComment[]
+
+  @@index([documentId, createdAt])
+  @@index([expiresAt])
+}
+
+model GuestShareComment {
+  id          String            @id @default(cuid())
+  shareLinkId String
+  shareLink   DocumentShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  documentId  String
+  versionId   String
+  page        Int
+  content     String
+  authorName  String?
+  authorEmail String?
+  x           Float?
+  y           Float?
+  status      String            @default("open")
+  authorReply String?
+  resolvedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([documentId, versionId, createdAt])
+  @@index([shareLinkId, createdAt])
+}
+
+model MediaAsset {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  title      String
+  s3Key      String
+  fileName   String
+  mimeType   String
+  size       BigInt    @default(0)
+  width      Int?
+  height     Int?
+  status     String    @default("pending_upload")
+  thumbS3Key String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([documentId, createdAt])
+}
+
+model DocumentPageReviewMark {
+  id         String   @id @default(cuid())
+  documentId String
+  versionId  String
+  page       Int
+  status     String
+  tenantId   String
+  updatedAt  DateTime @updatedAt
+
+  @@unique([documentId, versionId, page])
+  @@index([documentId, versionId])
+  @@index([tenantId])
 }
 
 model DocumentVersion {
@@ -61,12 +237,27 @@ model DocumentVersion {
   documentId String
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   version    Int
+  versionLabel String?
   s3Key      String
   size       BigInt   @default(0)
   sha256     String?
   mimeType   String   @default("application/pdf")
   status     String   @default("pending")
   pageCount  Int?
+  sourceDocxKey String?
+  sourceVersionId String?
+  sourceVersion   DocumentVersion? @relation("VersionAncestry", fields: [sourceVersionId], references: [id])
+  derivedVersions DocumentVersion[] @relation("VersionAncestry")
+  integrityStatus     String?
+  integrityScore      Int?
+  integritySummary    String?
+  integrityDetails    Json?
+  integrityAnalyzedAt DateTime?
+  confidenceLevel     String?
+  confidenceScore     Int?
+  confidenceSummary   String?
+  confidenceDetails   Json?
+  confidenceAnalyzedAt DateTime?
   createdAt  DateTime @default(now())
 
   @@unique([documentId, version])
@@ -93,4 +284,97 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([tenantId, createdAt])
+}
+
+model DocumentAnnotation {
+  id         String   @id @default(cuid())
+  documentId String
+  versionId  String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  page       Int
+  kind       String   @default("comment")
+  content    String
+  quote      String?
+  x          Float?
+  y          Float?
+  meta       Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([documentId, versionId])
+}
+
+model AiSuggestion {
+  id           String   @id @default(cuid())
+  documentId   String
+  versionId    String
+  tenantId     String
+  fragmentId   String
+  originalText String
+  suggestion   String
+  reason       String
+  page         Int?
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([documentId, versionId])
+  @@index([tenantId, status])
+}
+
+model RagSource {
+  id         String     @id @default(cuid())
+  tenantId   String
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title      String
+  s3Key      String
+  fileName   String
+  status     String     @default("processing")
+  chunkCount Int        @default(0)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  chunks     RagChunk[]
+
+  @@index([tenantId, createdAt])
+}
+
+model RagChunk {
+  id         String                     @id @default(cuid())
+  sourceId   String
+  source     RagSource                  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  tenantId   String
+  chunkIndex Int
+  content    String                     @db.Text
+  embedding  Unsupported("vector(384)")?
+
+  @@index([sourceId])
+  @@index([tenantId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique
+  scopes     String[]  @default(["documents:read"])
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([tenantId, createdAt])
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  url       String
+  secret    String
+  events    String[] @default(["job.completed"])
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, enabled])
 }

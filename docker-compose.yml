@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: folio
       POSTGRES_PASSWORD: folio
@@ -31,6 +31,7 @@ services:
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: miniosecret
+      MINIO_CORS_ALLOW_ORIGIN: "*"
     ports:
       - '9000:9000'
       - '9001:9001'
@@ -53,12 +54,47 @@ services:
       mc alias set local http://minio:9000 minio miniosecret;
       mc mb -p local/folio-mind || true;
       mc anonymous set download local/folio-mind || true;
+      mc admin config set local api cors_origins="*" && mc admin service restart local || true;
       for p in folioFiles/originals folioFiles/previews folioFiles/processing folioFiles/exports folioFiles/media folioFiles/rag-sources; do
         echo '' | mc pipe local/folio-mind/$$p/.keep || true;
       done;
       echo 'MinIO ready: bucket folio-mind, objects under folioFiles/*';
       exit 0;
       "
+
+  gotenberg:
+    container_name: folio-mind-gotenberg
+    image: gotenberg/gotenberg:8
+    ports:
+      - '3003:3000'
+    environment:
+      DISABLE_GOOGLE_CHROME: "1"
+      DISABLE_UNOCONV: "0"
+    volumes:
+      - ./tmp/libreoffice:/tmp/libreoffice
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:3000/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  pdf2docx:
+    container_name: folio-mind-pdf2docx
+    build: ./docker/pdf2docx
+    ports:
+      - '8080:8080'
+    environment:
+      # Согласовано с MAX_UPLOAD_BYTES (100 МБ) в API
+      MAX_UPLOAD_MB: '100'
+    # pdf2docx жрёт RAM: ориентир ~40–60 МБ RAM на 1 МБ PDF (иллюстрации, сложная вёрстка)
+    mem_limit: 4g
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 volumes:
   postgres_data:

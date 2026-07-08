@@ -1,17 +1,13 @@
 import { getTracer, isTracingEnabled, SpanStatusCode, type Span } from '@folio-mind/observability';
 import type { FastifyPluginAsync } from 'fastify';
-
 declare module 'fastify' {
   interface FastifyRequest {
     otelSpan?: Span;
   }
 }
-
 export const tracingPlugin: FastifyPluginAsync = async (app) => {
   if (!isTracingEnabled()) return;
-
   const tracer = getTracer('folio-mind-api');
-
   app.addHook('onRequest', async (request) => {
     const route = request.routeOptions?.url ?? request.url;
     request.otelSpan = tracer.startSpan(`${request.method} ${route}`, {
@@ -22,7 +18,6 @@ export const tracingPlugin: FastifyPluginAsync = async (app) => {
       },
     });
   });
-
   app.addHook('onResponse', async (request, reply) => {
     const span = request.otelSpan;
     if (!span) return;

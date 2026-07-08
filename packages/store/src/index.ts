@@ -1,110 +1,294 @@
 export { createAppStore, type AppStore, type RootState, type AppDispatch } from './store.js';
-
+export {
+  OPTIMIZE_PRESET_INFO,
+  OPTIMIZE_PRESETS,
+  estimateOptimizeSize,
+  formatFileSize,
+  formatOptimizeSizeRange,
+  type OptimizePreset,
+  layoutStepFraction,
+  pdfPointsToMm,
+  rotateLayoutObject,
+  rotateLayoutPageObject,
+  layoutFillToCss,
+  isLayoutImageObject,
+  isLayoutShapeObject,
+  DEFAULT_LAYOUT_SOLID_FILL,
+  DEFAULT_LAYOUT_GRADIENT_FILL,
+  LAYOUT_MARGIN_PRESETS,
+  layoutGuidesForPreset,
+  clampLayoutRect,
+  normalizeLayoutCrop,
+  isFullLayoutCrop,
+  type LayoutImageObject,
+  type LayoutShapeObject,
+  type LayoutPageObject,
+  type LayoutFill,
+  type LayoutMarginPresetId,
+  type LayoutRect,
+  type OptimizeSizeEstimate,
+  DOCUMENT_REVIEW_STATUSES,
+  type DocumentReviewStatus,
+  isDocumentReviewStatus,
+  applyLayoutTemplateObjects,
+  serializePageToTemplate,
+  FOLIO_MEDIA_DRAG_MIME,
+  type LayoutTemplateStoredObject,
+  type LayoutTemplateCategory,
+  MEDIA_MAX_FILE_BYTES,
+  MEDIA_TENANT_QUOTA_BYTES_DEFAULT,
+  MEDIA_MAX_PIXEL_SIDE,
+  MEDIA_STORE_MAX_PIXEL_SIDE,
+  MEDIA_JPEG_QUALITY,
+  formatBytesShort,
+  type MediaQuotaInfo,
+  BOOKLET_EXPORT_DEFAULT_JPEG_DPI,
+  PRINT_MIN_DPI,
+  type PrintReadinessReport,
+  type PrintReadinessLevel,
+  captionFromFileName,
+  LABEL_ARCHIVE_PDF,
+  LABEL_ARCHIVE_PDF_HINT,
+  MSG_ARCHIVE_PDF_FALLBACK,
+  LABEL_GUEST_BOOKLET_ZIP,
+  LABEL_GUEST_BOOKLET_ZIP_HINT,
+  LABEL_PAGE_REVIEW_SECTION,
+  HINT_PAGE_REVIEW_AUTHOR,
+  LABEL_PAGE_REVIEW_OK,
+  LABEL_PAGE_REVIEW_NEEDS_FIX,
+  LABEL_GUEST_PAGE_NEEDS_FIX,
+  LABEL_GUEST_PAGE_OK,
+  MSG_GUEST_PAGE_NEEDS_FIX,
+  LABEL_GUEST_COMMENT_OPEN,
+  LABEL_GUEST_COMMENT_RESOLVED,
+  LABEL_GUEST_COMMENT_RESOLVED_GUEST,
+  LABEL_GUEST_AUTHOR_REPLY,
+  HINT_GUEST_RESOLVE_REPLY,
+  MSG_GUEST_COMMENT_RESOLVED_AUTHOR,
+  PLACEHOLDER_GUEST_RESOLVE_REPLY,
+  MSG_PROCESSING_WAIT,
+  VERSION_STATUS_LABELS,
+  MSG_VERSION_VIEWABLE_WHILE_PROCESSING,
+  getVersionStatusLabel,
+  getVersionListStatusLabel,
+  formatProcessingWaitMessage,
+  msgNewVersionStarted,
+  HINT_OPTIMIZE_NEW_VERSION,
+  HINT_OPTIMIZE_REQUIREMENTS,
+  HINT_LAYOUT_SAVE_NEW_VERSION,
+  MSG_OPERATION_STARTING,
+  MSG_OPTIMIZE_RUNNING,
+  MSG_OPTIMIZE_DONE_SUFFIX,
+  MSG_OPTIMIZE_NO_CHANGE,
+  MSG_OPTIMIZE_NO_TOOLS,
+  MSG_OPTIMIZE_SAVED,
+  MSG_OPTIMIZE_ASSEMBLED,
+  formatOptimizeWaitHint,
+  readJobProgressLabel,
+} from '@folio-mind/pdf-contracts';
 export { apiBaseUrl } from './api/baseApi.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
+export { uploadRagSource, type UploadRagSourceArgs } from './lib/uploadRagSource.js';
+export { uploadSourceDocx } from './lib/uploadSourceDocx.js';
 export { putFileToPresignedUrl } from './lib/presignedUpload.js';
-
-export { authSlice, setCredentials, logout } from './slices/authSlice.js';
-
+export {
+  formatUploadError,
+  isUploadNetworkError,
+  UPLOAD_NETWORK_ERROR_MESSAGE,
+} from './lib/formatUploadError.js';
+export { authSlice, setCredentials, setToken, logout } from './slices/authSlice.js';
 export { uiSlice, toggleSidebar, setTheme } from './slices/uiSlice.js';
-
 export {
-
   viewerSlice,
-
   setDisplayMode,
-
   setZoomMode,
-
   setCustomScale,
-
   zoomIn,
-
   zoomOut,
-
   resetZoom,
-
   setSearchQuery,
-
   setSearchMatches,
-
   nextSearchMatch,
-
   prevSearchMatch,
-
   clearSearch,
-
   type ViewerDisplayMode,
-
   type ViewerZoomMode,
-
   type SearchMatch,
-
 } from './slices/viewerSlice.js';
-
 export {
-
+  backgroundUploadSlice,
+  uploadStarted,
+  uploadProgress,
+  uploadShowDone,
+  uploadFinished,
+  uploadFailed,
+  clearUploadError,
+  type BackgroundUploadKind,
+} from './slices/backgroundUploadSlice.js';
+export {
   authApi,
-
   useRegisterMutation,
-
+  useVerifyEmailMutation,
+  useResendVerificationMutation,
+  useEmailVerificationStatusMutation,
+  useRequestMagicLinkMutation,
+  useVerifyMagicLinkMutation,
   useLoginMutation,
-
   useMeQuery,
-
   useHealthQuery,
-
   useForgotPasswordMutation,
-
   useResetPasswordMutation,
-
+  useSendPhoneCodeMutation,
+  usePhoneRegisterMutation,
+  usePhoneLoginMutation,
 } from './api/authApi.js';
-
 export {
-
   documentsApi,
-
+  type DocumentListItem,
+  type CreateDocumentBody,
+  type CreateDocumentResponse,
   useListDocumentsQuery,
-
   useGetDocumentQuery,
-
   useCreateDocumentMutation,
-
+  useCreateDocumentFromDocxMutation,
+  useImportFromDocxMutation,
   useCreateDocumentVersionMutation,
-
+  useCreateDocumentVersionFromDocxMutation,
   useCompleteUploadMutation,
-
+  useCompleteDocxUploadMutation,
+  useAttachSourceDocxMutation,
   useUploadVersionFileMutation,
-
   useDeleteDocumentMutation,
-
+  useUpdateDocumentReviewStatusMutation,
+  useDeleteDocumentVersionMutation,
   useLazyGetDownloadUrlQuery,
-
+  useLazyGetSourceDocxUrlQuery,
+  useGetVersionIntegrityQuery,
   useGetVersionPreviewsQuery,
-
+  useSplitPagesMutation,
+  useRearrangePagesMutation,
+  useMergeVersionsMutation,
+  useOptimizePdfMutation,
+  useApplyLayoutPdfMutation,
+  useApplyEditsFinalMutation,
+  useExportHighlightDocxMutation,
+  useExportBookletMutation,
+  useExportPagesMutation,
+  usePrintReadinessMutation,
+  useLazyGetBookletExportUrlQuery,
+  useLazyGetPagesExportUrlQuery,
+  useLazyGetHighlightDocxUrlQuery,
+  useLazyCompareVersionsQuery,
+  useCompareVersionIntegrityQuery,
+  useUpdateVersionLabelMutation,
 } from './api/documentsApi.js';
-
 export {
-
   aiApi,
-
   useGetAiProvidersQuery,
-
   useRequestSummaryMutation,
-
   useRequestChatMutation,
-
   useExportReportMutation,
-
   useGetJobQuery,
-
   useLazyGetJobQuery,
-
   type AiProviderId,
-
   type AiJobPayload,
-
   type ChatMessage,
-
+  useListAiSuggestionsQuery,
+  useRequestAiSuggestionsMutation,
+  useUpdateAiSuggestionMutation,
+  useApplyAcceptedSuggestionsMutation,
+  useRequestRagCompareMutation,
 } from './api/aiApi.js';
-
+export {
+  annotationsApi,
+  type DocumentAnnotation,
+  useListAnnotationsQuery,
+  useCreateAnnotationMutation,
+  useUpdateAnnotationMutation,
+  useDeleteAnnotationMutation,
+} from './api/annotationsApi.js';
+export {
+  ragApi,
+  useListRagSourcesQuery,
+  useCreateRagSourceMutation,
+  useCompleteRagSourceMutation,
+  useUploadRagSourceFileMutation,
+  useDeleteRagSourceMutation,
+  useQueryRagMutation,
+} from './api/ragApi.js';
+export {
+  shareApi,
+  useListShareLinksQuery,
+  useCreateShareLinkMutation,
+  useRevokeShareLinkMutation,
+  fetchGuestShareMeta,
+  fetchGuestSharePreviews,
+  fetchGuestSharePageReviewMarks,
+  fetchGuestShareBookletDownload,
+  GuestSharePasswordRequiredError,
+  type ShareLinkItem,
+  type ShareLinkTtlPresetId,
+  type CreateShareLinkBody,
+  type GuestShareMeta,
+  type GuestSharePreviews,
+  type GuestSharePageReviewMark,
+  type GuestSharePageReviewMarks,
+  SHARE_LINK_TTL_PRESETS,
+  SHARE_LINK_TTL_PRESET_IDS,
+  DEFAULT_SHARE_LINK_TTL_PRESET,
+  shareLinkTtlLabel,
+} from './api/shareApi.js';
+export {
+  guestCommentsApi,
+  useListGuestCommentsQuery,
+  useUpdateGuestCommentStatusMutation,
+  useDeleteGuestCommentMutation,
+  useClearGuestCommentsMutation,
+  fetchGuestShareComments,
+  createGuestShareComment,
+  type GuestShareComment,
+  type CreateGuestShareCommentBody,
+} from './api/guestCommentsApi.js';
+export {
+  mediaApi,
+  useGetMediaQuotaQuery,
+  useListMediaAssetsQuery,
+  useCreateMediaAssetMutation,
+  useUploadMediaAssetMutation,
+  useCompleteMediaAssetMutation,
+  useDeleteMediaAssetMutation,
+  uploadMediaAssetFile,
+  fetchMediaAssetDataUrl,
+  type MediaAssetItem,
+} from './api/mediaApi.js';
+export {
+  pageReviewApi,
+  useListPageReviewMarksQuery,
+  useSetPageReviewMarkMutation,
+  type PageReviewMark,
+  type PageReviewMarkStatus,
+} from './api/pageReviewApi.js';
+export {
+  projectsApi,
+  useListProjectsQuery,
+  useGetProjectQuery,
+  useCreateProjectMutation,
+  useUpdateProjectMutation,
+  useDeleteProjectMutation,
+  useUpdateDocumentProjectMutation,
+  type ProjectItem,
+} from './api/projectsApi.js';
+export {
+  layoutTemplatesApi,
+  useListLayoutTemplatesQuery,
+  useCreateLayoutTemplateMutation,
+  useUpdateLayoutTemplateMutation,
+  useDeleteLayoutTemplateMutation,
+  type LayoutTemplateItem,
+} from './api/layoutTemplatesApi.js';
+export {
+  useRequestBookletTitleDraftMutation,
+  useLazySearchProjectMaterialsQuery,
+  type BookletTitleDraftResult,
+  type ProjectMaterialsSearchResult,
+} from './api/bookletAiApi.js';

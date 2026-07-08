@@ -1,0 +1,79 @@
+import {
+  comparePageLayoutSignatures,
+  scoreApplyEditsConfidence,
+  scoreDocxReflowConfidence,
+  type ApplyEditsMethod,
+  type ConfidenceResult,
+} from '@folio-mind/pdf-contracts';
+import { comparePdfVisualDrift } from './compare-pdf-visual-drift.js';
+import { getObjectBuffer } from '../storage/s3.js';
+import { extractPageLayoutSignatures } from './find-text-positions.js';
+import { extractTextFromPdf } from './pdf-text.js';
+
+type Edit = {
+  page: number;
+};
+
+export async function computeApplyEditsConfidence(params: {
+  sourceS3Key: string;
+  targetPdfBuffer: Buffer;
+  edits: Edit[];
+  method: ApplyEditsMethod;
+}): Promise<ConfidenceResult> {
+  const sourceBuffer = await getObjectBuffer(params.sourceS3Key);
+  const editedPages = [...new Set(params.edits.map((e) => e.page))];
+
+  if (params.method === 'docx' || params.method === 'docx-converted' || params.method === 'docx-hybrid') {
+    const [sourceExtracted, targetExtracted] = await Promise.all([
+      extractTextFromPdf(sourceBuffer),
+      extractTextFromPdf(params.targetPdfBuffer),
+    ]);
+    return scoreDocxReflowConfidence({
+      sourcePageCount: sourceExtracted.pageCount,
+      targetPageCount: targetExtracted.pageCount,
+      editedPages,
+      method: params.method === 'docx-hybrid' ? 'docx-hybrid' : params.method,
+    });
+  }
+
+  const [sourceExtracted, targetExtracted, sourceLayout, targetLayout] = await Promise.all([
+    extractTextFromPdf(sourceBuffer),
+    extractTextFromPdf(params.targetPdfBuffer),
+    extractPageLayoutSignatures(sourceBuffer),
+    extractPageLayoutSignatures(params.targetPdfBuffer),
+  ]);
+  const layout = comparePageLayoutSignatures({
+    source: sourceLayout,
+    target: targetLayout,
+    editedPages,
+  });
+  const pixel =
+    params.method === 'pdf-overlay' || params.method === 'docx-fallback-overlay'
+      ? await comparePdfVisualDrift({
+          sourceBuffer,
+          targetBuffer: params.targetPdfBuffer,
+          sourcePageCount: sourceExtracted.pageCount,
+          targetPageCount: targetExtracted.pageCount,
+          editedPages,
+        })
+      : {
+          pixelPagesChecked: 0,
+          pixelDriftPages: 0,
+          pixelDriftRatio: 0,
+          visualDriftPages: [] as number[],
+        };
+  return scoreApplyEditsConfidence({
+    sourcePageCount: sourceExtracted.pageCount,
+    targetPageCount: targetExtracted.pageCount,
+    sourcePages: sourceExtracted.pages,
+    targetPages: targetExtracted.pages,
+    editedPages,
+    method: params.method,
+    layoutPagesChecked: layout.layoutPagesChecked,
+    layoutDriftPages: layout.layoutDriftPages,
+    pixelPagesChecked: pixel.pixelPagesChecked,
+    pixelDriftPages: pixel.pixelDriftPages,
+    pixelDriftRatio: pixel.pixelDriftRatio,
+    visualDriftPages: pixel.visualDriftPages,
+  });
+}

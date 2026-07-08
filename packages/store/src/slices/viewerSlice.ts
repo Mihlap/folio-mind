@@ -1,14 +1,11 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-
 export type ViewerDisplayMode = 'single' | 'continuous';
 export type ViewerZoomMode = 'fit-width' | 'custom';
-
 export type SearchMatch = {
   page: number;
   matchIndex: number;
   snippet: string;
 };
-
 type ViewerState = {
   displayMode: ViewerDisplayMode;
   zoomMode: ViewerZoomMode;
@@ -17,7 +14,6 @@ type ViewerState = {
   searchMatches: SearchMatch[];
   activeMatchIndex: number;
 };
-
 const initialState: ViewerState = {
   displayMode: 'continuous',
   zoomMode: 'fit-width',
@@ -26,7 +22,6 @@ const initialState: ViewerState = {
   searchMatches: [],
   activeMatchIndex: 0,
 };
-
 export const viewerSlice = createSlice({
   name: 'viewer',
   initialState,
@@ -78,7 +73,6 @@ export const viewerSlice = createSlice({
     },
   },
 });
-
 export const {
   setDisplayMode,
   setZoomMode,

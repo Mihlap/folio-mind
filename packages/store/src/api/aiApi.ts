@@ -1,28 +1,26 @@
 import { baseApi } from './baseApi.js';
-
 export type AiProviderId = 'gigachat' | 'yandex';
-
 export type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
-
 export type SummaryJobResponse = {
   jobId: string;
   status: string;
   cached?: boolean;
 };
-
 export type AiJobPayload = {
   summary?: string;
   reply?: string;
+  report?: string;
   error?: string;
   model?: string;
   provider?: string;
   cached?: boolean;
   prompt?: string;
+  suggestionCount?: number;
+  ragChunkCount?: number;
 };
-
 export const aiApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getAiProviders: build.query<
@@ -43,7 +41,11 @@ export const aiApi = baseApi.injectEndpoints({
     }),
     requestSummary: build.mutation<
       SummaryJobResponse,
-      { documentId: string; versionId: string; provider?: AiProviderId }
+      {
+        documentId: string;
+        versionId: string;
+        provider?: AiProviderId;
+      }
     >({
       query: ({ documentId, versionId, provider }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/summary`,
@@ -68,13 +70,21 @@ export const aiApi = baseApi.injectEndpoints({
       }),
     }),
     exportReport: build.mutation<
-      { url: string; key: string },
-      { documentId: string; versionId: string; chatMessages?: ChatMessage[] }
+      {
+        url: string;
+        key: string;
+      },
+      {
+        documentId: string;
+        versionId: string;
+        chatMessages?: ChatMessage[];
+        format?: 'md' | 'pdf' | 'word';
+      }
     >({
-      query: ({ documentId, versionId, chatMessages }) => ({
+      query: ({ documentId, versionId, chatMessages, format = 'word' }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/export`,
         method: 'POST',
-        body: { chatMessages },
+        body: { chatMessages, format },
       }),
     }),
     getJob: build.query<
@@ -90,9 +100,111 @@ export const aiApi = baseApi.injectEndpoints({
     >({
       query: (jobId) => `/jobs/${jobId}`,
     }),
+    listAiSuggestions: build.query<
+      {
+        items: Array<{
+          id: string;
+          fragmentId: string;
+          originalText: string;
+          suggestion: string;
+          reason: string;
+          page: number | null;
+          status: string;
+          createdAt: string;
+        }>;
+      },
+      {
+        documentId: string;
+        versionId: string;
+      }
+    >({
+      query: ({ documentId, versionId }) =>
+        `/documents/${documentId}/versions/${versionId}/ai/suggestions`,
+      providesTags: (_r, _e, { versionId }) => [{ type: 'AiSuggestions', id: versionId }],
+    }),
+    requestAiSuggestions: build.mutation<
+      SummaryJobResponse,
+      {
+        documentId: string;
+        versionId: string;
+        provider?: AiProviderId;
+      }
+    >({
+      query: ({ documentId, versionId, provider }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/ai/suggestions`,
+        method: 'POST',
+        body: { provider },
+      }),
+      invalidatesTags: (_r, _e, { versionId }) => [{ type: 'AiSuggestions', id: versionId }],
+    }),
+    applyAcceptedSuggestions: build.mutation<
+      {
+        operationJobId: string;
+        versionId: string;
+        version: number;
+        status: 'processing';
+      },
+      {
+        documentId: string;
+        versionId: string;
+      }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/ai/apply-accepted`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, { documentId, versionId }) => [
+        { type: 'AiSuggestions', id: versionId },
+        { type: 'Documents', id: 'LIST' },
+        { type: 'Documents', id: documentId },
+        { type: 'Annotations', id: versionId },
+      ],
+    }),
+    updateAiSuggestion: build.mutation<
+      {
+        id: string;
+        status: string;
+        fragmentId: string;
+        originalText: string;
+        suggestion: string;
+        reason: string;
+        page: number | null;
+        createdAt: string;
+      },
+      {
+        documentId: string;
+        versionId: string;
+        suggestionId: string;
+        status: 'accepted' | 'rejected';
+      }
+    >({
+      query: ({ documentId, versionId, suggestionId, status }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/ai/suggestions/${suggestionId}`,
+        method: 'PATCH',
+        body: { status },
+      }),
+      invalidatesTags: (_r, _e, { versionId }) => [
+        { type: 'AiSuggestions', id: versionId },
+        { type: 'Annotations', id: versionId },
+      ],
+    }),
+    requestRagCompare: build.mutation<
+      SummaryJobResponse,
+      {
+        documentId: string;
+        versionId: string;
+        query?: string;
+        provider?: AiProviderId;
+      }
+    >({
+      query: ({ documentId, versionId, query, provider }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/rag/compare`,
+        method: 'POST',
+        body: { query, provider },
+      }),
+    }),
   }),
 });
-
 export const {
   useGetAiProvidersQuery,
   useRequestSummaryMutation,
@@ -100,4 +212,9 @@ export const {
   useExportReportMutation,
   useGetJobQuery,
   useLazyGetJobQuery,
+  useListAiSuggestionsQuery,
+  useRequestAiSuggestionsMutation,
+  useUpdateAiSuggestionMutation,
+  useApplyAcceptedSuggestionsMutation,
+  useRequestRagCompareMutation,
 } = aiApi;

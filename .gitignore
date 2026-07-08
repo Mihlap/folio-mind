@@ -24,14 +24,25 @@ secrets/
 # Local dev / machine-specific scripts (WSL, Docker, Postgres setup)
 /scripts/
 
-# IDE / editor
+# AI tools
+.opencode/*
+!.opencode/AGENTS.md
+!.opencode/skills/
+.agents/
 .cursor/
 .vscode/settings.json
+
+# Vendored PDF tools (install via tools/install-ghostscript.ps1)
+tools/ghostscript/
+.cache/
 
 # Logs & OS
 *.log
 .DS_Store
 Thumbs.db
+
+# Shared tmp for LibreOffice docker exec
+/tmp/
 
 # Mobile native (if generated locally)
 apps/mobile/android

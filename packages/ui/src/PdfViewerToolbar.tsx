@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { PdfViewerDisplayMode, PdfViewerZoomMode } from './PdfViewer.js';
-
 type PdfViewerToolbarProps = {
   displayMode: PdfViewerDisplayMode;
   zoomMode: PdfViewerZoomMode;
@@ -16,8 +15,11 @@ type PdfViewerToolbarProps = {
   onPrevMatch: () => void;
   onNextMatch: () => void;
   onClearSearch: () => void;
+  layoutMode?: boolean;
+  onLayoutModeChange?: (enabled: boolean) => void;
+  onPresentationStart?: () => void;
+  presentationDisabled?: boolean;
 };
-
 export function PdfViewerToolbar({
   displayMode,
   zoomMode,
@@ -33,10 +35,14 @@ export function PdfViewerToolbar({
   onPrevMatch,
   onNextMatch,
   onClearSearch,
+  layoutMode = false,
+  onLayoutModeChange,
+  onPresentationStart,
+  presentationDisabled = false,
 }: PdfViewerToolbarProps) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-      <div className="inline-flex rounded-lg border border-slate-200 p-0.5">
+      <div className="inline-flex shrink-0 rounded-lg border border-slate-200 p-0.5">
         <ToolbarButton
           active={displayMode === 'continuous'}
           onClick={() => onDisplayModeChange('continuous')}
@@ -49,12 +55,19 @@ export function PdfViewerToolbar({
         />
       </div>
 
-      <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-1">
+      <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-1">
         <IconButton label="Уменьшить" onClick={onZoomOut}>
           −
         </IconButton>
-        <span className="min-w-[3rem] text-center text-xs tabular-nums text-slate-600">
-          {zoomMode === 'fit-width' ? 'по ширине' : `${Math.round(customScale * 100)}%`}
+        <span className="min-w-[2.5rem] text-center text-[10px] tabular-nums text-slate-600 sm:min-w-[3rem] sm:text-xs">
+          {zoomMode === 'fit-width' ? (
+            <>
+              <span className="sm:hidden">шир.</span>
+              <span className="hidden sm:inline">по ширине</span>
+            </>
+          ) : (
+            `${Math.round(customScale * 100)}%`
+          )}
         </span>
         <IconButton label="Увеличить" onClick={onZoomIn}>
           +
@@ -64,7 +77,24 @@ export function PdfViewerToolbar({
         </IconButton>
       </div>
 
-      <div className="flex min-w-[12rem] flex-1 items-center gap-1">
+      {onLayoutModeChange && (
+        <ToolbarButton
+          active={layoutMode}
+          onClick={() => onLayoutModeChange(!layoutMode)}
+          label="Макет"
+        />
+      )}
+
+      {onPresentationStart && (
+        <ToolbarButton
+          active={false}
+          onClick={onPresentationStart}
+          label="Презентация"
+          disabled={presentationDisabled}
+        />
+      )}
+
+      <div className="flex min-w-0 w-full basis-full items-center gap-1 sm:basis-auto sm:flex-1">
         <input
           type="search"
           value={searchQuery}
@@ -75,18 +105,24 @@ export function PdfViewerToolbar({
         {searchQuery && (
           <>
             <span className="shrink-0 text-xs text-slate-500">
-              {matchCount > 0
-                ? `${activeMatchIndex + 1}/${matchCount}`
-                : 'нет'}
+              {matchCount > 0 ? `${activeMatchIndex + 1}/${matchCount}` : 'нет'}
             </span>
-            <IconButton label="Предыдущее совпадение" onClick={onPrevMatch} disabled={matchCount === 0}>
+            <IconButton
+              label="Предыдущее совпадение"
+              onClick={onPrevMatch}
+              disabled={matchCount === 0}
+            >
               ↑
             </IconButton>
-            <IconButton label="Следующее совпадение" onClick={onNextMatch} disabled={matchCount === 0}>
+            <IconButton
+              label="Следующее совпадение"
+              onClick={onNextMatch}
+              disabled={matchCount === 0}
+            >
               ↓
             </IconButton>
             <IconButton label="Очистить поиск" onClick={onClearSearch}>
-              ×
+              ✕
             </IconButton>
           </>
         )}
@@ -94,29 +130,28 @@ export function PdfViewerToolbar({
     </div>
   );
 }
-
 function ToolbarButton({
   active,
   onClick,
   label,
+  disabled,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition ${
-        active ? 'bg-folio-600 text-white' : 'text-slate-600 hover:bg-slate-50'
-      }`}
+      disabled={disabled}
+      className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'bg-folio-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
     >
       {label}
     </button>
   );
 }
-
 function IconButton({
   label,
   onClick,
@@ -134,7 +169,7 @@ function IconButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-sm text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-base text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {children}
     </button>
