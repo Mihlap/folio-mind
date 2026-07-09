@@ -12,13 +12,18 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@folio-mind/edit-markdown": "workspace:*",
     "@folio-mind/store": "workspace:*",
     "@folio-mind/ui": "workspace:*",
+    "katex": "^0.16.22",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "react-redux": "^9.2.0",
-    "react-router-dom": "^7.4.0"
+    "react-router-dom": "^7.4.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.14",

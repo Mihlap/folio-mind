@@ -1,9 +1,13 @@
 import { useId, useState } from 'react';
-import { ExpandableFieldDialog, ExpandableReadOnlyField } from './ExpandableEditField.js';
+import { ExpandableFieldDialog, ExpandableReadOnlyField, EXPANDABLE_DIALOG_TEXTAREA_CLASS } from './ExpandableEditField.js';
+import { MarkdownPreview } from './MarkdownPreview.js';
+
+type ContentFormat = 'plain' | 'markdown';
 
 type Props = {
   before: string;
   after: string;
+  afterFormat?: ContentFormat;
   compact?: boolean;
   className?: string;
   large?: boolean;
@@ -28,14 +32,45 @@ function InlineReadOnlyField({
   );
 }
 
+function AfterPreview({
+  after,
+  afterFormat,
+  className,
+  rows,
+}: {
+  after: string;
+  afterFormat: ContentFormat;
+  className: string;
+  rows?: number;
+}) {
+  if (afterFormat === 'markdown') {
+    return (
+      <div className={`${className} overflow-auto`}>
+        <MarkdownPreview markdown={after} className="text-[11px] leading-snug" />
+      </div>
+    );
+  }
+  return (
+    <textarea
+      readOnly
+      value={after}
+      rows={rows}
+      placeholder="—"
+      className={`w-full resize-none ${className}`}
+    />
+  );
+}
+
 function CompactBeforeAfterPreview({
   before,
   after,
+  afterFormat,
   textClass,
   previewRows,
 }: {
   before: string;
   after: string;
+  afterFormat: ContentFormat;
   textClass: string;
   previewRows: number;
 }) {
@@ -50,7 +85,7 @@ function CompactBeforeAfterPreview({
       </div>
       <div className="space-y-1">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Стало</p>
-        <textarea readOnly value={after} rows={previewRows} placeholder="—" className={`w-full resize-none ${afterClass}`} />
+        <AfterPreview after={after} afterFormat={afterFormat} className={afterClass} rows={previewRows} />
       </div>
     </div>
   );
@@ -59,10 +94,12 @@ function CompactBeforeAfterPreview({
 function CompactBeforeAfterCompare({
   before,
   after,
+  afterFormat = 'markdown',
   className = '',
 }: {
   before: string;
   after: string;
+  afterFormat?: ContentFormat;
   className?: string;
 }) {
   const dialogId = useId();
@@ -107,6 +144,7 @@ function CompactBeforeAfterCompare({
           <CompactBeforeAfterPreview
             before={before}
             after={after}
+            afterFormat={afterFormat}
             textClass={textClass}
             previewRows={previewRows}
           />
@@ -128,14 +166,20 @@ function CompactBeforeAfterCompare({
           </button>
         }
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="flex min-h-0 flex-col space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">Было</p>
-            <textarea readOnly value={before} rows={14} className={`min-h-[32vh] w-full resize-y ${beforeClass}`} />
+            <textarea readOnly value={before} className={`${beforeClass} ${EXPANDABLE_DIALOG_TEXTAREA_CLASS}`} />
           </div>
-          <div className="space-y-1">
+          <div className="flex min-h-0 flex-col space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Стало</p>
-            <textarea readOnly value={after} rows={14} className={`min-h-[32vh] w-full resize-y ${afterClass}`} />
+            {afterFormat === 'markdown' ? (
+              <div className={`${afterClass} min-h-[12rem] overflow-auto`}>
+                <MarkdownPreview markdown={after} />
+              </div>
+            ) : (
+              <textarea readOnly value={after} className={`${afterClass} ${EXPANDABLE_DIALOG_TEXTAREA_CLASS}`} />
+            )}
           </div>
         </div>
       </ExpandableFieldDialog>
@@ -146,6 +190,7 @@ function CompactBeforeAfterCompare({
 export function AcceptedEditBeforeAfter({
   before,
   after,
+  afterFormat = 'markdown',
   compact = false,
   className = '',
   large = false,
@@ -156,7 +201,7 @@ export function AcceptedEditBeforeAfter({
   const afterClass = `rounded-lg border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-emerald-950 ${textClass}`;
 
   if (compact && !large) {
-    return <CompactBeforeAfterCompare before={before} after={after} className={className} />;
+    return <CompactBeforeAfterCompare before={before} after={after} afterFormat={afterFormat} className={className} />;
   }
 
   return (
@@ -185,7 +230,17 @@ export function AcceptedEditBeforeAfter({
       <div className="space-y-1">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Стало</p>
         {large ? (
-          <InlineReadOnlyField value={after} rows={previewRows} className={afterClass} />
+          afterFormat === 'markdown' ? (
+            <div className={`${afterClass} min-h-[12rem] overflow-auto`}>
+              <MarkdownPreview markdown={after} />
+            </div>
+          ) : (
+            <InlineReadOnlyField value={after} rows={previewRows} className={afterClass} />
+          )
+        ) : afterFormat === 'markdown' ? (
+          <div className={`rounded-md border border-emerald-100 bg-emerald-50/80 px-2 py-1.5 ${textClass}`}>
+            <MarkdownPreview markdown={after} />
+          </div>
         ) : (
           <ExpandableReadOnlyField
             label="Стало (новая формулировка)"

@@ -18,6 +18,9 @@ type ReadOnlyFieldProps = {
   dialogHint?: string;
 };
 
+export const EXPANDABLE_DIALOG_TEXTAREA_CLASS =
+  'min-h-[12rem] w-full flex-1 resize-none';
+
 export function ExpandableFieldDialog({
   fieldId,
   label,
@@ -35,28 +38,48 @@ export function ExpandableFieldDialog({
   children: ReactNode;
   footer: ReactNode;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-end justify-center p-2 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={`${fieldId}-dialog-title`}
-      onClick={onClose}
     >
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default bg-slate-900/40"
+        aria-label="Закрыть"
+        onClick={onClose}
+      />
       <div
-        className="flex max-h-[min(92vh,720px)] w-full max-w-2xl flex-col rounded-t-2xl border border-slate-200 bg-white shadow-xl sm:rounded-2xl"
+        className="relative flex max-h-[92vh] min-h-[min(40vh,280px)] w-[min(96vw,42rem)] min-w-[min(96vw,280px)] max-w-[95vw] resize flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-xl sm:rounded-2xl"
+        style={{ height: 'min(60vh, 520px)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+        <div className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
           <h3 id={`${fieldId}-dialog-title`} className="text-sm font-semibold text-slate-900">
             {label}
           </h3>
           {dialogHint && <p className="mt-0.5 text-xs text-slate-500">{dialogHint}</p>}
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden p-4 sm:p-5">{children}</div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 px-4 py-3 sm:px-5">
-          {footer}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-4 pb-2 sm:px-5 sm:pt-5 sm:pb-3">
+          {children}
+        </div>
+        <div className="shrink-0 border-t border-slate-100 px-4 pt-2 pb-1.5 sm:px-5">
+          <div className="flex justify-end gap-2">{footer}</div>
+          <p className="mt-1 text-right text-[10px] leading-tight text-slate-400" aria-hidden>
+            Потяните за угол ↘
+          </p>
         </div>
       </div>
     </div>
@@ -104,12 +127,13 @@ export function ExpandableReadOnlyField({
           </button>
         }
       >
-        <textarea
-          readOnly
-          value={value}
-          rows={14}
-          className={`${fieldClassName} min-h-[40vh] w-full resize-y`}
-        />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <textarea
+            readOnly
+            value={value}
+            className={`${fieldClassName} ${EXPANDABLE_DIALOG_TEXTAREA_CLASS}`}
+          />
+        </div>
       </ExpandableFieldDialog>
     </>
   );
@@ -212,14 +236,15 @@ export function ExpandableEditField({
             </>
           }
         >
-          <textarea
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={placeholder}
-            rows={14}
-            className={`${fieldClassName} min-h-[40vh] w-full resize-y`}
-          />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={placeholder}
+              className={`${fieldClassName} ${EXPANDABLE_DIALOG_TEXTAREA_CLASS}`}
+            />
+          </div>
         </ExpandableFieldDialog>
       )}
     </>

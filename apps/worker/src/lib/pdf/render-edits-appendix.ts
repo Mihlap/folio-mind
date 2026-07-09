@@ -1,5 +1,6 @@
 import type { PDFDocument, PDFFont } from 'pdf-lib';
 import { rgb } from 'pdf-lib';
+import { markdownToPlainText, type EditContentFormat } from '@folio-mind/edit-markdown';
 import {
   drawLabelAndExcerpt,
   drawTextLine,
@@ -9,6 +10,7 @@ export type AppendixEdit = {
   page: number;
   originalText: string;
   suggestion: string;
+  contentFormat?: EditContentFormat;
 };
 const BODY_SIZE = 8;
 const TITLE_SIZE = 11;
@@ -16,6 +18,12 @@ const LINE_HEIGHT = 11;
 
 function normalizeRegistryText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function formatRegistrySuggestion(suggestion: string, contentFormat?: EditContentFormat): string {
+  const plain =
+    contentFormat === 'markdown' ? markdownToPlainText(suggestion) : suggestion;
+  return normalizeRegistryText(plain);
 }
 function startLayout(pdfDoc: PDFDocument, font: PDFFont): PdfTextLayout {
   const page = pdfDoc.addPage();
@@ -54,7 +62,7 @@ export function renderAcceptedEditsAppendix(
       labelColor: rgb(0.55, 0.2, 0.2),
       textColor: rgb(0.35, 0.15, 0.15),
     });
-    drawLabelAndExcerpt(layout, 'Стало:', normalizeRegistryText(edit.suggestion), {
+    drawLabelAndExcerpt(layout, 'Стало:', formatRegistrySuggestion(edit.suggestion, edit.contentFormat), {
       fontSize: BODY_SIZE,
       labelColor: rgb(0.15, 0.45, 0.3),
       textColor: rgb(0.15, 0.3, 0.22),

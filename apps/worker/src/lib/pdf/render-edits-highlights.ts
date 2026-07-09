@@ -32,6 +32,12 @@ export function renderAllHighlights(
     const allPositions: TextBoxPosition[] = [];
     for (const matches of editMap.values()) {
       for (const entry of matches) {
+        if ('lines' in entry && entry.lines.length > 1) {
+          for (const line of entry.lines) {
+            allPositions.push(line.box);
+          }
+          continue;
+        }
         allPositions.push('box' in entry ? entry.box : entry);
       }
     }

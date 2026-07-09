@@ -131,6 +131,26 @@ export function buildMatchedLines(
   }
   return lines;
 }
+export function explicitTextLines(text: string): string[] {
+  return text
+    .trim()
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/** Многострочный абзац в PDF — один блок; список с новыми пунктами — expanded. */
+export function paragraphDrawMode(
+  layoutLineCount: number,
+  suggestion: string,
+): 'per-line' | 'unified' | 'expanded' {
+  const explicit = explicitTextLines(suggestion);
+  if (layoutLineCount <= 1) return 'per-line';
+  if (explicit.length > layoutLineCount) return 'expanded';
+  if (explicit.length === layoutLineCount && explicit.length > 1) return 'per-line';
+  return 'unified';
+}
+
 export function splitSuggestionByOriginalLines(
   originalLines: string[],
   suggestion: string,
@@ -141,6 +161,7 @@ export function splitSuggestionByOriginalLines(
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
+  if (explicit.length > originalLines.length) return explicit;
   if (explicit.length === originalLines.length) return explicit;
   if (originalLines.length <= 1) return [trimmed];
   const sugWords = trimmed.split(/\s+/).filter(Boolean);

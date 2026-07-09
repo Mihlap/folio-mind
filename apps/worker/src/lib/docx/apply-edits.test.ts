@@ -42,6 +42,66 @@ describe('applyEditsToDocx', () => {
     expect(xml).not.toContain('Поддерживается ввод файлов формата DOCX');
   });
 
+  it('добавляет дополнительный пункт списка без маркеров в исходнике', async () => {
+    const listXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r><w:t>Slovníku jazyka</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>kaˆ tîn qerapÒntwn</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>`;
+    const docx = await buildDocx(listXml);
+    const { modifiedDocx, applied } = await applyEditsToDocx(docx, [
+      {
+        originalText: 'Slovníku jazyka\nkaˆ tîn qerapÒntwn',
+        suggestion: '• Slovníku jazyka\n• kaˆ tîn qerapÒntwn\n• nový bod',
+        suggestionPlain: '• Slovníku jazyka\n• kaˆ tîn qerapÒntwn\n• nový bod',
+        page: 1,
+      },
+    ]);
+    expect(applied).toBe(1);
+    const JSZip = (await import('jszip')).default;
+    const out = await JSZip.loadAsync(modifiedDocx);
+    const xml = await out.file('word/document.xml')!.async('string');
+    expect(xml).toContain('nový bod');
+    expect(xml.match(/<w:p[\s>]/g)?.length ?? 0).toBe(3);
+  });
+
+  it('вставляет многострочный список отдельными абзацами', async () => {
+    const listXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r><w:t>• первый пункт</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>• второй пункт</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>`;
+    const docx = await buildDocx(listXml);
+    const { modifiedDocx, applied } = await applyEditsToDocx(docx, [
+      {
+        originalText: '• первый пункт\n• второй пункт',
+        suggestion: '• первый пункт\n• второй пункт\n• третий пункт',
+        suggestionPlain: '• первый пункт\n• второй пункт\n• третий пункт',
+        suggestionRunsXml:
+          '<w:r><w:t>• первый пункт</w:t></w:r><w:r><w:br/><w:t>• второй пункт</w:t></w:r><w:r><w:br/><w:t>• третий пункт</w:t></w:r>',
+        page: 1,
+      },
+    ]);
+    expect(applied).toBe(1);
+    const JSZip = (await import('jszip')).default;
+    const out = await JSZip.loadAsync(modifiedDocx);
+    const xml = await out.file('word/document.xml')!.async('string');
+    expect(xml).toContain('третий пункт');
+    expect(xml.match(/<w:p[\s>]/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
   it('возвращает per-edit results и считает failed', async () => {
     const docx = await buildDocx(paragraphXml);
     const { applied, failed, results } = await applyEditsToDocx(docx, [

@@ -387,6 +387,7 @@ export function DocumentAiSuggestionsPanel({
                 compact
                 before={item.originalText}
                 after={item.suggestion}
+                afterFormat="plain"
               />
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
@@ -441,6 +442,7 @@ export function DocumentAiSuggestionsPanel({
                   compact
                   before={item.originalText}
                   after={item.suggestion}
+                  afterFormat="plain"
                 />
               </li>
             ))}

@@ -34,6 +34,71 @@ function clientRectFromPoints(x1: number, y1: number, x2: number, y2: number): D
   const top = Math.min(y1, y2);
   return new DOMRect(left, top, Math.abs(x2 - x1), Math.abs(y2 - y1));
 }
+const LINE_Y_TOLERANCE_PX = 4;
+const NEAREST_SPAN_MAX_SCORE = 48;
+
+function rangeEndX(range: Range): number {
+  const rects = Array.from(range.getClientRects());
+  if (rects.length === 0) return range.getBoundingClientRect().right;
+  return rects[rects.length - 1].right;
+}
+
+function caretOffsetInTextNode(x: number, textNode: Text): number {
+  const len = textNode.textContent?.length ?? 0;
+  if (len === 0) return 0;
+
+  let low = 0;
+  let high = len;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, mid);
+    if (rangeEndX(range) < x) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
+function spanTextNode(span: HTMLElement): Text | null {
+  const textNode = span.firstChild;
+  return textNode instanceof Text ? textNode : null;
+}
+
+function findSpanAtPoint(x: number, y: number, textLayer: HTMLElement): HTMLElement | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (!(el instanceof HTMLElement)) continue;
+    const span = el.closest('span');
+    if (span instanceof HTMLElement && textLayer.contains(span)) return span;
+  }
+
+  let best: HTMLElement | null = null;
+  let bestScore = Infinity;
+  for (const span of textLayer.querySelectorAll('span')) {
+    if (!(span instanceof HTMLElement)) continue;
+    const r = span.getBoundingClientRect();
+    if (r.width <= 0 && r.height <= 0) continue;
+
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      return span;
+    }
+
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    if (dy > LINE_Y_TOLERANCE_PX) continue;
+
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const score = dy * 1000 + dx;
+    if (score < bestScore) {
+      bestScore = score;
+      best = span;
+    }
+  }
+  return bestScore <= NEAREST_SPAN_MAX_SCORE ? best : null;
+}
+
 function caretRangeAtPoint(x: number, y: number): Range | null {
   const doc = document as Document & {
     caretRangeFromPoint?: (x: number, y: number) => Range | null;
@@ -49,22 +114,22 @@ function caretRangeAtPoint(x: number, y: number): Range | null {
   range.setEnd(pos.offsetNode, pos.offset);
   return range;
 }
+
 function caretRangeAtPointInTextLayer(x: number, y: number, textLayer: HTMLElement): Range | null {
+  const span = findSpanAtPoint(x, y, textLayer);
+  if (span) {
+    const textNode = spanTextNode(span);
+    if (textNode) {
+      const offset = caretOffsetInTextNode(x, textNode);
+      const range = document.createRange();
+      range.setStart(textNode, offset);
+      range.setEnd(textNode, offset);
+      return range;
+    }
+  }
+
   const caret = caretRangeAtPoint(x, y);
   if (caret && textLayer.contains(caret.startContainer)) return caret;
-  for (const el of document.elementsFromPoint(x, y)) {
-    if (!(el instanceof HTMLElement)) continue;
-    const span = el.closest('span');
-    if (!(span instanceof HTMLElement) || !textLayer.contains(span)) continue;
-    const textNode = span.firstChild;
-    if (textNode?.nodeType !== Node.TEXT_NODE) continue;
-    const text = textNode.textContent ?? '';
-    if (!text.length) continue;
-    const range = document.createRange();
-    range.setStart(textNode, 0);
-    range.setEnd(textNode, text.length);
-    return range;
-  }
   return null;
 }
 function rangeFromCaretPoints(
@@ -334,10 +399,7 @@ export function captureTextSelectionFromDrag(
     rect: DOMRect;
   } | null> = isTiny
     ? [getWordSelectionAtPoint(endX, endY, textLayer, pageRoot)]
-    : [
-        getTextFromCaretPoints(startX, startY, endX, endY, textLayer, pageRoot),
-        readBrowserSelectionInTextLayer(textLayer, pageRoot),
-      ];
+    : [getTextFromCaretPoints(startX, startY, endX, endY, textLayer, pageRoot)];
   for (const captured of attempts) {
     if (!captured) continue;
     const text = captured.text.slice(0, MAX_QUOTE_LEN);

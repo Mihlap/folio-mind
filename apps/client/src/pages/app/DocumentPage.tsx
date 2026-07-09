@@ -947,6 +947,7 @@ export function DocumentPage() {
                   annotationId,
                   quote: payload.quote,
                   content: payload.content,
+                  contentFormat: payload.contentFormat ?? 'markdown',
                 }).unwrap();
               }
             : undefined

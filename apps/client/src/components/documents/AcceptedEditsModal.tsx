@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DocumentAnnotation } from '@folio-mind/store';
 import { AcceptedEditBeforeAfter } from './AcceptedEditBeforeAfter.js';
+import { MarkdownPreview } from './MarkdownPreview.js';
 
 const EDIT_FIELD_ROWS = 8;
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
     payload: {
       quote: string;
       content: string;
+      contentFormat?: 'plain' | 'markdown';
     },
   ) => void | Promise<void>;
   saving?: boolean;
@@ -78,7 +80,7 @@ export function AcceptedEditsModal({
     if (!onUpdate) return;
     setEditError(null);
     try {
-      await onUpdate(annotationId, { quote, content });
+      await onUpdate(annotationId, { quote, content, contentFormat: 'markdown' });
       setEditingId(null);
     } catch {
       setEditError('Не удалось сохранить правку');
@@ -188,16 +190,22 @@ export function AcceptedEditsModal({
                         </div>
                         <div className="space-y-1">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-                            Стало
+                            Стало (Markdown)
                           </p>
                           <textarea
                             value={draftAfter}
                             onChange={(e) => setDraftAfter(e.target.value)}
                             disabled={saving}
                             rows={EDIT_FIELD_ROWS}
-                            placeholder="Стало…"
-                            className="min-h-[8rem] w-full resize-y rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-sm leading-relaxed disabled:opacity-50"
+                            placeholder={`- • пункт списка
+- **жирный** текст
+- формула $E=mc^2$`}
+                            className="min-h-[8rem] w-full resize-y rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2 font-mono text-sm leading-relaxed disabled:opacity-50"
                           />
+                          <div className="rounded-lg border border-emerald-100 bg-white p-2">
+                            <p className="mb-1 text-[10px] font-medium text-slate-500">Превью</p>
+                            <MarkdownPreview markdown={draftAfter} />
+                          </div>
                         </div>
                         {editError && <p className="text-xs text-red-600">{editError}</p>}
                         <div className="flex flex-wrap gap-2">
@@ -223,7 +231,12 @@ export function AcceptedEditsModal({
                         </div>
                       </div>
                     ) : item.quote ? (
-                      <AcceptedEditBeforeAfter large before={item.quote} after={item.content} />
+                      <AcceptedEditBeforeAfter
+                        large
+                        before={item.quote}
+                        after={item.content}
+                        afterFormat={item.contentFormat}
+                      />
                     ) : (
                       <p className="text-sm text-slate-700">{item.content}</p>
                     )}

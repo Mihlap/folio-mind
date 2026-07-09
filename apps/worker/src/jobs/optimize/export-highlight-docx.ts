@@ -3,6 +3,11 @@ import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { resolveDocxForEdits } from '../../lib/convert/resolve-docx.js';
 import { highlightEditsInDocx } from '../../lib/docx/highlight-edits.js';
+import {
+  buildPageContextSearchVariants,
+  getPageTextForEdit,
+  loadPageTextHints,
+} from '../../lib/docx/page-disambiguation.js';
 import { collectAcceptedEditsForPdf } from '../../lib/pdf/collect-accepted-edits.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import { isWorkerS3Configured, putObjectBuffer } from '../../lib/storage/s3.js';
@@ -45,6 +50,7 @@ export async function processExportHighlightDocxJob(
     if (edits.length === 0) {
       throw new Error('Нет принятых правок для экспорта');
     }
+    const pageHints = await loadPageTextHints(documentId, versionId);
     const resolved = await resolveDocxForEdits({
       documentId,
       rootVersionId,
@@ -53,8 +59,27 @@ export async function processExportHighlightDocxJob(
     });
     const { highlightedDocx, highlighted, failed } = await highlightEditsInDocx(
       resolved.buffer,
-      edits,
+      edits.map((edit) => ({
+        originalText: edit.originalText,
+        suggestion: edit.suggestion,
+        contentFormat: edit.contentFormat,
+        page: edit.page,
+      })),
+      {
+        pageContextVariants: (edit) =>
+          buildPageContextSearchVariants(
+            getPageTextForEdit(pageHints, edit.page),
+            edit.originalText,
+          ),
+      },
     );
+    if (highlighted === 0) {
+      throw new Error(
+        failed > 0
+          ? 'Текст правок не найден в DOCX — загрузите исходный DOCX или проверьте поле «Было».'
+          : 'Нет правок для подсветки в DOCX.',
+      );
+    }
     const exportKey = highlightEditsDocxKey(documentId, versionId);
     await putObjectBuffer({
       key: exportKey,

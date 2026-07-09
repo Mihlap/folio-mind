@@ -36,6 +36,7 @@ import {
 import { DocumentPageOrderPanel } from './DocumentPageOrderPanel.js';
 import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
+import { DocumentEditsApplyActions } from './DocumentEditsApplyActions.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
@@ -82,6 +83,12 @@ function getMutationError(err: unknown): string {
 }
 type ToolGroupId = 'pdf' | 'layout' | 'approval' | 'edits';
 const TOOL_GROUP_IDS: ToolGroupId[] = ['pdf', 'layout', 'approval', 'edits'];
+const GROUP_SECTIONS: Record<ToolGroupId, ToolSectionId[]> = {
+  pdf: ['optimize', 'split', 'pages', 'merge', 'diff'],
+  layout: ['layout', 'booklet'],
+  approval: ['share', 'annotations'],
+  edits: ['edits'],
+};
 
 function getSectionGroup(sectionId: ToolSectionId): ToolGroupId {
   if (sectionId === 'layout' || sectionId === 'booklet') return 'layout';
@@ -108,7 +115,7 @@ function ToolGroupHeader({
           type="button"
           onClick={onToggle}
           aria-expanded={isOpen}
-          className="flex w-full items-start gap-2 px-2.5 py-2 text-left"
+          className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-slate-100/80"
         >
           <span className="mt-0.5 shrink-0 text-[10px] text-slate-400" aria-hidden>
             {isOpen ? '▼' : '▶'}
@@ -181,7 +188,7 @@ export function DocumentPdfOperationsPanel({
 }: Props) {
   const [expanded, setExpanded] = useState(embedded);
   const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
-  const [openGroups, setOpenGroups] = useState<Set<ToolGroupId>>(() => new Set(['pdf']));
+  const [openGroups, setOpenGroups] = useState<Set<ToolGroupId>>(() => new Set());
   const sectionRefs = useRef<Partial<Record<ToolSectionId, HTMLDivElement | null>>>({});
   const sectionRefCallbacks = useMemo(() => {
     const callbacks = {} as Record<ToolSectionId, (el: HTMLDivElement | null) => void>;
@@ -485,15 +492,29 @@ export function DocumentPdfOperationsPanel({
   }
   function collapseAllSections() {
     setOpenSections(new Set());
-    setOpenGroups(new Set(['pdf']));
+    setOpenGroups(new Set());
+  }
+  function visibleSectionsInGroup(groupId: ToolGroupId): ToolSectionId[] {
+    return GROUP_SECTIONS[groupId].filter((id) => visibleToolSectionIds.includes(id));
   }
   function toggleGroup(groupId: ToolGroupId) {
+    const sectionsInGroup = visibleSectionsInGroup(groupId);
+    const soleSection = sectionsInGroup.length === 1 ? sectionsInGroup[0] : null;
+    const opening = !openGroups.has(groupId);
     setOpenGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
+      if (opening) next.add(groupId);
+      else next.delete(groupId);
       return next;
     });
+    if (soleSection) {
+      setOpenSections((prev) => {
+        const next = new Set(prev);
+        if (opening) next.add(soleSection);
+        else next.delete(soleSection);
+        return next;
+      });
+    }
   }
   useEffect(() => {
     if (!editTextInjection) return;
@@ -1080,6 +1101,7 @@ export function DocumentPdfOperationsPanel({
                 pageCount={effectivePageCount}
                 onGoToPage={onGoToPage}
               />
+              <DocumentEditsApplyActions />
             </ToolAccordionSection>
           </div>
         </DocumentAnnotationsControllerProvider>

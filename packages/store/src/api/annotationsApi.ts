@@ -8,6 +8,7 @@ export type DocumentAnnotation = {
   kind: string;
   content: string;
   quote: string | null;
+  contentFormat: 'plain' | 'markdown';
   x: number | null;
   y: number | null;
   createdAt: string;
@@ -41,6 +42,7 @@ export const annotationsApi = baseApi.injectEndpoints({
         content: string;
         kind?: 'comment' | 'highlight' | 'accepted_edit';
         quote?: string;
+        contentFormat?: 'plain' | 'markdown';
       }
     >({
       query: ({ documentId, versionId, ...body }) => ({
@@ -59,6 +61,7 @@ export const annotationsApi = baseApi.injectEndpoints({
         page?: number;
         content?: string;
         quote?: string;
+        contentFormat?: 'plain' | 'markdown';
       }
     >({
       query: ({ documentId, versionId, annotationId, ...body }) => ({

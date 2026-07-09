@@ -39,14 +39,24 @@ async function loadDocumentPages(
   return extracted.pages;
 }
 
+const PREVIEW_TEXT_CHAR_CAP = 12_000;
+
 function isPagesExtractionIncomplete(
   pages: PageText[],
   pdfPageCount: number | null | undefined,
 ): boolean {
   if (pages.length === 0) return true;
-  if (!pdfPageCount || pdfPageCount <= 1) return false;
+  const totalChars = pages.reduce((sum, page) => sum + page.text.length, 0);
+  const expectedPages = pdfPageCount ? Math.min(pdfPageCount, 50) : null;
   const lastPage = pages[pages.length - 1]?.page ?? 0;
-  return lastPage < Math.min(pdfPageCount, 50);
+
+  if (totalChars >= PREVIEW_TEXT_CHAR_CAP - 256) {
+    if (!expectedPages || pages.length < expectedPages || lastPage < expectedPages) {
+      return true;
+    }
+  }
+  if (!expectedPages || expectedPages <= 1) return false;
+  return lastPage < expectedPages;
 }
 
 /** Для ИИ: при необходимости перечитывает PDF с лимитом ~100k символов (кэш превью — только 12k). */

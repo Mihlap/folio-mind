@@ -37,9 +37,94 @@ function norm(str: string): string {
   return str
     .replace(/\u00A0/g, ' ')
     .replace(/\u00AD/g, '')
+    .replace(/\uF0B7/g, '•')
     .replace(/[\u2010-\u2015\u2212]/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
+}
+function stripListMarkerForSearch(line: string): string {
+  return line
+    .trim()
+    .replace(/^&bullet;\s*/i, '')
+    .replace(/^[-*+•●\uF0B7\u2022]\s*/, '')
+    .trim();
+}
+function looksLikeListQuote(searchText: string): boolean {
+  return searchText.split(/\n+/).some((line) =>
+    /^\s*([-*+•●\uF0B7]|\d+[.)]|&bullet;)/i.test(line.trim()),
+  );
+}
+function shouldSearchLineByLine(searchText: string): boolean {
+  const lines = searchText
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length < 2) return false;
+  if (looksLikeListQuote(searchText)) return true;
+
+  const bodies = lines.map((line) => stripListMarkerForSearch(line));
+  const maxLen = Math.max(...bodies.map((line) => line.length));
+  const avgLen = bodies.reduce((sum, line) => sum + line.length, 0) / bodies.length;
+
+  if (maxLen > 60) {
+    const first = bodies[0] ?? '';
+    const second = bodies[1] ?? '';
+    if (/[,;:]\s*$/.test(first) && /^[а-яa-zё]/i.test(second)) return false;
+    if (avgLen > 45) return false;
+  }
+
+  return maxLen <= 55;
+}
+function searchListLinesInItems(
+  items: TextItem[],
+  searchText: string,
+  anchor?: { xNorm: number; yNorm: number },
+  pageSize?: { width: number; height: number },
+): TextBoxPosition[] {
+  const rawLines = searchText
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (rawLines.length < 2) return [];
+
+  const sorted = sortItemsReadingOrder(items);
+  const boxes: TextBoxPosition[] = [];
+  let nearX: number | undefined;
+  let belowY: number | undefined;
+
+  for (const rawLine of rawLines) {
+    const needle = norm(stripListMarkerForSearch(rawLine));
+    if (needle.length < 2) continue;
+
+    let candidates = searchSingleItems(sorted, needle);
+    if (candidates.length === 0) {
+      const span = findSpanInReadingOrder(sorted, rawLine);
+      if (!span) return [];
+      candidates = [span];
+    }
+
+    if (nearX != null) {
+      const inColumn = candidates.filter((box) => Math.abs(box.x - nearX) < 100);
+      if (inColumn.length > 0) candidates = inColumn;
+    }
+    if (belowY != null) {
+      const lower = candidates.filter((box) => box.y < belowY! - 1);
+      if (lower.length > 0) candidates = lower;
+    }
+
+    const box =
+      boxes.length === 0 && anchor && pageSize
+        ? pickBestTextBoxNearAnchor(candidates, anchor, pageSize)
+        : candidates.length === 1
+          ? candidates[0]!
+          : pickBestTextBox(candidates);
+
+    boxes.push(box);
+    nearX = box.x;
+    belowY = box.y;
+  }
+
+  return boxes.length >= 2 ? boxes : [];
 }
 function sortItemsReadingOrder(items: TextItem[]): TextItem[] {
   return [...items].sort((a, b) => {
@@ -205,6 +290,55 @@ function getMatchedItems(items: TextItem[], box: TextBoxPosition): TextItem[] {
     );
   });
 }
+function toHighlightMatch(items: TextItem[], boxes: TextBoxPosition[], searchText: string): TextMatch {
+  const lines = boxes.map((box) => {
+    const matched = getMatchedItems(items, box);
+    const style = resolveMatchStyle(items, box);
+    return {
+      x: box.x,
+      y: box.y + box.height / 1.3,
+      width: box.width,
+      box,
+      style,
+      originalText: searchText,
+      items: matched,
+    };
+  });
+  return {
+    box: unionManyBoxes(boxes),
+    style: lines[0]!.style,
+    lines,
+  };
+}
+function toMatchFromLineBoxes(
+  items: TextItem[],
+  boxes: TextBoxPosition[],
+  searchText: string,
+  suggestion: string,
+): TextMatch {
+  const quoteLines = searchText
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const lines = boxes.map((box, index) => {
+    const matched = getMatchedItems(items, box);
+    const style = resolveMatchStyle(items, box);
+    return {
+      x: box.x,
+      y: box.y + box.height / 1.3,
+      width: box.width,
+      box,
+      style,
+      originalText: quoteLines[index] ?? searchText,
+      items: matched,
+    };
+  });
+  return {
+    box: unionManyBoxes(boxes),
+    style: lines[0]!.style,
+    lines,
+  };
+}
 function toMatch(
   items: TextItem[],
   box: TextBoxPosition,
@@ -265,17 +399,10 @@ async function collectPageTextItems(page: {
   }
   return items;
 }
-function fontNamesFromMatches(matches: Map<string, TextMatch[]>): Set<string> {
+function fontNamesFromItems(items: TextItem[]): Set<string> {
   const names = new Set<string>();
-  for (const matchList of matches.values()) {
-    for (const match of matchList) {
-      for (const line of match.lines) {
-        if (line.style.fontName) names.add(line.style.fontName);
-        for (const item of line.items) {
-          if (item.fontName) names.add(item.fontName);
-        }
-      }
-    }
+  for (const item of items) {
+    if (item.fontName) names.add(item.fontName);
   }
   return names;
 }
@@ -338,10 +465,20 @@ export function editPositionKey(edit: {
   }
   return edit.originalText;
 }
-export function searchTextInItems(items: TextItem[], searchText: string): TextBoxPosition[] {
+export function searchTextInItems(
+  items: TextItem[],
+  searchText: string,
+  anchor?: { xNorm: number; yNorm: number },
+  pageSize?: { width: number; height: number },
+): TextBoxPosition[] {
   const needle = norm(searchText);
   if (!needle) return [];
   const sorted = sortItemsReadingOrder(items);
+
+  if (searchText.includes('\n') && shouldSearchLineByLine(searchText)) {
+    const listBoxes = searchListLinesInItems(items, searchText, anchor, pageSize);
+    if (listBoxes.length > 0) return listBoxes;
+  }
 
   if (needle.length > 24 || needle.includes(' ')) {
     const span = findSpanInReadingOrder(sorted, searchText);
@@ -547,23 +684,24 @@ export async function findAllTextPositions(
       itemsByPage.set(pageNumber, items);
       const pageMap = new Map<string, TextMatch[]>();
       for (const edit of pageEdits) {
-        const boxes = searchTextInItems(items, edit.originalText);
+        const boxes = searchTextInItems(items, edit.originalText, edit.anchor, pageSize);
         if (boxes.length > 0) {
-          const box = pickBestTextBoxNearAnchor(boxes, edit.anchor, pageSize);
-          pageMap.set(editPositionKey(edit), [
-            toMatch(items, box, edit.originalText, edit.suggestion ?? ''),
-          ]);
+          const match =
+            boxes.length > 1
+              ? edit.suggestion
+                ? toMatchFromLineBoxes(items, boxes, edit.originalText, edit.suggestion)
+                : toHighlightMatch(items, boxes, edit.originalText)
+              : toMatch(items, boxes[0]!, edit.originalText, edit.suggestion ?? '');
+          pageMap.set(editPositionKey(edit), [match]);
         }
       }
       if (pageMap.size > 0) {
         positions.set(pageNumber, pageMap);
-        const fontBytes = await collectEmbeddedFontBytes(
-          page,
-          fontNamesFromMatches(pageMap),
-        );
-        for (const [name, bytes] of fontBytes) {
-          fontBytesByName.set(name, bytes);
-        }
+      }
+      const pageFontNames = fontNamesFromItems(items);
+      const fontBytes = await collectEmbeddedFontBytes(page, pageFontNames);
+      for (const [name, bytes] of fontBytes) {
+        fontBytesByName.set(name, bytes);
       }
     }
   } finally {

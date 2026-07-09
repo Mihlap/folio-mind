@@ -65,6 +65,10 @@ export function usePdfTextSelection({
       if ((e.target as HTMLElement).closest('[data-pdf-selection-ui]')) return;
 
       const drag = selectionDragRef.current;
+      if (drag) {
+        drag.lastX = e.clientX;
+        drag.lastY = e.clientY;
+      }
       selectionDragRef.current = null;
       onLiveSelectionChange?.(null);
 

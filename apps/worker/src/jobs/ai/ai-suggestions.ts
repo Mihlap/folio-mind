@@ -131,16 +131,25 @@ async function collectSuggestionsForPages(
     return { items, model: result.model, rawText: result.text };
   }
 
+  const nonEmptyPages = pages.filter((p) => p.text.trim().length > 0);
+  if (nonEmptyPages.length === 0) {
+    throw new Error('В документе нет текста для анализа');
+  }
+
   const merged: AiSuggestionItem[] = [];
   let model = '';
   let rawText = '';
+  let pagesAttempted = 0;
+  let pagesFailed = 0;
+  let lastError: Error | null = null;
 
-  for (const page of pages) {
+  for (const page of nonEmptyPages) {
+    pagesAttempted += 1;
     const pageText = formatPagesForAiPrompt([page]);
     try {
       const result = await completeAndParseSuggestions(
         llm,
-        buildSystemPrompt(4),
+        buildPageScopeSystemPrompt(4),
         `Только страница ${page.page}.\n\nТекст:\n\n${pageText}`,
       );
       model = result.model;
@@ -151,14 +160,19 @@ async function collectSuggestionsForPages(
           page: item.page ?? page.page,
         })),
       );
-    } catch {
-      // Пропускаем страницу, если ИИ не вернул валидный ответ; итог — по остальным.
+    } catch (err) {
+      pagesFailed += 1;
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn('[ai-suggestions] page analysis failed', {
+        page: page.page,
+        error: lastError.message,
+      });
     }
   }
 
   const items = dedupeSuggestions(merged).slice(0, 30);
-  if (items.length === 0) {
-    throw new Error(AI_SUGGESTIONS_USER_ERROR.noSuggestions);
+  if (items.length === 0 && pagesFailed > 0 && pagesFailed === pagesAttempted && lastError) {
+    throw lastError;
   }
   return { items, model, rawText };
 }
