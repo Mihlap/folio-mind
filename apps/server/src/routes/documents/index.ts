@@ -7,6 +7,7 @@ import { registerReadRoutes } from './register-read.routes.js';
 import { registerVersionsRoutes } from './register-versions.routes.js';
 import { registerShareRoutes } from './register-share.routes.js';
 import { registerGuestCommentsRoutes } from './register-guest-comments.routes.js';
+import { registerDocumentEventsRoutes } from './register-document-events.routes.js';
 import { registerReviewStatusRoutes } from './register-review-status.routes.js';
 import { registerProjectRoutes } from './register-project.routes.js';
 import { registerExportRoutes } from './register-export.routes.js';
@@ -23,6 +24,7 @@ export const documentRoutes: FastifyPluginAsync<{
   await app.register(registerReadRoutes, opts);
   await app.register(registerShareRoutes, opts);
   await app.register(registerGuestCommentsRoutes, opts);
+  await app.register(registerDocumentEventsRoutes, opts);
   await app.register(registerReviewStatusRoutes, opts);
   await app.register(registerProjectRoutes, opts);
   await app.register(registerDeleteRoutes, opts);

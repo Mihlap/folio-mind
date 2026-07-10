@@ -5,9 +5,13 @@ type PasswordInputProps = {
   onChange: (value: string) => void;
   required?: boolean;
   minLength?: number;
+  maxLength?: number;
+  placeholder?: string;
   autoComplete?: string;
   disabled?: boolean;
   hint?: React.ReactNode;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  autoFocus?: boolean;
 };
 export function PasswordInput({
   label,
@@ -15,9 +19,13 @@ export function PasswordInput({
   onChange,
   required,
   minLength,
+  maxLength,
+  placeholder,
   autoComplete,
   disabled,
   hint,
+  onKeyDown,
+  autoFocus,
 }: PasswordInputProps) {
   const id = useId();
   const [visible, setVisible] = useState(false);
@@ -34,8 +42,12 @@ export function PasswordInput({
           onChange={(e) => onChange(e.target.value)}
           required={required}
           minLength={minLength}
+          maxLength={maxLength}
+          placeholder={placeholder}
           autoComplete={autoComplete}
           disabled={disabled}
+          onKeyDown={onKeyDown}
+          autoFocus={autoFocus}
           className="w-full rounded-lg border border-slate-200 py-1.5 pl-3 pr-10 text-slate-900 outline-none ring-folio-500 focus:border-folio-500 focus:ring-2 disabled:opacity-50"
         />
         <button

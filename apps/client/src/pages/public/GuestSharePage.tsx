@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   LABEL_GUEST_AUTHOR_REPLY,
@@ -17,11 +17,12 @@ import {
   type GuestSharePageReviewMark,
 } from '@folio-mind/store';
 import { pageReviewMarksByPage } from '../../lib/documents/pageReviewMarkers.js';
+import { useGuestShareEvents } from '../../hooks/useGuestShareEvents.js';
+import { PasswordInput } from '../../components/auth/PasswordInput.js';
 
 const PREVIEW_BATCH = 20;
 const AUTHOR_NAME_KEY = 'folio-guest-author-name';
 const AUTHOR_EMAIL_KEY = 'folio-guest-author-email';
-const GUEST_SHARE_SYNC_MS = 4000;
 
 function sharePasswordKey(token: string): string {
   return `folio-share-pwd:${token}`;
@@ -31,7 +32,7 @@ function sharePasswordKey(token: string): string {
 const THUMB_WATERMARK_MAX_WIDTH = 240;
 
 const WATERMARK_TEXT = 'ТОЛЬКО ПРОСМОТР';
-const WATERMARK_ROWS = 6;
+const WATERMARK_ROWS = 5;
 const WATERMARK_COLS = 3;
 
 type PagePreview = {
@@ -54,7 +55,7 @@ function GuestViewWatermark() {
             {Array.from({ length: WATERMARK_COLS }, (_, col) => (
               <span
                 key={col}
-                className="whitespace-nowrap text-center text-2xl font-semibold tracking-[0.12em] text-slate-500/38 sm:text-3xl md:text-[2rem]"
+                className="whitespace-nowrap text-center text-xl font-medium tracking-[0.1em] text-slate-400/15 sm:text-2xl md:text-[1.65rem]"
               >
                 {WATERMARK_TEXT}
               </span>
@@ -328,6 +329,10 @@ export function GuestSharePage() {
   const [bookletDownloadBusy, setBookletDownloadBusy] = useState(false);
   const [bookletDownloadError, setBookletDownloadError] = useState<string | null>(null);
   const [pageReviewMarks, setPageReviewMarks] = useState<GuestSharePageReviewMark[]>([]);
+  const sharePasswordRef = useRef<string | null>(null);
+  const loadShareSeqRef = useRef(0);
+
+  sharePasswordRef.current = sharePassword;
 
   useEffect(() => {
     try {
@@ -349,6 +354,8 @@ export function GuestSharePage() {
       // Session storage is optional; the guest can re-enter the password.
     }
   }, [token]);
+
+  const resolveSharePassword = useCallback((pwd?: string | null) => pwd ?? sharePasswordRef.current, []);
 
   const commentsByPage = useMemo(() => {
     const map = new Map<number, GuestShareComment[]>();
@@ -378,23 +385,23 @@ export function GuestSharePage() {
   const loadComments = useCallback(
     async (pwd?: string | null) => {
       if (!token) return;
-      const items = await fetchGuestShareComments(token, pwd ?? sharePassword);
+      const items = await fetchGuestShareComments(token, resolveSharePassword(pwd));
       setComments(items);
     },
-    [token, sharePassword],
+    [token, resolveSharePassword],
   );
 
   const loadPageReviewMarks = useCallback(
     async (pwd?: string | null) => {
       if (!token) return;
       try {
-        const marks = await fetchGuestSharePageReviewMarks(token, pwd ?? sharePassword);
+        const marks = await fetchGuestSharePageReviewMarks(token, resolveSharePassword(pwd));
         setPageReviewMarks(marks.items);
       } catch {
         setPageReviewMarks([]);
       }
     },
-    [token, sharePassword],
+    [token, resolveSharePassword],
   );
 
   const loadPreviews = useCallback(
@@ -402,7 +409,7 @@ export function GuestSharePage() {
       if (!token) return;
       setLoadingMore(true);
       try {
-        const result = await fetchGuestSharePreviews(token, from, to, pwd ?? sharePassword);
+        const result = await fetchGuestSharePreviews(token, from, to, resolveSharePassword(pwd));
         setPageCount(result.pageCount);
         setPreviewStatus(result.status);
         setPendingPages(result.pendingPages ?? []);
@@ -415,30 +422,37 @@ export function GuestSharePage() {
         });
       } catch (err) {
         if (err instanceof GuestSharePasswordRequiredError) {
-          setNeedsPassword(true);
-          return;
+          throw err;
         }
         setError(err instanceof Error ? err.message : 'Не удалось загрузить превью');
       } finally {
         setLoadingMore(false);
       }
     },
-    [token, sharePassword],
+    [token, resolveSharePassword],
   );
 
   const loadShare = useCallback(
-    async (pwd?: string | null) => {
+    async (pwd?: string | null): Promise<boolean> => {
       if (!token) {
         setError('Некорректная ссылка');
         setLoadingMeta(false);
-        return;
+        return false;
       }
+
+      const requestSeq = ++loadShareSeqRef.current;
+      const effectivePwd = resolveSharePassword(pwd);
 
       setLoadingMeta(true);
       setError(null);
-      setPasswordError(null);
+      if (pwd !== undefined) {
+        setPasswordError(null);
+      }
+
       try {
-        const meta = await fetchGuestShareMeta(token, pwd ?? sharePassword);
+        const meta = await fetchGuestShareMeta(token, effectivePwd);
+        if (requestSeq !== loadShareSeqRef.current) return false;
+
         setNeedsPassword(false);
         setTitle(meta.title);
         setVersion(meta.version);
@@ -448,35 +462,52 @@ export function GuestSharePage() {
         setPreviewStatus(meta.previewStatus);
         const count = meta.pageCount ?? 0;
         setPageCount(count);
-        await loadComments(pwd ?? sharePassword);
-        await loadPageReviewMarks(pwd ?? sharePassword);
+
+        await loadComments(effectivePwd);
+        if (requestSeq !== loadShareSeqRef.current) return false;
+
+        await loadPageReviewMarks(effectivePwd);
+        if (requestSeq !== loadShareSeqRef.current) return false;
+
         if (count > 0) {
-          await loadPreviews(1, Math.min(PREVIEW_BATCH, count), pwd ?? sharePassword);
+          await loadPreviews(1, Math.min(PREVIEW_BATCH, count), effectivePwd);
+          if (requestSeq !== loadShareSeqRef.current) return false;
         }
+
+        return true;
       } catch (err) {
+        if (requestSeq !== loadShareSeqRef.current) return false;
+
         if (err instanceof GuestSharePasswordRequiredError) {
           setNeedsPassword(true);
           setError(null);
-        } else {
-          setError(err instanceof Error ? err.message : 'Ссылка недоступна');
+          if (effectivePwd) {
+            setPasswordError('Неверный пароль');
+          }
+          return false;
         }
+
+        setError(err instanceof Error ? err.message : 'Ссылка недоступна');
+        return false;
       } finally {
-        setLoadingMeta(false);
+        if (requestSeq === loadShareSeqRef.current) {
+          setLoadingMeta(false);
+        }
       }
     },
-    [token, sharePassword, loadComments, loadPageReviewMarks, loadPreviews],
+    [token, resolveSharePassword, loadComments, loadPageReviewMarks, loadPreviews],
   );
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      await loadShare();
-      if (cancelled) return;
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token, sharePassword, loadShare]);
+    if (!token) return;
+    let savedPwd: string | null = null;
+    try {
+      savedPwd = sessionStorage.getItem(sharePasswordKey(token));
+    } catch {
+      savedPwd = null;
+    }
+    void loadShare(savedPwd);
+  }, [token, loadShare]);
 
   useEffect(() => {
     if (!token || error || needsPassword) return;
@@ -487,18 +518,16 @@ export function GuestSharePage() {
       void loadPageReviewMarks();
     }
 
-    const timer = window.setInterval(syncGuestUpdates, GUEST_SHARE_SYNC_MS);
-
-    function onVisibilityChange() {
-      if (document.visibilityState === 'visible') syncGuestUpdates();
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
+    syncGuestUpdates();
   }, [token, error, needsPassword, loadComments, loadPageReviewMarks]);
+
+  useGuestShareEvents({
+    token,
+    sharePassword,
+    enabled: Boolean(token && !error && !needsPassword),
+    onGuestComment: () => void loadComments(),
+    onPageReview: () => void loadPageReviewMarks(),
+  });
 
   useEffect(() => {
     if (!token || error || needsPassword) return;
@@ -593,7 +622,15 @@ export function GuestSharePage() {
         // Session storage is optional; keep the password only in component state.
       }
       setSharePassword(pwd);
-      await loadShare(pwd);
+      const unlocked = await loadShare(pwd);
+      if (!unlocked) {
+        try {
+          sessionStorage.removeItem(sharePasswordKey(token));
+        } catch {
+          // Session storage is optional.
+        }
+        setSharePassword(null);
+      }
     } catch (err) {
       setPasswordError(err instanceof Error ? err.message : 'Неверный пароль');
     } finally {
@@ -636,6 +673,8 @@ export function GuestSharePage() {
           </p>
           {loadingMeta ? (
             <h1 className="mt-1 text-lg font-semibold text-slate-800">Загрузка…</h1>
+          ) : needsPassword && !error ? (
+            <h1 className="mt-1 text-lg font-semibold text-slate-800">Просмотр для согласования</h1>
           ) : error ? (
             <h1 className="mt-1 text-lg font-semibold text-slate-800">Ссылка недоступна</h1>
           ) : (
@@ -679,19 +718,15 @@ export function GuestSharePage() {
             <p className="mt-1 text-sm text-slate-600">
               Владелец документа защитил ссылку паролем. Введите его, чтобы открыть превью.
             </p>
-            <label className="mt-4 block text-xs text-slate-600">
-              Пароль
-              <input
-                type="password"
-                value={passwordDraft}
-                onChange={(e) => setPasswordDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleUnlockPassword();
-                }}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                autoFocus
-              />
-            </label>
+            <PasswordInput
+              label="Пароль"
+              value={passwordDraft}
+              onChange={setPasswordDraft}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleUnlockPassword();
+              }}
+              autoFocus
+            />
             {passwordError && <p className="mt-2 text-xs text-red-600">{passwordError}</p>}
             <button
               type="button"

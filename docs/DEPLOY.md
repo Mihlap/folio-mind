@@ -119,6 +119,12 @@ OTEL_ENABLED=true
 - **Worker:** превью, конвертация, сжатие, тяжёлый ИИ.
 - **Клиент:** viewer на превью + виртуализация; не сжимать 50+ МБ в браузере.
 
+### SSE (live guest-comments)
+
+- Endpoint: `GET /documents/:id/versions/:vid/events` (см. [SSE.md](./SSE.md)).
+- **Redis обязателен** (`REDIS_URL`) — pub/sub между инстансами API.
+- За reverse proxy: `proxy_buffering off`, `proxy_read_timeout` ≥ 3600s для SSE-роута.
+
 ---
 
 ## CI

@@ -139,6 +139,7 @@ CREATE TABLE "DocumentShareLink" (
     "allowDownload" BOOLEAN NOT NULL DEFAULT false,
     "allowBookletZip" BOOLEAN NOT NULL DEFAULT false,
     "passwordHash" TEXT,
+    "tokenCipher" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "DocumentShareLink_pkey" PRIMARY KEY ("id")

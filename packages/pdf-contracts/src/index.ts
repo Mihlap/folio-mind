@@ -244,3 +244,21 @@ export {
   PLACEHOLDER_GUEST_RESOLVE_REPLY,
 } from './user-labels.js';
 export { captionFromFileName } from './caption-from-filename.js';
+export {
+  DOCUMENT_EVENTS_CHANNEL_PREFIX,
+  documentVersionEventsChannel,
+  documentMetaEventsChannel,
+  DOCUMENT_META_CHANNEL_SUFFIX,
+  parseDocumentVersionEvent,
+  parseDocumentVersionScopeEvent,
+  parseDocumentMetaScopeEvent,
+  type DocumentVersionEvent,
+  type DocumentVersionScopeEvent,
+  type DocumentMetaScopeEvent,
+  type DocumentScopeEvent,
+  type GuestCommentDocumentEvent,
+  type PageReviewDocumentEvent,
+  type ReviewStatusDocumentEvent,
+  type GuestCommentEventAction,
+  type PageReviewEventAction,
+} from './document-events.js';

@@ -1,8 +1,9 @@
 import type { SKRSContext2D } from '@napi-rs/canvas';
 
 export const GUEST_VIEW_WATERMARK_TEXT = 'ТОЛЬКО ПРОСМОТР';
+export const GUEST_VIEW_WATERMARK_ALPHA = 0.15;
 
-const WATERMARK_ROWS = 6;
+const WATERMARK_ROWS = 5;
 const WATERMARK_COLS = 3;
 const WATERMARK_ANGLE_DEG = -28;
 
@@ -20,9 +21,9 @@ export function drawGuestViewWatermark(
   const startY = -((WATERMARK_ROWS - 1) * stepY) / 2;
 
   context.save();
-  context.globalAlpha = 0.38;
-  context.fillStyle = '#64748b';
-  context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  context.globalAlpha = GUEST_VIEW_WATERMARK_ALPHA;
+  context.fillStyle = '#94a3b8';
+  context.font = `500 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.translate(width / 2, height / 2);

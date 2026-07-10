@@ -167,6 +167,7 @@ model DocumentShareLink {
   allowDownload Boolean   @default(false)
   allowBookletZip Boolean @default(false)
   passwordHash  String?
+  tokenCipher   String?
   createdAt     DateTime  @default(now())
   guestComments GuestShareComment[]
 

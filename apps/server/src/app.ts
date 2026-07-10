@@ -82,7 +82,7 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(mediaRoutes, { env: options.env });
     await app.register(layoutTemplateRoutes);
     await app.register(projectRoutes);
-    await app.register(pageReviewRoutes);
+    await app.register(pageReviewRoutes, { env: options.env });
     await app.register(apiV1Routes, { env: options.env });
   } else if (options.skipDatabase) {
     await app.register(healthRoutes, { env: options.env });

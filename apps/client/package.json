@@ -15,6 +15,7 @@
     "@folio-mind/edit-markdown": "workspace:*",
     "@folio-mind/store": "workspace:*",
     "@folio-mind/ui": "workspace:*",
+    "@microsoft/fetch-event-source": "^2.0.1",
     "katex": "^0.16.22",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",

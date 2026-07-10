@@ -1,10 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import type { Env } from '../lib/config/env.js';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
+import { publishPageReviewDocumentEvent } from '../lib/events/document-events-bus.js';
 import { errorBody } from './documents/schemas.js';
 
-export const pageReviewRoutes: FastifyPluginAsync = async (app) => {
+export const pageReviewRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { env }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.get(
@@ -99,6 +101,17 @@ export const pageReviewRoutes: FastifyPluginAsync = async (app) => {
             tenantId: user.tenantId,
           },
         });
+
+        void publishPageReviewDocumentEvent(
+          env,
+          document.id,
+          version.id,
+          'cleared',
+          page,
+        ).catch((err) => {
+          request.log.warn({ err }, 'page review event publish failed');
+        });
+
         return { page, status: null };
       }
 
@@ -119,6 +132,12 @@ export const pageReviewRoutes: FastifyPluginAsync = async (app) => {
         },
         update: { status },
       });
+
+      void publishPageReviewDocumentEvent(env, document.id, version.id, 'updated', page).catch(
+        (err) => {
+          request.log.warn({ err }, 'page review event publish failed');
+        },
+      );
 
       return { page, status };
     },

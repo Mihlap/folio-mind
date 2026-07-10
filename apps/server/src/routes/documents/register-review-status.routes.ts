@@ -2,13 +2,15 @@ import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { DOCUMENT_REVIEW_STATUSES } from '@folio-mind/pdf-contracts';
+import type { Env } from '../../lib/config/env.js';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
 import { toDocumentReviewStatus } from '../../lib/documents/document-review-status.js';
+import { publishReviewStatusDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody } from './schemas.js';
 
 const reviewStatusSchema = z.enum(DOCUMENT_REVIEW_STATUSES);
 
-export const registerReviewStatusRoutes: FastifyPluginAsync = async (app) => {
+export const registerReviewStatusRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { env }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.patch(
@@ -66,6 +68,10 @@ export const registerReviewStatusRoutes: FastifyPluginAsync = async (app) => {
             to: reviewStatus,
           },
         },
+      });
+
+      void publishReviewStatusDocumentEvent(env, document.id, reviewStatus).catch((err) => {
+        request.log.warn({ err }, 'review status event publish failed');
       });
 
       return {

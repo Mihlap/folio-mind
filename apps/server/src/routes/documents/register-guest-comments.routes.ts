@@ -12,6 +12,7 @@ import {
 } from '../../lib/share/guest-comment.js';
 import { createMailer } from '../../lib/email/mailer.js';
 import { notifyGuestCommentResolvedGuest } from '../../lib/share/notify-guest-comment.js';
+import { publishGuestCommentDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody } from './schemas.js';
 
 async function assertGuestCommentsDeletable(
@@ -134,6 +135,12 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
         },
       });
 
+      void publishGuestCommentDocumentEvent(env, documentId, comment.versionId, 'updated', commentId).catch(
+        (err) => {
+          request.log.warn({ err }, 'guest comment event publish failed');
+        },
+      );
+
       if (resolved && comment.authorEmail && authorReplyText) {
         const version = await app.prisma.documentVersion.findUnique({
           where: { id: comment.versionId },
@@ -211,6 +218,16 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
 
       await app.prisma.guestShareComment.delete({ where: { id: commentId } });
 
+      void publishGuestCommentDocumentEvent(
+        env,
+        documentId,
+        comment.versionId,
+        'deleted',
+        commentId,
+      ).catch((err) => {
+        request.log.warn({ err }, 'guest comment event publish failed');
+      });
+
       await app.prisma.auditLog.create({
         data: {
           action: 'document.guest_comment_deleted',
@@ -265,6 +282,10 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
       });
 
       if (result.count > 0) {
+        void publishGuestCommentDocumentEvent(env, documentId, versionId, 'cleared').catch((err) => {
+          request.log.warn({ err }, 'guest comment event publish failed');
+        });
+
         await app.prisma.auditLog.create({
           data: {
             action: 'document.guest_comments_cleared',

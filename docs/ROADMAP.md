@@ -149,10 +149,25 @@ _Параллельно с фазой 2 после стабильного viewer
 - [x] Аудит: `share_create`, `share_revoke`, `share_view` — **MVP**
 - [x] Комментарии гостя с pin на странице; статусы open/resolved в панели автора — **MVP**
 - [x] **Ответ автора при «Решено»**; гостю — «Исправлено отправителем» — **MVP**
-- [x] **Polling** гостевой страницы (комментарии + метки без F5) — **MVP**
+- [x] **Polling** гостевой страницы (комментарии + метки без F5) — **MVP** _(заменён SSE на `/public/share/:token/events`)_
+- [x] **SSE** live-обновление guest-comments у владельца (Redis pub/sub, без polling) — **MVP** _(см. `docs/SSE.md`)_
 - [x] Уведомления владельцу (email + generic webhook + Telegram); статусы документа draft/in_review/approved — **MVP**
 - [x] **Пароль на гостевую ссылку** (optional при создании; форма на `/share/:token`) — **MVP**
 - [x] **Метки страницы «ОК / нужны правки»** (автор + баннер у гостя) — **MVP**
+
+### Спринт 6 — SSE guest-comments (2026-07)
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 1 | Контракты событий (`pdf-contracts/document-events`) | ✅ |
+| 2 | Redis pub/sub + publish при create/update/delete/clear | ✅ |
+| 3 | SSE endpoint `GET .../versions/:vid/events` | ✅ |
+| 4 | Клиент: `useDocumentVersionEvents`, отключение polling | ✅ |
+| 5 | Тесты + документация `docs/SSE.md` | ✅ |
+| 6 | Расширение SSE: `page_review`, `review_status` | ✅ |
+| 7 | Гостевая страница `/share/:token` — SSE вместо polling | ✅ |
+
+---
 
 ### Спринт 5 — порядок страниц и подписи версий (2026-07)
 

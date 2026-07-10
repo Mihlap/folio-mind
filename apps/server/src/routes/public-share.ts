@@ -15,24 +15,48 @@ import {
 } from '../lib/share/share-link.js';
 import { resolveShareLinkByToken } from '../lib/share/resolve-share-link.js';
 import { notifyGuestCommentOwner } from '../lib/share/notify-guest-comment.js';
+import { publishGuestCommentDocumentEvent, isDocumentEventsRedisConfigured } from '../lib/events/document-events-bus.js';
+import { streamDocumentScopeEvents } from '../lib/events/sse.js';
 import { createMailer } from '../lib/email/mailer.js';
 import type { Env } from '../lib/config/env.js';
 import { getObjectWithBuffer, isS3Configured, s3ObjectExists, getPresignedGetUrl } from '../lib/storage/s3.js';
 import { readSharePasswordHeader, verifySharePassword } from '../lib/share/share-password.js';
-import { errorBody } from './documents/schemas.js';
+import { createGuestPageAccessToken, verifyGuestPageAccessToken } from '../lib/share/guest-page-access.js';
+import { errorBody, sharePasswordRequiredBody } from './documents/schemas.js';
 
-async function assertSharePassword(
-  request: { headers: Record<string, string | string[] | undefined> },
+async function assertGuestShareAccess(
+  request: {
+    headers: Record<string, string | string[] | undefined>;
+    query?: unknown;
+  },
   passwordHash: string | null,
   reply: FastifyReply,
+  accessContext?: { shareLinkId: string; shareToken: string; env: Env },
 ): Promise<boolean> {
   if (!passwordHash) return true;
-  const ok = await verifySharePassword(readSharePasswordHeader(request.headers), passwordHash);
-  if (!ok) {
-    reply.code(401).send({ error: 'Требуется пароль', requiresPassword: true });
-    return false;
+
+  const headerPassword = readSharePasswordHeader(request.headers);
+  if (await verifySharePassword(headerPassword, passwordHash)) {
+    return true;
   }
-  return true;
+
+  const query = request.query as Record<string, unknown> | undefined;
+  const access = typeof query?.access === 'string' ? query.access : undefined;
+  if (
+    access &&
+    accessContext &&
+    verifyGuestPageAccessToken({
+      env: accessContext.env,
+      access,
+      shareLinkId: accessContext.shareLinkId,
+      shareToken: accessContext.shareToken,
+    })
+  ) {
+    return true;
+  }
+
+  reply.code(401).send({ error: 'Требуется пароль', requiresPassword: true });
+  return false;
 }
 
 export const PUBLIC_SHARE_RATE_LIMIT = {
@@ -65,6 +89,7 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
             bookletZipAvailable: z.boolean(),
             previewStatus: z.enum(['processing', 'ready', 'partial', 'unavailable']),
           }),
+          401: sharePasswordRequiredBody,
           404: errorBody,
           410: errorBody,
           503: errorBody,
@@ -87,7 +112,11 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
         return reply.code(404).send({ error: 'Ссылка не найдена' });
       }
 
-      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
         return reply;
       }
 
@@ -149,6 +178,7 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
             status: z.enum(['processing', 'ready', 'partial', 'unavailable']),
             pendingPages: z.array(z.number()).optional(),
           }),
+          401: sharePasswordRequiredBody,
           404: errorBody,
           410: errorBody,
           503: errorBody,
@@ -164,7 +194,11 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
       }
-      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
         return reply;
       }
 
@@ -184,11 +218,18 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       });
 
       const token = request.params.token;
+      const pageAccess = resolved.link.passwordHash
+        ? createGuestPageAccessToken({
+            env,
+            shareLinkId: resolved.link.id,
+            shareToken: token,
+          })
+        : null;
       return {
         ...result,
         pages: result.pages.map((item) => ({
           page: item.page,
-          url: guestPreviewPageUrl({ env, request, token, page: item.page }),
+          url: guestPreviewPageUrl({ env, request, token, page: item.page, access: pageAccess }),
         })),
       };
     },
@@ -219,7 +260,11 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
       }
-      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
         return reply;
       }
 
@@ -264,7 +309,11 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
       }
-      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
         return reply;
       }
 
@@ -277,6 +326,46 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       });
 
       return { items: items.map(serializeGuestShareComment) };
+    },
+  );
+
+  r.get(
+    '/public/share/:token/events',
+    {
+      config: { rateLimit: false },
+      schema: {
+        params: z.object({ token: z.string().min(16) }),
+        response: {
+          401: errorBody,
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isDocumentEventsRedisConfigured(env)) {
+        return reply.code(503).send({ error: 'Live-обновления временно недоступны' });
+      }
+
+      const resolved = await resolveShareLinkByToken(app.prisma, request.params.token);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
+      }
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
+        return reply;
+      }
+
+      await streamDocumentScopeEvents({
+        env,
+        request,
+        reply,
+        documentId: resolved.document.id,
+        versionId: resolved.version.id,
+      });
     },
   );
 
@@ -305,7 +394,11 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
       }
-      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
         return reply;
       }
 
@@ -340,6 +433,16 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
             page: created.page,
           },
         },
+      });
+
+      void publishGuestCommentDocumentEvent(
+        env,
+        resolved.document.id,
+        resolved.version.id,
+        'created',
+        created.id,
+      ).catch((err) => {
+        request.log.warn({ err }, 'guest comment event publish failed');
       });
 
       void notifyGuestCommentOwner(
@@ -390,7 +493,11 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
       }
-      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
         return reply;
       }
       if (!resolved.link.allowBookletZip) {
@@ -423,6 +530,9 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
           token: z.string().min(16),
           page: z.coerce.number().int().min(1),
         }),
+        querystring: z.object({
+          access: z.string().optional(),
+        }),
       },
     },
     async (request, reply) => {
@@ -434,7 +544,11 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
       if (!resolved) {
         return reply.code(404).send({ error: 'Ссылка не найдена или недействительна' });
       }
-      if (!(await assertSharePassword(request, resolved.link.passwordHash, reply))) {
+      if (!(await assertGuestShareAccess(request, resolved.link.passwordHash, reply, {
+        shareLinkId: resolved.link.id,
+        shareToken: request.params.token,
+        env,
+      }))) {
         return reply;
       }
 

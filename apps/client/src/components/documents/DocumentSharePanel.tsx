@@ -13,6 +13,7 @@ import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import type { DocumentReviewStatus } from '@folio-mind/store';
 import { DocumentReviewStatusControl } from './DocumentReviewStatusControl.js';
 import { DocumentPageReviewBar } from './DocumentPageReviewBar.js';
+import { PasswordInput } from '../auth/PasswordInput.js';
 import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 
 type Props = {
@@ -44,11 +45,28 @@ function getMutationError(err: unknown): string {
   if (typeof err === 'object' && err && 'data' in err) {
     const data = (err as { data?: unknown }).data;
     if (typeof data === 'string') return data;
-    if (typeof data === 'object' && data && 'error' in data) {
-      return String((data as { error: string }).error);
+    if (typeof data === 'object' && data) {
+      if ('error' in data && typeof (data as { error: unknown }).error === 'string') {
+        return (data as { error: string }).error;
+      }
+      if ('message' in data && typeof (data as { message: unknown }).message === 'string') {
+        const message = (data as { message: string }).message;
+        if (message.includes('/password') || message.toLowerCase().includes('password')) {
+          return 'Пароль ссылки должен быть от 4 до 64 символов';
+        }
+        if (message !== 'Bad Request') return message;
+      }
     }
   }
   return 'Не удалось выполнить операцию';
+}
+
+function validateSharePassword(password: string): string | null {
+  const trimmed = password.trim();
+  if (!trimmed) return null;
+  if (trimmed.length < 4) return 'Пароль ссылки должен быть не короче 4 символов';
+  if (trimmed.length > 64) return 'Пароль ссылки не длиннее 64 символов';
+  return null;
 }
 
 export function DocumentSharePanel({
@@ -72,6 +90,11 @@ export function DocumentSharePanel({
   const handleCreate = async () => {
     if (!activeVersion?.id) return;
     setCopyNotice(null);
+    const passwordError = validateSharePassword(sharePassword);
+    if (passwordError) {
+      setCopyNotice(passwordError);
+      return;
+    }
     try {
       const result = await createLink({
         documentId,
@@ -166,17 +189,20 @@ export function DocumentSharePanel({
         </select>
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-slate-500">Пароль (необязательно)</span>
-        <input
-          type="password"
-          value={sharePassword}
-          onChange={(e) => setSharePassword(e.target.value)}
-          placeholder="Заказчик введёт при открытии ссылки"
-          className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
-          autoComplete="new-password"
-        />
-      </label>
+      <PasswordInput
+        label="Пароль (необязательно)"
+        value={sharePassword}
+        onChange={setSharePassword}
+        minLength={4}
+        maxLength={64}
+        placeholder="От 4 символов — заказчик введёт при открытии"
+        autoComplete="new-password"
+        hint={
+          <span className="mt-1 block text-[11px] text-slate-400">
+            Если нужен пароль — минимум 4 символа.
+          </span>
+        }
+      />
 
       <label className="flex items-start gap-2 text-xs text-slate-600">
         <input
@@ -236,11 +262,27 @@ export function DocumentSharePanel({
                     <p className="text-xs text-slate-600">
                       Версия v{link.version} · до {formatExpires(link.expiresAt)}
                     </p>
+                    {link.url ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="break-all font-mono text-[11px] text-slate-700">{link.url}</p>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopy(link.url!)}
+                          className="cursor-pointer text-xs font-medium text-folio-700 underline hover:text-folio-900"
+                        >
+                          Скопировать ссылку
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-[11px] leading-snug text-slate-400">
+                        URL этой ссылки недоступен — отзовите и создайте новую.
+                      </p>
+                    )}
                     <button
                       type="button"
                       disabled={revoking}
                       onClick={() => void handleRevoke(link.id)}
-                      className="mt-1 text-xs font-medium text-rose-600 underline disabled:opacity-50"
+                      className="mt-2 text-xs font-medium text-rose-600 underline disabled:opacity-50"
                     >
                       Отозвать
                     </button>

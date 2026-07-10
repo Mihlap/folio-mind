@@ -19,6 +19,7 @@ export type ShareLinkItem = {
   allowBookletZip: boolean;
   createdAt: string;
   active: boolean;
+  url: string | null;
 };
 
 export type CreateShareLinkBody = {

@@ -4,6 +4,11 @@ import { OPTIMIZE_PRESETS, DOCUMENT_REVIEW_STATUSES } from '@folio-mind/pdf-cont
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 export const uploadRateLimit = { rateLimit: UPLOAD_RATE_LIMIT };
 export const errorBody = z.object({ error: z.string() });
+
+export const sharePasswordRequiredBody = z.object({
+  error: z.string(),
+  requiresPassword: z.literal(true),
+});
 export const operationSaveModeSchema = z.enum(['new_version', 'replace_current']).default('new_version');
 export const documentReviewStatusSchema = z.enum(DOCUMENT_REVIEW_STATUSES);
 export const documentSchema = z.object({

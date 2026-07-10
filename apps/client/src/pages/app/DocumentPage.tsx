@@ -9,6 +9,7 @@ import {
   useListAnnotationsQuery,
   useListGuestCommentsQuery,
   useListPageReviewMarksQuery,
+  useListShareLinksQuery,
   fetchMediaAssetDataUrl,
   clearSearch,
   nextSearchMatch,
@@ -36,6 +37,7 @@ import { DocumentSourceDocxBanner } from '../../components/documents/DocumentSou
 import { useDocumentWorkspace } from '../../context/useDocumentWorkspace.js';
 import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js';
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
+import { useDocumentVersionEvents } from '../../hooks/useDocumentVersionEvents.js';
 import { useDocumentPdfLoader, pdfLoadStageLabel } from '../../hooks/useDocumentPdfLoader.js';
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { usePanelToggleCenterY } from '../../hooks/usePanelToggleCenterY.js';
@@ -257,10 +259,25 @@ export function DocumentPage() {
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     {
       skip: !id || !activeVersion?.id || !versionReady,
-      pollingInterval: 4000,
       refetchOnFocus: true,
     },
   );
+  const { data: shareLinksData } = useListShareLinksQuery(id!, {
+    skip: !id || !versionReady,
+  });
+  const hasActiveShareLinkForVersion = useMemo(
+    () =>
+      (shareLinksData?.items ?? []).some(
+        (link) => link.active && link.versionId === activeVersion?.id,
+      ),
+    [shareLinksData?.items, activeVersion?.id],
+  );
+  useDocumentVersionEvents({
+    documentId: id,
+    versionId: activeVersion?.id,
+    token,
+    enabled: Boolean(id && activeVersion?.id && versionReady && hasActiveShareLinkForVersion),
+  });
   const { data: pageReviewData } = useListPageReviewMarksQuery(
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     { skip: !id || !activeVersion?.id || !versionReady },

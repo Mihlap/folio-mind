@@ -18,8 +18,6 @@ type Props = {
   onGoToComment?: (page: number, commentId: string) => void;
 };
 
-const GUEST_COMMENTS_POLL_MS = 4000;
-
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', {
     day: 'numeric',
@@ -110,14 +108,12 @@ export function DocumentGuestCommentsPanel({
     { documentId, versionId },
     {
       skip: !versionReady || !versionId,
-      pollingInterval: GUEST_COMMENTS_POLL_MS,
       refetchOnFocus: true,
       refetchOnReconnect: true,
     },
   );
   const { data: shareLinksData } = useListShareLinksQuery(documentId, {
     skip: !versionReady || !versionId,
-    pollingInterval: GUEST_COMMENTS_POLL_MS,
   });
   const [updateStatus, { isLoading: updating }] = useUpdateGuestCommentStatusMutation();
   const [deleteComment, { isLoading: deletingOne }] = useDeleteGuestCommentMutation();
