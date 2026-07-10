@@ -167,11 +167,41 @@ CREATE TABLE "GuestShareComment" (
 );
 
 -- CreateTable
+CREATE TABLE "DocumentMember" (
+    "id" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "role" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "DocumentMember_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "TenantInvite" (
+    "id" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "tokenCipher" TEXT,
+    "email" TEXT,
+    "documentId" TEXT,
+    "documentRole" TEXT,
+    "createdById" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "TenantInvite_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "MediaAsset" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "documentId" TEXT,
     "title" TEXT NOT NULL,
+    "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "s3Key" TEXT NOT NULL,
     "fileName" TEXT NOT NULL,
     "mimeType" TEXT NOT NULL,
@@ -267,6 +297,7 @@ CREATE TABLE "DocumentAnnotation" (
     "x" DOUBLE PRECISION,
     "y" DOUBLE PRECISION,
     "meta" JSONB,
+    "hideOnExport" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -421,6 +452,21 @@ CREATE INDEX "GuestShareComment_documentId_versionId_createdAt_idx" ON "GuestSha
 CREATE INDEX "GuestShareComment_shareLinkId_createdAt_idx" ON "GuestShareComment"("shareLinkId", "createdAt");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "DocumentMember_documentId_userId_key" ON "DocumentMember"("documentId", "userId");
+
+-- CreateIndex
+CREATE INDEX "DocumentMember_userId_idx" ON "DocumentMember"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "TenantInvite_tokenHash_key" ON "TenantInvite"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "TenantInvite_tenantId_createdAt_idx" ON "TenantInvite"("tenantId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "TenantInvite_expiresAt_idx" ON "TenantInvite"("expiresAt");
+
+-- CreateIndex
 CREATE INDEX "MediaAsset_tenantId_createdAt_idx" ON "MediaAsset"("tenantId", "createdAt");
 
 -- CreateIndex
@@ -506,6 +552,21 @@ ALTER TABLE "DocumentShareLink" ADD CONSTRAINT "DocumentShareLink_createdById_fk
 
 -- AddForeignKey
 ALTER TABLE "GuestShareComment" ADD CONSTRAINT "GuestShareComment_shareLinkId_fkey" FOREIGN KEY ("shareLinkId") REFERENCES "DocumentShareLink"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentMember" ADD CONSTRAINT "DocumentMember_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentMember" ADD CONSTRAINT "DocumentMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TenantInvite" ADD CONSTRAINT "TenantInvite_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TenantInvite" ADD CONSTRAINT "TenantInvite_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TenantInvite" ADD CONSTRAINT "TenantInvite_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "MediaAsset" ADD CONSTRAINT "MediaAsset_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;

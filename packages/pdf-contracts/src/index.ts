@@ -120,6 +120,8 @@ export {
   type LayoutFill,
   type LayoutRect,
   type LayoutImageDrawParams,
+  type LayoutPageChrome,
+  formatLayoutPageChromeText,
 } from './layout-editor.js';
 export {
   BUILTIN_LAYOUT_TEMPLATES,
@@ -262,3 +264,12 @@ export {
   type GuestCommentEventAction,
   type PageReviewEventAction,
 } from './document-events.js';
+export {
+  DOCUMENT_MEMBER_ROLES,
+  DOCUMENT_ROLE_LABELS,
+  isDocumentMemberRole,
+  roleHasCapability,
+  type DocumentAccessRole,
+  type DocumentCapability,
+  type DocumentMemberRole,
+} from './document-roles.js';

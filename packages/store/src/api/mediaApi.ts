@@ -7,6 +7,7 @@ import { apiBaseUrl, baseApi } from './baseApi.js';
 export type MediaAssetItem = {
   id: string;
   title: string;
+  tags: string[];
   fileName: string;
   mimeType: string;
   size: string;
@@ -25,12 +26,20 @@ export const mediaApi = baseApi.injectEndpoints({
       query: () => '/media-assets/quota',
       providesTags: [{ type: 'MediaAssets', id: 'QUOTA' }],
     }),
-    listMediaAssets: build.query<{ items: MediaAssetItem[] }, { documentId?: string } | void>({
+    listMediaAssets: build.query<
+      { items: MediaAssetItem[] },
+      { documentId?: string; q?: string; tag?: string } | void
+    >({
       query: (params) => {
-        const documentId = params && 'documentId' in params ? params.documentId : undefined;
-        return documentId
-          ? `/media-assets?documentId=${encodeURIComponent(documentId)}`
-          : '/media-assets';
+        if (!params) return '/media-assets';
+        const search = new URLSearchParams();
+        if ('documentId' in params && params.documentId) {
+          search.set('documentId', params.documentId);
+        }
+        if ('q' in params && params.q) search.set('q', params.q);
+        if ('tag' in params && params.tag) search.set('tag', params.tag);
+        const query = search.toString();
+        return query ? `/media-assets?${query}` : '/media-assets';
       },
       providesTags: [{ type: 'MediaAssets', id: 'LIST' }],
     }),

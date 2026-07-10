@@ -12,6 +12,7 @@ type AnnotationRow = {
   x: number | null;
   y: number | null;
   meta: unknown;
+  hideOnExport?: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -29,6 +30,7 @@ export function serializeDocumentAnnotation(item: AnnotationRow) {
     contentFormat: readContentFormat(item.meta),
     x: item.x,
     y: item.y,
+    hideOnExport: item.hideOnExport ?? false,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };

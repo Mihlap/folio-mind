@@ -30,6 +30,7 @@ const IMAGE_MIME = /^image\/(png|jpeg|jpg|webp|gif|bmp)$/i;
 const mediaAssetSchema = z.object({
   id: z.string(),
   title: z.string(),
+  tags: z.array(z.string()).default([]),
   fileName: z.string(),
   mimeType: z.string(),
   size: z.string(),
@@ -49,6 +50,7 @@ function isImageFileName(fileName: string): boolean {
 async function serializeMediaAsset(item: {
   id: string;
   title: string;
+  tags?: string[];
   fileName: string;
   mimeType: string;
   size: bigint;
@@ -64,6 +66,7 @@ async function serializeMediaAsset(item: {
   return {
     id: item.id,
     title: item.title,
+    tags: item.tags ?? [],
     fileName: item.fileName,
     mimeType: item.mimeType,
     size: item.size.toString(),
@@ -144,6 +147,8 @@ export const mediaRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =
       schema: {
         querystring: z.object({
           documentId: z.string().optional(),
+          q: z.string().optional(),
+          tag: z.string().optional(),
         }),
         response: {
           200: z.object({ items: z.array(mediaAssetSchema) }),
@@ -153,7 +158,9 @@ export const mediaRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const { documentId } = request.query;
+      const { documentId, q, tag } = request.query;
+      const search = q?.trim();
+      const tagFilter = tag?.trim().toLowerCase();
 
       if (documentId) {
         const document = await findDocumentForUser(app.prisma, documentId, user);
@@ -169,6 +176,15 @@ export const mediaRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =
           ...(documentId
             ? { OR: [{ documentId }, { documentId: null }] }
             : {}),
+          ...(search
+            ? {
+                OR: [
+                  { title: { contains: search, mode: 'insensitive' } },
+                  { fileName: { contains: search, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+          ...(tagFilter ? { tags: { has: tagFilter } } : {}),
         },
         orderBy: { createdAt: 'desc' },
         take: 200,

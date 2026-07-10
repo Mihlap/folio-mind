@@ -30,12 +30,18 @@ import { verifyTurnstileToken } from '../lib/auth/turnstile.js';
 import { createMagicLinkToken, buildMagicLinkUrl } from '../lib/auth/magic-link.js';
 import { hashUnusablePassword } from '../lib/auth/password.js';
 import { createSmsSender } from '../lib/auth/sms.js';
+import {
+  consumeTenantInvite,
+  findActiveTenantInvite,
+  acceptTenantInviteForUser,
+} from '../lib/tenant/tenant-invite.js';
 const registerSchema = z.object({
   email: z.string().email(),
   password: passwordSchema,
   name: z.string().min(1).optional(),
   tenantName: z.string().min(1).optional(),
   captchaToken: z.string().optional(),
+  inviteToken: z.string().min(10).optional(),
 });
 const loginSchema = z.object({
   email: z.string().email(),
@@ -192,10 +198,31 @@ export const authRoutes: FastifyPluginAsync<{
           message: 'Этот email уже зарегистрирован',
         });
       }
+
+      const inviteToken = request.body.inviteToken?.trim();
+      let tenantInvite: Awaited<ReturnType<typeof findActiveTenantInvite>> = null;
+      if (inviteToken) {
+        tenantInvite = await findActiveTenantInvite(app.prisma, inviteToken);
+        if (!tenantInvite) {
+          return reply.code(400).send({
+            error: 'INVITE_INVALID',
+            message: 'Ссылка приглашения недействительна или истекла',
+          });
+        }
+        if (tenantInvite.email && tenantInvite.email !== email) {
+          return reply.code(400).send({
+            error: 'INVITE_EMAIL_MISMATCH',
+            message: 'Эта ссылка выдана для другого email',
+          });
+        }
+      }
+
       const { password, name, tenantName } = request.body;
-      const tenant = await app.prisma.tenant.create({
-        data: { name: tenantName ?? `${email.split('@')[0]} workspace` },
-      });
+      const tenant = tenantInvite
+        ? await app.prisma.tenant.findUniqueOrThrow({ where: { id: tenantInvite.tenantId } })
+        : await app.prisma.tenant.create({
+            data: { name: tenantName ?? `${email.split('@')[0]} workspace` },
+          });
       const passwordHash = await hashPassword(password);
       const user = await app.prisma.user.create({
         data: {
@@ -206,6 +233,9 @@ export const authRoutes: FastifyPluginAsync<{
           emailVerifiedAt: null,
         },
       });
+      if (tenantInvite) {
+        await consumeTenantInvite(app.prisma, tenantInvite.id, user.id);
+      }
       try {
         await sendVerificationEmailForUser(app.prisma, env, user.id, email, request.log);
       } catch (err) {
@@ -221,6 +251,88 @@ export const authRoutes: FastifyPluginAsync<{
         email,
         message: 'Мы отправили ссылку для подтверждения на вашу почту.',
       });
+    },
+  );
+  r.get(
+    '/auth/tenant-invite',
+    {
+      schema: {
+        querystring: z.object({ token: z.string().min(10) }),
+        response: {
+          200: z.object({
+            valid: z.literal(true),
+            email: z.string().nullable(),
+            tenantName: z.string(),
+            documentTitle: z.string().nullable(),
+            documentRole: z.string().nullable(),
+          }),
+          404: authErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const invite = await findActiveTenantInvite(app.prisma, request.query.token);
+      if (!invite) {
+        return reply.code(404).send({
+          error: 'INVITE_NOT_FOUND',
+          message: 'Ссылка приглашения недействительна или истекла',
+        });
+      }
+      return {
+        valid: true as const,
+        email: invite.email,
+        tenantName: invite.tenant.name,
+        documentTitle: invite.document?.title ?? null,
+        documentRole: invite.documentRole,
+      };
+    },
+  );
+  r.post(
+    '/auth/accept-tenant-invite',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        body: z.object({ inviteToken: z.string().min(10) }),
+        response: {
+          200: z.object({
+            ok: z.literal(true),
+            tenantId: z.string(),
+            documentId: z.string().nullable(),
+            token: z.string(),
+            user: authUserSchema,
+          }),
+          400: authErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = request.user as JwtPayload;
+      const result = await acceptTenantInviteForUser(
+        app.prisma,
+        request.body.inviteToken.trim(),
+        user.sub,
+      );
+      if (!result.ok) {
+        return reply.code(400).send({
+          error: result.code,
+          message: result.message,
+        });
+      }
+      const updatedUser = await app.prisma.user.findUniqueOrThrow({ where: { id: user.sub } });
+      const token = await issueAuthToken(reply, updatedUser);
+      return {
+        ok: true as const,
+        tenantId: result.tenantId,
+        documentId: result.documentId,
+        token,
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          tenantId: updatedUser.tenantId,
+          emailVerified: Boolean(updatedUser.emailVerifiedAt),
+        },
+      };
     },
   );
   r.get('/auth/verify-email', async (request, reply) => {

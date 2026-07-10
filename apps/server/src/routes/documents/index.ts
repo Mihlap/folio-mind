@@ -12,6 +12,7 @@ import { registerReviewStatusRoutes } from './register-review-status.routes.js';
 import { registerProjectRoutes } from './register-project.routes.js';
 import { registerExportRoutes } from './register-export.routes.js';
 import { registerBookletAiRoutes } from './register-booklet-ai.routes.js';
+import { registerMembersRoutes } from './register-members.routes.js';
 export { hashBuffer } from './helpers.js';
 export const documentRoutes: FastifyPluginAsync<{
   env: Env;
@@ -27,5 +28,6 @@ export const documentRoutes: FastifyPluginAsync<{
   await app.register(registerDocumentEventsRoutes, opts);
   await app.register(registerReviewStatusRoutes, opts);
   await app.register(registerProjectRoutes, opts);
+  await app.register(registerMembersRoutes, opts);
   await app.register(registerDeleteRoutes, opts);
 };

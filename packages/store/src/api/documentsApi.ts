@@ -67,6 +67,7 @@ export const documentsApi = baseApi.injectEndpoints({
         reviewStatusChangedAt: string | null;
         projectId: string | null;
         projectName: string | null;
+        myRole: string | null;
         versions: Array<{
           id: string;
           version: number;
@@ -592,13 +593,19 @@ export const documentsApi = baseApi.injectEndpoints({
           caption?: string;
         }>;
         blankInsertions?: Array<{ afterPage: number; count: number }>;
+        pageChrome?: {
+          headerText?: string;
+          footerText?: string;
+          showPageNumbers?: boolean;
+          startPageNumber?: number;
+        };
         saveMode?: 'new_version' | 'replace_current';
       }
     >({
-      query: ({ documentId, versionId, objects, blankInsertions = [], saveMode = 'new_version' }) => ({
+      query: ({ documentId, versionId, objects, blankInsertions = [], pageChrome, saveMode = 'new_version' }) => ({
         url: `/documents/${documentId}/versions/${versionId}/operations/apply-layout-pdf`,
         method: 'POST',
-        body: { objects, blankInsertions, saveMode },
+        body: { objects, blankInsertions, pageChrome, saveMode },
       }),
       invalidatesTags: (_r, _e, { documentId }) => [
         { type: 'Documents', id: 'LIST' },

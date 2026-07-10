@@ -9,7 +9,8 @@ import { DocumentReportPanel } from './DocumentReportPanel.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import type { ToolSectionId } from '../ui/ToolAccordionSection.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
-import type { DocumentReviewStatus } from '@folio-mind/store';
+import type { DocumentReviewStatus, ShareLinkItem } from '@folio-mind/store';
+import type { VersionCreatedNotice } from '../../hooks/useVersionCreatedNotice.js';
 export type DocumentRightTab = 'chat' | 'tools' | 'report';
 type Props = {
   documentId: string;
@@ -38,6 +39,13 @@ type Props = {
   documentTitle?: string;
   projectId?: string | null;
   projectName?: string | null;
+  shareLinks?: ShareLinkItem[];
+  openGuestCommentsCount?: number;
+  needsFixMarksCount?: number;
+  acceptedEditsCount?: number;
+  versionCreatedNotice?: VersionCreatedNotice | null;
+  onDismissVersionCreatedNotice?: () => void;
+  documentRole?: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -82,7 +90,14 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   documentTitle = '',
   projectId = null,
   projectName = null,
-  collapsed,
+  shareLinks = [],
+  openGuestCommentsCount = 0,
+  needsFixMarksCount = 0,
+  acceptedEditsCount = 0,
+    versionCreatedNotice = null,
+    onDismissVersionCreatedNotice,
+    documentRole = 'owner',
+    collapsed,
   onToggleCollapsed,
   onExpand,
   panelWidth,
@@ -214,6 +229,13 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             documentTitle={documentTitle}
             projectId={projectId}
             projectName={projectName}
+            shareLinks={shareLinks}
+            openGuestCommentsCount={openGuestCommentsCount}
+            needsFixMarksCount={needsFixMarksCount}
+            acceptedEditsCount={acceptedEditsCount}
+            versionCreatedNotice={versionCreatedNotice}
+            onDismissVersionCreatedNotice={onDismissVersionCreatedNotice}
+            documentRole={documentRole}
           />
         </div>
         )}

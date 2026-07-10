@@ -77,7 +77,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -146,7 +146,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'view' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -199,7 +199,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'manage' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }

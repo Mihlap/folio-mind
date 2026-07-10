@@ -115,7 +115,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const pages = [...request.body.pages].sort((a, b) => a - b);
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -237,7 +237,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       const { documentId, versionId } = request.params;
       const { pages, saveMode } = request.body;
       const pageList = [...pages];
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -396,7 +396,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId } = request.params;
       const { versionIds } = request.body;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -518,7 +518,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       if (baseVersionId === compareVersionId) {
         return reply.code(400).send({ error: 'Выберите две разные версии' });
       }
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'view' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -617,7 +617,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -785,7 +785,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const { preset } = request.body;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -906,8 +906,8 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const { objects, blankInsertions, saveMode } = request.body;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const { objects, blankInsertions, pageChrome, saveMode } = request.body;
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -1004,6 +1004,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           targetS3Key,
           layoutObjects: objects,
           blankInsertions,
+          pageChrome,
           replaceInPlace,
           requestId: request.requestId,
         });
@@ -1061,7 +1062,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -1157,7 +1158,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -1223,7 +1224,7 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }

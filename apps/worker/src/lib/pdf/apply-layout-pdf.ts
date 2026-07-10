@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
-import { computeLayoutImageDrawParams, type LayoutImageObject, type LayoutBlankInsertion } from '@folio-mind/pdf-contracts';
+import { computeLayoutImageDrawParams, formatLayoutPageChromeText, type LayoutImageObject, type LayoutBlankInsertion, type LayoutPageChrome } from '@folio-mind/pdf-contracts';
 
 export type ApplyLayoutPdfResult = {
   buffer: Buffer;
@@ -45,10 +45,60 @@ function parseImageDataUrl(dataUrl: string): { mime: string; bytes: Uint8Array }
   return { mime, bytes: Buffer.from(match[2]!, 'base64') };
 }
 
+function drawPageChrome(
+  page: ReturnType<PDFDocument['getPage']>,
+  pageIndex: number,
+  pageCount: number,
+  chrome: LayoutPageChrome | undefined,
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+): void {
+  if (!chrome) return;
+  const { width, height } = page.getSize();
+  const fontSize = 9;
+  const margin = 24;
+  const startPageNumber = chrome.startPageNumber ?? 1;
+
+  const header = formatLayoutPageChromeText(chrome.headerText, pageIndex + 1, pageCount, startPageNumber);
+  if (header) {
+    const textWidth = font.widthOfTextAtSize(header, fontSize);
+    page.drawText(header, {
+      x: Math.max(margin, (width - textWidth) / 2),
+      y: height - margin,
+      size: fontSize,
+      font,
+      color: rgb(0.35, 0.35, 0.35),
+    });
+  }
+
+  const footerParts: string[] = [];
+  const footerTemplate = formatLayoutPageChromeText(
+    chrome.footerText,
+    pageIndex + 1,
+    pageCount,
+    startPageNumber,
+  );
+  if (footerTemplate) footerParts.push(footerTemplate);
+  if (chrome.showPageNumbers) {
+    footerParts.push(String(startPageNumber + pageIndex));
+  }
+  const footer = footerParts.join(' · ');
+  if (footer) {
+    const textWidth = font.widthOfTextAtSize(footer, fontSize);
+    page.drawText(footer, {
+      x: Math.max(margin, (width - textWidth) / 2),
+      y: margin - fontSize,
+      size: fontSize,
+      font,
+      color: rgb(0.35, 0.35, 0.35),
+    });
+  }
+}
+
 export async function applyLayoutToPdfBuffer(
   sourceBuffer: Buffer,
   objects: LayoutImageObject[],
   blankInsertions: LayoutBlankInsertion[] = [],
+  pageChrome?: LayoutPageChrome,
 ): Promise<ApplyLayoutPdfResult> {
   if (objects.length === 0) {
     throw new Error('Нет объектов макета для сохранения');
@@ -116,6 +166,10 @@ export async function applyLayoutToPdfBuffer(
     }
 
     appliedCount++;
+  }
+
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+    drawPageChrome(pdfDoc.getPage(pageIndex), pageIndex, pageCount, pageChrome, captionFont);
   }
 
   if (appliedCount === 0) {

@@ -1,4 +1,3 @@
-/** Доля листа (0..1) — не зависит от zoom в viewer. */
 export type LayoutRect = {
   x: number;
   y: number;
@@ -11,15 +10,13 @@ export type LayoutImageObject = {
   id: string;
   page: number;
   rect: LayoutRect;
-  /** data: URL изображения (сессия / черновик). */
   imageSrc: string;
   rotation: number;
-  /** Доля исходного изображения (0..1), видимая в рамке на листе. */
   crop?: LayoutRect;
-  /** Имя исходного файла (для автоподписи). */
   sourceFileName?: string;
-  /** Подпись под изображением (печатается при сохранении макета). */
   caption?: string;
+  brightness?: number;
+  contrast?: number;
 };
 
 export type LayoutFill =
@@ -36,6 +33,26 @@ export type LayoutShapeObject = {
 };
 
 export type LayoutPageObject = LayoutImageObject | LayoutShapeObject;
+
+export type LayoutPageChrome = {
+  headerText?: string;
+  footerText?: string;
+  showPageNumbers?: boolean;
+  startPageNumber?: number;
+};
+
+export function formatLayoutPageChromeText(
+  template: string | undefined,
+  page: number,
+  pageCount: number,
+  startPageNumber = 1,
+): string {
+  if (!template?.trim()) return '';
+  const displayPage = startPageNumber + page - 1;
+  return template
+    .replaceAll('{page}', String(displayPage))
+    .replaceAll('{pages}', String(startPageNumber + pageCount - 1));
+}
 
 export function isLayoutImageObject(object: LayoutPageObject): object is LayoutImageObject {
   return object.kind !== 'shape';
@@ -130,7 +147,6 @@ export type LayoutImageDrawParams = {
   rotationDeg: number;
 };
 
-/** PDF-координаты: поворот вокруг центра рамки (как в CSS transform-origin: center). */
 export function computeLayoutImageDrawParams(
   rect: LayoutRect,
   pageWidth: number,

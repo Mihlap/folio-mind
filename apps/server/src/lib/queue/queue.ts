@@ -337,6 +337,12 @@ export async function enqueueApplyLayoutPdfJob(
       rotation: number;
     }>;
     blankInsertions?: Array<{ afterPage: number; count: number }>;
+    pageChrome?: {
+      headerText?: string;
+      footerText?: string;
+      showPageNumbers?: boolean;
+      startPageNumber?: number;
+    };
     replaceInPlace?: boolean;
     requestId?: string;
   },
