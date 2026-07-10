@@ -21,6 +21,55 @@ function isSerifFamily(fontFamily: string): boolean {
     f.includes('garamond')
   );
 }
+export function fontSizeFromTextItems(items: TextItem[]): number {
+  if (items.length === 0) return 12;
+  let weighted = 0;
+  let chars = 0;
+  for (const item of items) {
+    const c = Math.max(item.str.length, 1);
+    const size = item.height > 0 ? item.height : item.fontSize > 0 ? item.fontSize : 12;
+    weighted += size * c;
+    chars += c;
+  }
+  return Math.max(6, Math.min(chars > 0 ? weighted / chars : 12, 72));
+}
+
+function scoreEmbeddedFontName(fontName: string, style: PdfTextStyle): number {
+  const lower = fontName.toLowerCase();
+  if (fontName === style.fontName) return 1000;
+  let score = 0;
+  if (style.fontName && lower.includes(style.fontName.toLowerCase())) score += 200;
+  for (const token of style.fontFamily.toLowerCase().split(/[\s,"]+/)) {
+    if (token.length > 2 && lower.includes(token)) score += 60;
+  }
+  if (isSerifFamily(style.fontFamily)) {
+    if (lower.includes('times') || lower.includes('serif') || lower.includes('cambria')) score += 40;
+  } else if (lower.includes('arial') || lower.includes('helv') || lower.includes('sans')) {
+    score += 40;
+  }
+  return score;
+}
+
+export function pickEmbeddedFontBytes(
+  style: PdfTextStyle,
+  fontBytesByName: Map<string, Uint8Array>,
+): { fontName: string; bytes: Uint8Array } | null {
+  const exact = fontBytesByName.get(style.fontName);
+  if (exact) return { fontName: style.fontName, bytes: exact };
+
+  let best: { fontName: string; bytes: Uint8Array; score: number } | null = null;
+  for (const [fontName, bytes] of fontBytesByName) {
+    const score = scoreEmbeddedFontName(fontName, style);
+    if (score > 0 && (!best || score > best.score)) {
+      best = { fontName, bytes, score };
+    }
+  }
+  if (best && best.score >= 40) {
+    return { fontName: best.fontName, bytes: best.bytes };
+  }
+  return null;
+}
+
 export function calibrateFontSize(item: TextItem, font: PDFFont): number {
   const base = item.height > 0 ? item.height : item.fontSize > 0 ? item.fontSize : 12;
   const text = item.str.trim();
@@ -39,18 +88,25 @@ export class PdfEditFontCache {
   private readonly embedded = new Map<string, PDFFont>();
   private serif: PDFFont | null = null;
   private sans: PDFFont | null = null;
+  private async embedNamedFont(
+    pdfDoc: PDFDocument,
+    fontName: string,
+    bytes: Uint8Array,
+  ): Promise<PDFFont> {
+    const cached = this.embedded.get(fontName);
+    if (cached) return cached;
+    const font = await pdfDoc.embedFont(bytes);
+    this.embedded.set(fontName, font);
+    return font;
+  }
   async resolve(
     pdfDoc: PDFDocument,
     style: PdfTextStyle,
     fontBytesByName: Map<string, Uint8Array>,
   ): Promise<PDFFont> {
-    const embeddedBytes = fontBytesByName.get(style.fontName);
-    if (embeddedBytes) {
-      const cached = this.embedded.get(style.fontName);
-      if (cached) return cached;
-      const font = await pdfDoc.embedFont(embeddedBytes);
-      this.embedded.set(style.fontName, font);
-      return font;
+    const picked = pickEmbeddedFontBytes(style, fontBytesByName);
+    if (picked) {
+      return this.embedNamedFont(pdfDoc, picked.fontName, picked.bytes);
     }
     const fallbackKey = isSerifFamily(style.fontFamily) ? 'fallback-serif' : 'fallback-sans';
     if (fallbackKey === 'fallback-serif') {
@@ -68,16 +124,26 @@ export class PdfEditFontCache {
 export async function collectEmbeddedFontBytes(
   page: {
     commonObjs: { get: (name: string) => Promise<unknown> };
+    objs?: { get: (name: string) => Promise<unknown> };
   },
   fontNames: Iterable<string>,
 ): Promise<Map<string, Uint8Array>> {
   const out = new Map<string, Uint8Array>();
+  const tryStore = async (
+    store: { get: (name: string) => Promise<unknown> },
+    fontName: string,
+  ): Promise<void> => {
+    const font = (await store.get(fontName)) as { data?: Uint8Array } | null;
+    if (font?.data instanceof Uint8Array && font.data.length > 64) {
+      out.set(fontName, font.data);
+    }
+  };
   for (const fontName of fontNames) {
     if (!fontName || out.has(fontName)) continue;
     try {
-      const font = (await page.commonObjs.get(fontName)) as { data?: Uint8Array } | null;
-      if (font?.data instanceof Uint8Array && font.data.length > 64) {
-        out.set(fontName, font.data);
+      await tryStore(page.commonObjs, fontName);
+      if (!out.has(fontName) && page.objs) {
+        await tryStore(page.objs, fontName);
       }
     } catch {
       // Some embedded fonts are not exposed by pdf.js; skip them.

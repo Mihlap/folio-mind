@@ -8,6 +8,7 @@ export type ToolSectionId =
   | 'diff'
   | 'layout'
   | 'booklet'
+  | 'team-access'
   | 'share';
 
 export const TOOL_SECTION_IDS: ToolSectionId[] = [
@@ -18,6 +19,7 @@ export const TOOL_SECTION_IDS: ToolSectionId[] = [
   'diff',
   'layout',
   'booklet',
+  'team-access',
   'share',
   'annotations',
   'edits',

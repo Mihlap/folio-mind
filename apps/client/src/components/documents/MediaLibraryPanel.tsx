@@ -70,8 +70,11 @@ export function MediaLibraryPanel() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const { data, isLoading, refetch } = useListMediaAssetsQuery(undefined);
+  const { data, isLoading, refetch } = useListMediaAssetsQuery(
+    searchQuery.trim() ? { q: searchQuery.trim() } : undefined,
+  );
   const { data: quota } = useGetMediaQuotaQuery();
   const [uploadMediaAsset] = useUploadMediaAssetMutation();
   const [deleteMediaAsset, { isLoading: deleting }] = useDeleteMediaAssetMutation();
@@ -186,6 +189,14 @@ export function MediaLibraryPanel() {
   return (
     <div className="space-y-4">
       <MediaQuotaBar />
+
+      <input
+        type="search"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Поиск по названию или файлу…"
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-slate-800">Всего файлов: {items.length}</p>

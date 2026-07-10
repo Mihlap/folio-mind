@@ -1,3 +1,5 @@
+import { readAcceptedEditContentFormat, type EditContentFormat } from '@folio-mind/edit-markdown';
+
 type AiAcceptedRow = {
   id: string;
   page: number | null;
@@ -14,7 +16,23 @@ export type CollectedAcceptedEdit = {
   page: number;
   originalText: string;
   suggestion: string;
+  contentFormat?: EditContentFormat;
+  anchor?: { xNorm: number; yNorm: number };
 };
+function pageAnchorFromMeta(meta: unknown): { xNorm: number; yNorm: number } | undefined {
+  if (!meta || typeof meta !== 'object') return undefined;
+  const anchor = (meta as { pageAnchor?: { xNorm?: unknown; yNorm?: unknown } }).pageAnchor;
+  if (
+    anchor &&
+    typeof anchor.xNorm === 'number' &&
+    typeof anchor.yNorm === 'number' &&
+    Number.isFinite(anchor.xNorm) &&
+    Number.isFinite(anchor.yNorm)
+  ) {
+    return { xNorm: anchor.xNorm, yNorm: anchor.yNorm };
+  }
+  return undefined;
+}
 function suggestionIdFromMeta(meta: unknown): string | null {
   if (!meta || typeof meta !== 'object') return null;
   const id = (
@@ -48,6 +66,8 @@ export function collectAcceptedEditsForPdf(
       page: row.page >= 1 ? row.page : 1,
       originalText: quote,
       suggestion: content,
+      contentFormat: readAcceptedEditContentFormat(row.meta),
+      anchor: pageAnchorFromMeta(row.meta),
     });
   }
   edits.sort((a, b) => a.page - b.page || a.originalText.localeCompare(b.originalText, 'ru'));

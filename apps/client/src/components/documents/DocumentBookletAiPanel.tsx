@@ -8,6 +8,13 @@ import {
 import { FeatureHelpButton } from '../ui/FeatureHelp.js';
 import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
+import {
+  bookletTitleFieldsFromAi,
+  EMPTY_BOOKLET_TITLE_FIELDS,
+  loadBookletTitleDraft,
+  saveBookletTitleDraft,
+  type BookletTitleFields,
+} from '../../lib/documents/booklet-title-draft.js';
 
 type Props = {
   documentId: string;
@@ -30,11 +37,28 @@ export function DocumentBookletAiPanel({
 }: Props) {
   const [objectHint, setObjectHint] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [titleDraft, setTitleDraft] = useState<BookletTitleDraftResult | null>(null);
+  const [titleFields, setTitleFields] = useState<BookletTitleFields>(EMPTY_BOOKLET_TITLE_FIELDS);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [statusHint, setStatusHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [captionNotice, setCaptionNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTitleFields(loadBookletTitleDraft(documentId) ?? EMPTY_BOOKLET_TITLE_FIELDS);
+  }, [documentId]);
+
+  function updateTitleField<K extends keyof BookletTitleFields>(key: K, value: BookletTitleFields[K]) {
+    setTitleFields((prev) => {
+      const next = { ...prev, [key]: value };
+      saveBookletTitleDraft(documentId, next);
+      return next;
+    });
+  }
+
+  function applyTitleFields(fields: BookletTitleFields) {
+    setTitleFields(fields);
+    saveBookletTitleDraft(documentId, fields);
+  }
 
   const [requestTitleDraft, { isLoading: requestingTitle }] = useRequestBookletTitleDraftMutation();
   const [searchMaterials, { data: searchResult, isFetching: searching }] =
@@ -50,13 +74,8 @@ export function DocumentBookletAiPanel({
     if (job.status === 'completed') {
       const payload = job.payload as BookletTitleDraftResult | null;
       if (payload?.title) {
-        setTitleDraft({
-          title: payload.title,
-          subtitle: payload.subtitle ?? 'Буклет',
-          tagline: payload.tagline ?? '',
-          message: payload.message,
-        });
-        setStatusHint(payload.message ?? 'Черновик титульника готов.');
+        applyTitleFields(bookletTitleFieldsFromAi(payload));
+        setStatusHint(payload.message ?? 'Черновик титульника готов — можно отредактировать поля ниже.');
       }
       setActiveJobId(null);
     }
@@ -71,12 +90,11 @@ export function DocumentBookletAiPanel({
     if (!versionReady) return;
     setError(null);
     setStatusHint(null);
-    setTitleDraft(null);
     try {
       const result = await requestTitleDraft({
         documentId,
         projectName: projectName ?? undefined,
-        objectHint: objectHint.trim() || documentTitle,
+        objectHint: objectHint.trim() || titleFields.title.trim() || documentTitle,
       }).unwrap();
       setActiveJobId(result.jobId);
       setStatusHint('ИИ готовит черновик титульника…');
@@ -139,23 +157,64 @@ export function DocumentBookletAiPanel({
         {captionNotice && <p className="text-xs text-emerald-700">{captionNotice}</p>}
       </div>
 
-      <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
+      <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-slate-800">Черновик титульника</span>
           <FeatureHelpButton title="Черновик титульника">
-            <p>ИИ предложит заголовок, подзаголовок и короткий слоган. Текст нужно вручную перенести на титульную страницу в «Макет».</p>
+            <p>
+              Впишите заголовок, подзаголовок и слоган вручную или нажмите «Сгенерировать черновик» —
+              ИИ заполнит поля, их можно сразу поправить.
+            </p>
+            <p>Готовый текст перенесите на титульную страницу в «Макет».</p>
           </FeatureHelpButton>
         </div>
+
         <label className="block text-xs text-slate-600">
-          Подсказка (необязательно)
+          Заголовок
+          <input
+            value={titleFields.title}
+            onChange={(e) => updateTitleField('title', e.target.value)}
+            placeholder="Например: Архитектурное бюро: инновации и стиль"
+            disabled={!versionReady}
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+          />
+        </label>
+
+        <label className="block text-xs text-slate-600">
+          Подзаголовок
+          <input
+            value={titleFields.subtitle}
+            onChange={(e) => updateTitleField('subtitle', e.target.value)}
+            placeholder="Буклет"
+            disabled={!versionReady}
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+          />
+        </label>
+
+        <label className="block text-xs text-slate-600">
+          Слоган <span className="text-slate-400">(необязательно)</span>
+          <input
+            value={titleFields.tagline}
+            onChange={(e) => updateTitleField('tagline', e.target.value)}
+            placeholder="Короткая фраза под заголовком"
+            disabled={!versionReady}
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
+          />
+        </label>
+
+        <label className="block text-xs text-slate-600">
+          Подсказка для ИИ <span className="text-slate-400">(необязательно)</span>
           <input
             value={objectHint}
             onChange={(e) => setObjectHint(e.target.value)}
-            placeholder={documentTitle}
+            placeholder={
+              titleFields.title.trim() || documentTitle || 'Объект, стиль, назначение буклета'
+            }
             disabled={busy || !versionReady}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm"
+            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm"
           />
         </label>
+
         <div className={reportActionsColumnClass}>
           <button
             type="button"
@@ -166,11 +225,15 @@ export function DocumentBookletAiPanel({
             {busy ? 'ИИ думает…' : 'Сгенерировать черновик'}
           </button>
         </div>
-        {titleDraft && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900">
-            <p className="font-semibold">{titleDraft.title}</p>
-            {titleDraft.subtitle && <p className="mt-1 opacity-90">{titleDraft.subtitle}</p>}
-            {titleDraft.tagline && <p className="mt-1 italic opacity-80">{titleDraft.tagline}</p>}
+
+        {(titleFields.title || titleFields.subtitle || titleFields.tagline) && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Как будет на титуле
+            </p>
+            {titleFields.title ? <p className="font-semibold">{titleFields.title}</p> : null}
+            {titleFields.subtitle ? <p className="mt-1 opacity-90">{titleFields.subtitle}</p> : null}
+            {titleFields.tagline ? <p className="mt-1 italic opacity-80">{titleFields.tagline}</p> : null}
           </div>
         )}
       </div>

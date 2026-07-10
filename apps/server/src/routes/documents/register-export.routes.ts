@@ -33,7 +33,7 @@ export const registerExportRoutes: FastifyPluginAsync<{ env: Env }> = async (app
   const env = opts.env;
 
   async function resolveReadyVersion(documentId: string, versionId: string, user: { sub: string; tenantId: string }) {
-    const document = await findDocumentForUser(app.prisma, documentId, user);
+    const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
     if (!document) return null;
     const version = document.versions.find((v: { id: string; status: string }) => v.id === versionId);
     if (!version || version.status !== 'ready') return null;

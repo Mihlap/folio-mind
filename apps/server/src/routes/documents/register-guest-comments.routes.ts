@@ -12,6 +12,7 @@ import {
 } from '../../lib/share/guest-comment.js';
 import { createMailer } from '../../lib/email/mailer.js';
 import { notifyGuestCommentResolvedGuest } from '../../lib/share/notify-guest-comment.js';
+import { publishGuestCommentDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody } from './schemas.js';
 
 async function assertGuestCommentsDeletable(
@@ -46,7 +47,7 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'view' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -84,7 +85,7 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, commentId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -133,6 +134,12 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
           meta: { commentId, versionId: comment.versionId, page: comment.page },
         },
       });
+
+      void publishGuestCommentDocumentEvent(env, documentId, comment.versionId, 'updated', commentId).catch(
+        (err) => {
+          request.log.warn({ err }, 'guest comment event publish failed');
+        },
+      );
 
       if (resolved && comment.authorEmail && authorReplyText) {
         const version = await app.prisma.documentVersion.findUnique({
@@ -186,7 +193,7 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, commentId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -210,6 +217,16 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
       }
 
       await app.prisma.guestShareComment.delete({ where: { id: commentId } });
+
+      void publishGuestCommentDocumentEvent(
+        env,
+        documentId,
+        comment.versionId,
+        'deleted',
+        commentId,
+      ).catch((err) => {
+        request.log.warn({ err }, 'guest comment event publish failed');
+      });
 
       await app.prisma.auditLog.create({
         data: {
@@ -241,7 +258,7 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -265,6 +282,10 @@ export const registerGuestCommentsRoutes: FastifyPluginAsync<{ env: Env }> = asy
       });
 
       if (result.count > 0) {
+        void publishGuestCommentDocumentEvent(env, documentId, versionId, 'cleared').catch((err) => {
+          request.log.warn({ err }, 'guest comment event publish failed');
+        });
+
         await app.prisma.auditLog.create({
           data: {
             action: 'document.guest_comments_cleared',

@@ -12,6 +12,7 @@ import {
   useLazyGetSourceDocxUrlQuery,
   useListAnnotationsQuery,
 } from '@folio-mind/store';
+import { normalizeMarkdownInput } from '@folio-mind/edit-markdown';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 import type { ConfidenceLevel } from './DocumentVersionConfidenceBadge.js';
 
@@ -63,6 +64,8 @@ export function useDocumentAnnotationsPanel({
   const { data: docData, refetch: refetchDocument } = useGetDocumentQuery(documentId, {
     skip: !documentId,
   });
+  const sourceVersion = docData?.versions.find((v) => v.id === versionId);
+  const hasSourceDocx = hasUserSourceDocx(sourceVersion?.sourceDocxKey);
   const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [fetchHighlightDocxUrl] = useLazyGetHighlightDocxUrlQuery();
@@ -173,11 +176,27 @@ export function useDocumentAnnotationsPanel({
     if (!exportHighlightJob) return;
     if (exportHighlightJob.status === 'completed') {
       setPollExportHighlight(false);
+      const payload =
+        typeof exportHighlightJob.payload === 'object' && exportHighlightJob.payload
+          ? (exportHighlightJob.payload as {
+              message?: string;
+              highlighted?: number;
+              failed?: number;
+            })
+          : null;
       void (async () => {
         try {
           const { url } = await fetchHighlightDocxUrl({ documentId, versionId }).unwrap();
           window.open(url, '_blank', 'noopener,noreferrer');
-          setApplyHint('DOCX с подсветкой правок готов к скачиванию.');
+          if (payload?.message) {
+            setApplyHint(payload.message);
+          } else if (payload?.failed && payload.failed > 0) {
+            setApplyHint(
+              `DOCX готов: подсвечено ${payload.highlighted ?? 0} из ${(payload.highlighted ?? 0) + payload.failed} правок.`,
+            );
+          } else {
+            setApplyHint('DOCX с подсветкой правок готов к скачиванию.');
+          }
         } catch {
           setError('DOCX сформирован, но ссылка для скачивания недоступна');
         }
@@ -185,15 +204,24 @@ export function useDocumentAnnotationsPanel({
     }
     if (exportHighlightJob.status === 'failed') {
       setPollExportHighlight(false);
-      setError(
+      const rawError =
         typeof exportHighlightJob.payload === 'object' &&
-          exportHighlightJob.payload &&
-          'error' in exportHighlightJob.payload
+        exportHighlightJob.payload &&
+        'error' in exportHighlightJob.payload
           ? String((exportHighlightJob.payload as { error?: string }).error)
-          : 'Не удалось экспортировать DOCX с подсветкой',
-      );
+          : 'Не удалось экспортировать DOCX с подсветкой';
+      if (/не найден в DOCX/i.test(rawError)) {
+        setError(null);
+        setApplyHint(
+          hasSourceDocx
+            ? `${rawError} Проверьте поле «Было» — оно должно дословно совпадать с текстом в Word.`
+            : `${rawError} Без исходного DOCX это часто происходит из‑за PDF→Word. Используйте «Собрать PDF с правками» или прикрепите DOCX через баннер выше.`,
+        );
+      } else {
+        setError(rawError);
+      }
     }
-  }, [exportHighlightJob, documentId, versionId, fetchHighlightDocxUrl]);
+  }, [exportHighlightJob, documentId, versionId, fetchHighlightDocxUrl, hasSourceDocx]);
 
   useEffect(() => {
     if (!focusedAnnotationId) return;
@@ -246,7 +274,7 @@ export function useDocumentAnnotationsPanel({
 
   async function handleAddManualEdit() {
     const before = editBefore.trim();
-    const after = editAfter.trim();
+    const after = normalizeMarkdownInput(editAfter).trim();
     if (!before || !after) return;
     setError(null);
     try {
@@ -258,6 +286,7 @@ export function useDocumentAnnotationsPanel({
         content: after,
         quote: before,
         kind: 'accepted_edit',
+        contentFormat: 'markdown',
         ...coords,
       }).unwrap();
       setEditBefore('');
@@ -268,8 +297,6 @@ export function useDocumentAnnotationsPanel({
     }
   }
 
-  const sourceVersion = docData?.versions.find((v) => v.id === versionId);
-  const hasSourceDocx = hasUserSourceDocx(sourceVersion?.sourceDocxKey);
   const applyPayload = applyJob?.payload as Record<string, unknown> | null;
   const applyConfidenceLevel: ConfidenceLevel | null =
     applyPayload?.confidenceLevel === 'green' ||

@@ -1,9 +1,9 @@
 import type { PDFDocument } from 'pdf-lib';
 import { rgb } from 'pdf-lib';
-import { expandEraseRegion, editPositionKey, type TextItem, type TextMatch } from './find-text-positions.js';
-import { calibrateFontSize, PdfEditFontCache } from './pdf-edit-fonts.js';
-import { splitSuggestionByOriginalLines } from './pdf-text-lines.js';
-import { expandBoxDownward, fitReplacementOnPage } from './pdf-fit-replacement-text.js';
+import { editPositionKey, type TextItem, type TextMatch } from './find-text-positions.js';
+import { calibrateFontSize, fontSizeFromTextItems, pickEmbeddedFontBytes, PdfEditFontCache } from './pdf-edit-fonts.js';
+import { splitSuggestionByOriginalLines, explicitTextLines, paragraphDrawMode } from './pdf-text-lines.js';
+import { fitReplacementOnPage, fitReplacementAtLayoutLines } from './pdf-fit-replacement-text.js';
 
 const HORIZONTAL_PAD = 8;
 const VERTICAL_PAD = 4;
@@ -16,7 +16,6 @@ type LineDraw = {
   text: string;
   fontSize: number;
   font: Awaited<ReturnType<PdfEditFontCache['resolve']>>;
-  eraseBox: Box;
 };
 
 function textItemBox(item: TextItem): Box {
@@ -37,10 +36,6 @@ function unionBoxes(a: Box, b: Box): Box {
   return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
 }
 
-function boxesOverlap(a: Box, b: Box): boolean {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-}
-
 function padBox(box: Box): Box {
   return {
     x: Math.max(0, box.x - HORIZONTAL_PAD),
@@ -50,43 +45,212 @@ function padBox(box: Box): Box {
   };
 }
 
-function computeEraseBox(
-  line: TextMatch['lines'][number],
-  pageItems: TextItem[],
-  originalText: string,
-  suggestion: string,
-): Box {
-  let region = expandEraseRegion(pageItems, line.box, originalText, suggestion);
-  region = unionBoxes(region, line.box);
-  for (const item of line.items) {
-    region = unionBoxes(region, textItemBox(item));
-  }
-  const padded = padBox(region);
-  for (const item of pageItems) {
-    const itemBox = textItemBox(item);
-    if (boxesOverlap(padded, itemBox)) {
-      region = unionBoxes(region, itemBox);
-    }
-  }
-  return padBox(region);
-}
-
-function eraseMatchRegion(pageItems: TextItem[], match: TextMatch, originalText: string, suggestion: string): Box {
-  let region = expandEraseRegion(pageItems, match.box, originalText, suggestion);
+function tightMatchRegion(match: TextMatch): Box {
+  let region = match.box;
   for (const line of match.lines) {
     region = unionBoxes(region, line.box);
     for (const item of line.items) {
       region = unionBoxes(region, textItemBox(item));
     }
   }
-  const padded = padBox(region);
-  for (const item of pageItems) {
-    const itemBox = textItemBox(item);
-    if (boxesOverlap(padded, itemBox)) {
-      region = unionBoxes(region, itemBox);
-    }
+  return region;
+}
+
+function eraseRegionForEdit(match: TextMatch, draws: LineDraw[]): Box {
+  let region = tightMatchRegion(match);
+  for (const draw of draws) {
+    if (!draw.text) continue;
+    const textWidth = draw.font.widthOfTextAtSize(draw.text, draw.fontSize);
+    const height = draw.fontSize * 1.25;
+    region = unionBoxes(region, {
+      x: draw.x,
+      y: draw.y - draw.fontSize * 0.15,
+      width: Math.max(textWidth, 1),
+      height,
+    });
   }
   return padBox(region);
+}
+
+async function drawExpandedSuggestionLines(
+  fontCache: PdfEditFontCache,
+  pdfDoc: PDFDocument,
+  match: TextMatch,
+  layoutLines: TextMatch['lines'],
+  suggestion: string,
+  pageItems: TextItem[],
+  originalText: string,
+  fontBytesByName: Map<string, Uint8Array>,
+  pageWidth: number,
+  pageHeight: number,
+): Promise<LineDraw[]> {
+  const suggestionLines = explicitTextLines(suggestion);
+  if (suggestionLines.length === 0) return [];
+
+  const lastLayout = layoutLines[layoutLines.length - 1] ?? layoutLines[0]!;
+  const anchorLine = layoutLines[0]!;
+  const draws: LineDraw[] = [];
+  let belowY = lastLayout.y;
+  let belowLineHeight = lastLayout.style.lineHeight;
+
+  for (let i = 0; i < suggestionLines.length; i++) {
+    const layoutLine = layoutLines[i];
+    const text = suggestionLines[i]!;
+    const line = layoutLine ?? lastLayout;
+    const { font, fontSize } = await resolveLayoutLineMetrics(
+      fontCache,
+      pdfDoc,
+      line,
+      fontBytesByName,
+    );
+    const startY = layoutLine ? layoutLine.y : belowY - belowLineHeight;
+    const fitted = fitReplacementOnPage({
+      font,
+      text,
+      baseFontSize: fontSize,
+      startX: layoutLine?.x ?? lastLayout.x,
+      startY,
+      pageWidth,
+      pageHeight,
+    });
+    if (fitted.lines.length === 0) continue;
+    for (const fittedLine of fitted.lines) {
+      draws.push({
+        x: fittedLine.x,
+        y: fittedLine.y,
+        text: fittedLine.text,
+        fontSize: fittedLine.fontSize,
+        font,
+      });
+    }
+    belowY = fitted.lines[fitted.lines.length - 1]!.y;
+    belowLineHeight = fitted.lineHeight;
+  }
+
+  if (draws.length === 0 && anchorLine) {
+    return drawFullSuggestionBlock(
+      fontCache,
+      pdfDoc,
+      match,
+      layoutLines,
+      suggestion,
+      pageItems,
+      originalText,
+      fontBytesByName,
+      pageWidth,
+      pageHeight,
+    );
+  }
+  return draws;
+}
+
+async function resolveLayoutLineMetrics(
+  fontCache: PdfEditFontCache,
+  pdfDoc: PDFDocument,
+  line: TextMatch['lines'][number],
+  fontBytesByName: Map<string, Uint8Array>,
+): Promise<{ font: Awaited<ReturnType<PdfEditFontCache['resolve']>>; fontSize: number }> {
+  const font = await fontCache.resolve(pdfDoc, line.style, fontBytesByName);
+  if (pickEmbeddedFontBytes(line.style, fontBytesByName)) {
+    return { font, fontSize: fontSizeFromTextItems(line.items) };
+  }
+  const sizes = line.items.map((item) => calibrateFontSize(item, font));
+  const fontSize =
+    sizes.length > 0
+      ? sizes.reduce((sum, size) => sum + size, 0) / sizes.length
+      : line.style.fontSize;
+  return { font, fontSize };
+}
+
+async function drawParagraphAtLayoutLines(
+  fontCache: PdfEditFontCache,
+  pdfDoc: PDFDocument,
+  match: TextMatch,
+  layoutLines: TextMatch['lines'],
+  suggestion: string,
+  pageItems: TextItem[],
+  originalText: string,
+  fontBytesByName: Map<string, Uint8Array>,
+  pageWidth: number,
+  pageHeight: number,
+): Promise<LineDraw[]> {
+  const lineMetrics = await Promise.all(
+    layoutLines.map((line) => resolveLayoutLineMetrics(fontCache, pdfDoc, line, fontBytesByName)),
+  );
+  const wrapMetrics = lineMetrics[0]!;
+  const baseFontSize =
+    lineMetrics.reduce((sum, metrics) => sum + metrics.fontSize, 0) / lineMetrics.length;
+  const fitted = fitReplacementAtLayoutLines({
+    font: wrapMetrics.font,
+    text: suggestion.trim(),
+    baseFontSize,
+    layoutLines,
+    pageWidth,
+    pageHeight,
+  });
+  if (fitted.lines.length === 0) return [];
+  return fitted.lines.map((line, index) => {
+    const metrics = lineMetrics[Math.min(index, lineMetrics.length - 1)]!;
+    return {
+      x: line.x,
+      y: line.y,
+      text: line.text,
+      fontSize: metrics.fontSize,
+      font: metrics.font,
+    };
+  });
+}
+
+async function drawFullSuggestionBlock(
+  fontCache: PdfEditFontCache,
+  pdfDoc: PDFDocument,
+  match: TextMatch,
+  layoutLines: TextMatch['lines'],
+  suggestion: string,
+  pageItems: TextItem[],
+  originalText: string,
+  fontBytesByName: Map<string, Uint8Array>,
+  pageWidth: number,
+  pageHeight: number,
+): Promise<LineDraw[]> {
+  if (layoutLines.length > 1) {
+    return drawParagraphAtLayoutLines(
+      fontCache,
+      pdfDoc,
+      match,
+      layoutLines,
+      suggestion,
+      pageItems,
+      originalText,
+      fontBytesByName,
+      pageWidth,
+      pageHeight,
+    );
+  }
+  const firstLine = layoutLines[0]!;
+  const { font, fontSize } = await resolveLayoutLineMetrics(
+    fontCache,
+    pdfDoc,
+    firstLine,
+    fontBytesByName,
+  );
+  const fitted = fitReplacementOnPage({
+    font,
+    text: suggestion.trim(),
+    baseFontSize: fontSize,
+    startX: firstLine.x,
+    startY: firstLine.y,
+    pageWidth,
+    pageHeight,
+  });
+  if (fitted.lines.length === 0) return [];
+  return fitted.lines.map((line) => ({
+    x: line.x,
+    y: line.y,
+    text: line.text,
+    fontSize: line.fontSize,
+    font,
+  }));
 }
 
 async function buildLineDraws(
@@ -105,28 +269,59 @@ async function buildLineDraws(
     const font = await fontCache.resolve(pdfDoc, match.style, fontBytesByName);
     const text = suggestion.trim();
     if (!text) return [];
-    const eraseBox = eraseMatchRegion(pageItems, match, originalText, suggestion);
+    const baseFontSize = pickEmbeddedFontBytes(match.style, fontBytesByName)
+      ? fontSizeFromTextItems(
+          match.lines.flatMap((line) => line.items).length > 0
+            ? match.lines.flatMap((line) => line.items)
+            : [],
+        )
+      : match.style.fontSize;
     const fitted = fitReplacementOnPage({
       font,
       text,
-      baseFontSize: match.style.fontSize,
+      baseFontSize: baseFontSize || match.style.fontSize,
       startX: match.box.x,
       startY: match.box.y + match.box.height / 1.3,
       pageWidth,
       pageHeight,
     });
-    const expandedErase =
-      fitted.lines.length > 1
-        ? expandBoxDownward(eraseBox, fitted.lines.length - 1, fitted.lineHeight)
-        : eraseBox;
     return fitted.lines.map((line) => ({
       x: line.x,
       y: line.y,
       text: line.text,
       fontSize: line.fontSize,
       font,
-      eraseBox: expandedErase,
     }));
+  }
+
+  if (layoutLines.length > 1) {
+    const mode = paragraphDrawMode(layoutLines.length, suggestion);
+    if (mode === 'expanded') {
+      return drawExpandedSuggestionLines(
+        fontCache,
+        pdfDoc,
+        match,
+        layoutLines,
+        suggestion,
+        pageItems,
+        originalText,
+        fontBytesByName,
+        pageWidth,
+        pageHeight,
+      );
+    }
+    return drawFullSuggestionBlock(
+      fontCache,
+      pdfDoc,
+      match,
+      layoutLines,
+      suggestion,
+      pageItems,
+      originalText,
+      fontBytesByName,
+      pageWidth,
+      pageHeight,
+    );
   }
 
   const originalTexts = layoutLines.map((line) => line.originalText);
@@ -135,7 +330,6 @@ async function buildLineDraws(
   for (let i = 0; i < layoutLines.length; i++) {
     const line = layoutLines[i]!;
     const text = (suggestionLines[i] ?? '').trim();
-    const eraseBox = computeEraseBox(line, pageItems, originalText, suggestion);
     if (!text) {
       draws.push({
         x: line.x,
@@ -143,16 +337,15 @@ async function buildLineDraws(
         text: '',
         fontSize: line.style.fontSize,
         font: await fontCache.resolve(pdfDoc, line.style, fontBytesByName),
-        eraseBox,
       });
       continue;
     }
-    const font = await fontCache.resolve(pdfDoc, line.style, fontBytesByName);
-    const sizes = line.items.map((item) => calibrateFontSize(item, font));
-    const fontSize =
-      sizes.length > 0
-        ? sizes.reduce((sum, size) => sum + size, 0) / sizes.length
-        : line.style.fontSize;
+    const { font, fontSize } = await resolveLayoutLineMetrics(
+      fontCache,
+      pdfDoc,
+      line,
+      fontBytesByName,
+    );
     const fitted = fitReplacementOnPage({
       font,
       text,
@@ -162,10 +355,6 @@ async function buildLineDraws(
       pageWidth,
       pageHeight,
     });
-    const expandedErase =
-      fitted.lines.length > 1
-        ? expandBoxDownward(eraseBox, fitted.lines.length - 1, fitted.lineHeight)
-        : eraseBox;
     for (const fittedLine of fitted.lines) {
       draws.push({
         x: fittedLine.x,
@@ -173,7 +362,6 @@ async function buildLineDraws(
         text: fittedLine.text,
         fontSize: fittedLine.fontSize,
         font,
-        eraseBox: expandedErase,
       });
     }
   }
@@ -232,19 +420,7 @@ export async function renderTextReplacements(
     );
     if (draws.length === 0) continue;
 
-    const eraseBoxes = new Map<string, Box>();
-    const matchErase = eraseMatchRegion(pageItems, match, edit.originalText, edit.suggestion);
-    eraseBoxes.set(
-      `${matchErase.x}:${matchErase.y}:${matchErase.width}:${matchErase.height}`,
-      matchErase,
-    );
-    for (const draw of draws) {
-      const key = `${draw.eraseBox.x}:${draw.eraseBox.y}:${draw.eraseBox.width}:${draw.eraseBox.height}`;
-      eraseBoxes.set(key, draw.eraseBox);
-    }
-    for (const box of eraseBoxes.values()) {
-      drawErase(page, box);
-    }
+    drawErase(page, eraseRegionForEdit(match, draws));
 
     pending.push({ pageIndex, draws });
     applied++;

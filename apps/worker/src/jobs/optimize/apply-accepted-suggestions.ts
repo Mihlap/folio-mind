@@ -26,11 +26,6 @@ type ApplyAcceptedPayload = WorkerJobPayload & {
   targetS3Key?: string;
   requestId?: string;
 };
-type AcceptedEdit = {
-  page: number;
-  originalText: string;
-  suggestion: string;
-};
 export async function processApplyAcceptedSuggestionsJob(
   env: WorkerEnv,
   data: ApplyAcceptedPayload,
@@ -88,14 +83,29 @@ export async function processApplyAcceptedSuggestionsJob(
     if (collected.length === 0) {
       throw new Error('Нет принятых правок для сборки PDF');
     }
-    const edits: AcceptedEdit[] = collected;
+    const edits = collected;
     const sourceBuffer = await getObjectBuffer(sourceS3Key);
     const pdfDoc = await PDFDocument.load(sourceBuffer);
     registerPdfFontkit(pdfDoc);
     const font = await embedCyrillicFont(pdfDoc);
-    const { positions: highlights } = await findAllTextPositions(sourceBuffer, edits);
+    const highlightEdits = edits.map((edit) => ({
+      page: edit.page,
+      originalText: edit.originalText,
+      suggestion: edit.suggestion,
+      anchor: edit.anchor,
+    }));
+    const { positions: highlights } = await findAllTextPositions(sourceBuffer, highlightEdits);
     renderAllHighlights(pdfDoc, highlights);
-    renderAcceptedEditsAppendix(pdfDoc, font, edits);
+    renderAcceptedEditsAppendix(
+      pdfDoc,
+      font,
+      edits.map((edit) => ({
+        page: edit.page,
+        originalText: edit.originalText,
+        suggestion: edit.suggestion,
+        contentFormat: edit.contentFormat,
+      })),
+    );
     const outputBytes = await pdfDoc.save();
     const outputBuffer = Buffer.from(outputBytes);
     await putObjectBuffer({

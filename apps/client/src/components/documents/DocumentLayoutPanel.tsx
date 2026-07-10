@@ -18,6 +18,7 @@ type Props = {
   layout: LayoutEditorState;
   viewerPage: number;
   versionReady: boolean;
+  canEdit?: boolean;
   documentId: string;
   versionId: string;
   pageCount?: number;
@@ -58,6 +59,7 @@ export function DocumentLayoutPanel({
   layout,
   viewerPage,
   versionReady,
+  canEdit = true,
   documentId,
   versionId,
   pageCount = 0,
@@ -187,6 +189,7 @@ export function DocumentLayoutPanel({
         versionId,
         objects,
         blankInsertions: layout.blankInsertions,
+        pageChrome: layout.pageChrome,
         saveMode,
       }).unwrap();
       setOperationJobId(result.operationJobId);
@@ -305,6 +308,48 @@ export function DocumentLayoutPanel({
         />
       </label>
 
+      <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+        <p className="text-xs font-medium text-slate-700">Колонтитулы и нумерация</p>
+        <label className="block text-xs text-slate-600">
+          Верхний колонтитул
+          <input
+            type="text"
+            value={layout.pageChrome.headerText ?? ''}
+            disabled={!canEdit}
+            onChange={(e) =>
+              layout.setPageChrome({ ...layout.pageChrome, headerText: e.target.value })
+            }
+            placeholder="Название проекта"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="block text-xs text-slate-600">
+          Нижний колонтитул
+          <input
+            type="text"
+            value={layout.pageChrome.footerText ?? ''}
+            disabled={!canEdit}
+            onChange={(e) =>
+              layout.setPageChrome({ ...layout.pageChrome, footerText: e.target.value })
+            }
+            placeholder="Бюро · {page} из {pages}"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={layout.pageChrome.showPageNumbers ?? false}
+            disabled={!canEdit}
+            onChange={(e) =>
+              layout.setPageChrome({ ...layout.pageChrome, showPageNumbers: e.target.checked })
+            }
+            className="rounded border-slate-300"
+          />
+          Нумерация страниц
+        </label>
+      </div>
+
       <input
         ref={fileInputRef}
         type="file"
@@ -379,6 +424,32 @@ export function DocumentLayoutPanel({
               >
                 Заменить фото
               </button>
+              <label className="flex w-full flex-col gap-0.5 text-xs text-slate-600">
+                Яркость
+                <input
+                  type="range"
+                  min={-100}
+                  max={100}
+                  value={selectedImage.brightness ?? 0}
+                  disabled={savePending || !canEdit}
+                  onChange={(e) =>
+                    layout.updateSelectedImageAdjustments({ brightness: Number(e.target.value) })
+                  }
+                />
+              </label>
+              <label className="flex w-full flex-col gap-0.5 text-xs text-slate-600">
+                Контраст
+                <input
+                  type="range"
+                  min={-100}
+                  max={100}
+                  value={selectedImage.contrast ?? 0}
+                  disabled={savePending || !canEdit}
+                  onChange={(e) =>
+                    layout.updateSelectedImageAdjustments({ contrast: Number(e.target.value) })
+                  }
+                />
+              </label>
               <label className="flex w-full flex-col gap-0.5 text-xs text-slate-600">
                 Подпись под рендером
                 <input

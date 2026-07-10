@@ -120,6 +120,8 @@ export {
   type LayoutFill,
   type LayoutRect,
   type LayoutImageDrawParams,
+  type LayoutPageChrome,
+  formatLayoutPageChromeText,
 } from './layout-editor.js';
 export {
   BUILTIN_LAYOUT_TEMPLATES,
@@ -244,3 +246,30 @@ export {
   PLACEHOLDER_GUEST_RESOLVE_REPLY,
 } from './user-labels.js';
 export { captionFromFileName } from './caption-from-filename.js';
+export {
+  DOCUMENT_EVENTS_CHANNEL_PREFIX,
+  documentVersionEventsChannel,
+  documentMetaEventsChannel,
+  DOCUMENT_META_CHANNEL_SUFFIX,
+  parseDocumentVersionEvent,
+  parseDocumentVersionScopeEvent,
+  parseDocumentMetaScopeEvent,
+  type DocumentVersionEvent,
+  type DocumentVersionScopeEvent,
+  type DocumentMetaScopeEvent,
+  type DocumentScopeEvent,
+  type GuestCommentDocumentEvent,
+  type PageReviewDocumentEvent,
+  type ReviewStatusDocumentEvent,
+  type GuestCommentEventAction,
+  type PageReviewEventAction,
+} from './document-events.js';
+export {
+  DOCUMENT_MEMBER_ROLES,
+  DOCUMENT_ROLE_LABELS,
+  isDocumentMemberRole,
+  roleHasCapability,
+  type DocumentAccessRole,
+  type DocumentCapability,
+  type DocumentMemberRole,
+} from './document-roles.js';

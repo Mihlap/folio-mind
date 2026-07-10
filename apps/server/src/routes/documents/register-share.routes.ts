@@ -11,7 +11,9 @@ import {
   buildGuestShareUrl,
   createShareLinkToken,
   isShareLinkActive,
+  resolveShareLinkUrl,
 } from '../../lib/share/share-link.js';
+import { encryptShareToken } from '../../lib/share/share-token-cipher.js';
 import type { Env } from '../../lib/config/env.js';
 import { isS3Configured } from '../../lib/storage/s3.js';
 import { hashSharePassword } from '../../lib/share/share-password.js';
@@ -27,6 +29,7 @@ const shareLinkItemSchema = z.object({
   allowBookletZip: z.boolean(),
   createdAt: z.string(),
   active: z.boolean(),
+  url: z.string().nullable(),
 });
 
 export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { env }) => {
@@ -45,7 +48,15 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
             .default(DEFAULT_SHARE_LINK_TTL_PRESET),
           allowDownload: z.boolean().optional(),
           allowBookletZip: z.boolean().optional(),
-          password: z.string().min(4).max(64).optional(),
+          password: z.preprocess(
+            (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+            z
+              .string()
+              .trim()
+              .min(4, 'Пароль ссылки должен быть не короче 4 символов')
+              .max(64, 'Пароль ссылки не длиннее 64 символов')
+              .optional(),
+          ),
         }),
         response: {
           201: z.object({
@@ -66,7 +77,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -93,6 +104,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
           allowDownload: request.body.allowDownload ?? false,
           allowBookletZip: request.body.allowBookletZip ?? false,
           passwordHash,
+          tokenCipher: encryptShareToken(token, env.JWT_SECRET),
         },
       });
 
@@ -134,7 +146,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'view' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -152,6 +164,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
       return {
         items: links.map((link) => {
           const versionNum = versionById.get(link.versionId);
+          const active = isShareLinkActive(link);
           return {
             id: link.id,
             versionId: link.versionId,
@@ -161,7 +174,8 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
             allowDownload: link.allowDownload,
             allowBookletZip: link.allowBookletZip,
             createdAt: link.createdAt.toISOString(),
-            active: isShareLinkActive(link),
+            active,
+            url: active ? resolveShareLinkUrl(env, link.tokenCipher) : null,
           };
         }),
       };
@@ -185,7 +199,7 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'manage' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }

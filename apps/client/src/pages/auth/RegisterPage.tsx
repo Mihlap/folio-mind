@@ -1,5 +1,5 @@
-import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useRegisterMutation } from '@folio-mind/store';
 import { Button } from '../../components/ui/Button.js';
 import { PasswordInput } from '../../components/auth/PasswordInput.js';
@@ -9,8 +9,20 @@ import { PhoneAuthForm } from '../../components/auth/PhoneAuthForm.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage, validatePasswordClient } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
+
 type AuthTab = 'email' | 'phone';
+
+type TenantInvitePreview = {
+  valid: true;
+  email: string | null;
+  tenantName: string;
+  documentTitle: string | null;
+  documentRole: string | null;
+};
+
 export function RegisterPage() {
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite')?.trim() || null;
   const [tab, setTab] = useState<AuthTab>('email');
   const [register, { isLoading, error }] = useRegisterMutation();
   const navigate = useNavigate();
@@ -20,6 +32,34 @@ export function RegisterPage() {
   const [name, setName] = useState('');
   const [clientError, setClientError] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [invitePreview, setInvitePreview] = useState<TenantInvitePreview | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/auth/tenant-invite?token=${encodeURIComponent(inviteToken)}`,
+        );
+        if (!res.ok) {
+          if (!cancelled) setInviteError('Ссылка приглашения недействительна или истекла');
+          return;
+        }
+        const data = (await res.json()) as TenantInvitePreview;
+        if (cancelled) return;
+        setInvitePreview(data);
+        if (data.email) setEmail(data.email);
+      } catch {
+        if (!cancelled) setInviteError('Не удалось проверить ссылку приглашения');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteToken]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setClientError(null);
@@ -42,16 +82,37 @@ export function RegisterPage() {
         password,
         name: name || undefined,
         captchaToken: captchaToken ?? undefined,
+        inviteToken: inviteToken ?? undefined,
       }).unwrap();
       navigate('/check-email', { state: { email: res.email } });
     } catch {
       // The mutation error state renders the message below.
     }
   }
+
   const displayError =
     clientError ?? (error ? getAuthErrorMessage(error, 'Не удалось зарегистрироваться') : null);
+  const emailAlreadyRegistered =
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    (error as { status?: number }).status === 409;
+
+  const subtitle = invitePreview
+    ? `Присоединение к «${invitePreview.tenantName}»`
+    : 'Создайте рабочее пространство';
+
   return (
-    <AuthLayout title="Регистрация" subtitle="Создайте рабочее пространство">
+    <AuthLayout title="Регистрация" subtitle={subtitle}>
+      {invitePreview && (
+        <p className="mb-3 rounded-lg border border-folio-200 bg-folio-50 px-3 py-2 text-sm text-folio-900">
+          {invitePreview.documentTitle
+            ? `После подтверждения почты вы получите доступ к документу «${invitePreview.documentTitle}».`
+            : 'После подтверждения почты вы присоединитесь к рабочему пространству команды.'}
+        </p>
+      )}
+      {inviteError && <p className="mb-3 text-sm text-rose-600">{inviteError}</p>}
+
       <div className="relative mb-4 flex rounded-lg border border-slate-200 bg-slate-50 p-1">
         <div
           className="absolute inset-y-1 rounded-md bg-white shadow-sm transition-all duration-300 ease-out"
@@ -103,9 +164,10 @@ export function RegisterPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                readOnly={Boolean(invitePreview?.email)}
                 required
                 autoComplete="email"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 outline-none focus:border-folio-500 focus:ring-2 focus:ring-folio-500"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 outline-none focus:border-folio-500 focus:ring-2 focus:ring-folio-500 read-only:bg-slate-50"
               />
             </label>
             <PasswordInput
@@ -131,12 +193,23 @@ export function RegisterPage() {
             />
             <TurnstileWidget onToken={setCaptchaToken} className="flex justify-center" />
             {displayError && <p className="text-sm text-red-600">{displayError}</p>}
+            {emailAlreadyRegistered && inviteToken && (
+              <p className="text-sm text-slate-600">
+                Уже есть аккаунт?{' '}
+                <Link
+                  to={`/login?invite=${encodeURIComponent(inviteToken)}`}
+                  className="font-medium text-folio-600 hover:underline"
+                >
+                  Войти и присоединиться
+                </Link>
+              </p>
+            )}
             <Button
               type="submit"
               className="w-full"
               disabled={isLoading || (isTurnstileEnabled && !captchaToken)}
             >
-              {isLoading ? 'Создание…' : 'Создать аккаунт'}
+              {isLoading ? 'Создание…' : invitePreview ? 'Присоединиться' : 'Создать аккаунт'}
             </Button>
           </form>
         </div>

@@ -26,6 +26,10 @@ export function markerKindClass(kind: PdfPageMarkerKind): string {
       return 'bg-emerald-500 ring-emerald-200 hover:bg-emerald-600';
     case 'page_review_fix':
       return 'bg-amber-500 ring-amber-200 hover:bg-amber-600';
+    case 'internal_arrow':
+      return 'bg-violet-500 ring-violet-200 hover:bg-violet-600';
+    case 'internal_frame':
+      return 'bg-fuchsia-500 ring-fuchsia-200 hover:bg-fuchsia-600';
     default:
       return 'bg-amber-500 ring-amber-200 hover:bg-amber-600';
   }

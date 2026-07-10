@@ -29,7 +29,7 @@ export const registerBookletAiRoutes: FastifyPluginAsync<{ env: Env }> = async (
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'edit' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }

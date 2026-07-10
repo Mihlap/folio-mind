@@ -36,15 +36,32 @@ import {
 import { DocumentPageOrderPanel } from './DocumentPageOrderPanel.js';
 import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
+import { DocumentEditsApplyActions } from './DocumentEditsApplyActions.js';
 import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
+import { DocumentInternalMarkupPanel } from './DocumentInternalMarkupPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
+import { DocumentAccessPanel } from './DocumentAccessPanel.js';
 import { DocumentBookletPanel } from './DocumentBookletPanel.js';
 import { DocumentGuestCommentsPanel } from './DocumentGuestCommentsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
-import type { DocumentReviewStatus } from '@folio-mind/store';
+import type { DocumentReviewStatus, ShareLinkItem } from '@folio-mind/store';
+import { roleHasCapability, type DocumentAccessRole } from '@folio-mind/store';
 import { useDocumentAnnotationsPanel } from './useDocumentAnnotationsPanel.js';
+import { DocumentVersionContextBanner } from './DocumentVersionContextBanner.js';
+import { DocumentToolScenarioBar } from './DocumentToolScenarioBar.js';
+import { DocumentVersionCreatedNotice } from './DocumentVersionCreatedNotice.js';
+import type { VersionCreatedNotice } from '../../hooks/useVersionCreatedNotice.js';
+import {
+  buildScenarioSteps,
+  buildVersionWorkflowContext,
+  inferDefaultToolScenario,
+  isToolGroupVisible,
+  readStoredToolScenario,
+  writeStoredToolScenario,
+  type ToolScenario,
+} from '../../lib/documents/version-workflow.js';
 function parsePageNumbers(input: string, maxPage: number): number[] | string {
   const parts = input
     .split(/[,;\s]+/)
@@ -82,10 +99,16 @@ function getMutationError(err: unknown): string {
 }
 type ToolGroupId = 'pdf' | 'layout' | 'approval' | 'edits';
 const TOOL_GROUP_IDS: ToolGroupId[] = ['pdf', 'layout', 'approval', 'edits'];
+const GROUP_SECTIONS: Record<ToolGroupId, ToolSectionId[]> = {
+  pdf: ['optimize', 'split', 'pages', 'merge', 'diff'],
+  layout: ['layout', 'booklet'],
+  approval: ['team-access', 'share', 'annotations'],
+  edits: ['edits'],
+};
 
 function getSectionGroup(sectionId: ToolSectionId): ToolGroupId {
   if (sectionId === 'layout' || sectionId === 'booklet') return 'layout';
-  if (sectionId === 'share' || sectionId === 'annotations') return 'approval';
+  if (sectionId === 'team-access' || sectionId === 'share' || sectionId === 'annotations') return 'approval';
   if (sectionId === 'edits') return 'edits';
   return 'pdf';
 }
@@ -108,7 +131,7 @@ function ToolGroupHeader({
           type="button"
           onClick={onToggle}
           aria-expanded={isOpen}
-          className="flex w-full items-start gap-2 px-2.5 py-2 text-left"
+          className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-slate-100/80"
         >
           <span className="mt-0.5 shrink-0 text-[10px] text-slate-400" aria-hidden>
             {isOpen ? '▼' : '▶'}
@@ -152,6 +175,13 @@ type Props = {
   documentTitle?: string;
   projectId?: string | null;
   projectName?: string | null;
+  shareLinks?: ShareLinkItem[];
+  openGuestCommentsCount?: number;
+  needsFixMarksCount?: number;
+  acceptedEditsCount?: number;
+  versionCreatedNotice?: VersionCreatedNotice | null;
+  onDismissVersionCreatedNotice?: () => void;
+  documentRole?: string | null;
 };
 export function DocumentPdfOperationsPanel({
   documentId,
@@ -178,10 +208,22 @@ export function DocumentPdfOperationsPanel({
   documentTitle = '',
   projectId = null,
   projectName = null,
+  shareLinks = [],
+  openGuestCommentsCount = 0,
+  needsFixMarksCount = 0,
+  acceptedEditsCount = 0,
+  versionCreatedNotice = null,
+  onDismissVersionCreatedNotice,
+  documentRole = 'owner',
 }: Props) {
+  const accessRole = (documentRole ?? 'owner') as DocumentAccessRole;
+  const canEdit = roleHasCapability(accessRole, 'edit');
+  const canComment = roleHasCapability(accessRole, 'comment');
   const [expanded, setExpanded] = useState(embedded);
   const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
-  const [openGroups, setOpenGroups] = useState<Set<ToolGroupId>>(() => new Set(['pdf']));
+  const [openGroups, setOpenGroups] = useState<Set<ToolGroupId>>(() => new Set());
+  const [toolScenario, setToolScenario] = useState<ToolScenario>('all');
+  const toolScenarioInitializedRef = useRef(false);
   const sectionRefs = useRef<Partial<Record<ToolSectionId, HTMLDivElement | null>>>({});
   const sectionRefCallbacks = useMemo(() => {
     const callbacks = {} as Record<ToolSectionId, (el: HTMLDivElement | null) => void>;
@@ -461,13 +503,63 @@ export function DocumentPdfOperationsPanel({
     return estimateOptimizeSize(sourceBytes, effectivePageCount, optimizePreset);
   }, [activeReady, effectivePageCount, optimizePreset, sourceBytes]);
   const hasLayoutTools = Boolean(layout);
+  const layoutObjectCount = layout?.objects.length ?? 0;
   const visibleToolSectionIds = useMemo(
     () => TOOL_SECTION_IDS.filter((id) => id !== 'layout' || hasLayoutTools),
     [hasLayoutTools],
   );
+  const visibleToolGroupIds = useMemo(
+    () => TOOL_GROUP_IDS.filter((groupId) => isToolGroupVisible(groupId, toolScenario)),
+    [toolScenario],
+  );
+  const workflowContext = useMemo(
+    () =>
+      buildVersionWorkflowContext({
+        activeVersion,
+        versionReady,
+        reviewStatus,
+        shareLinks,
+        openGuestCommentsCount,
+        needsFixMarksCount,
+        acceptedEditsCount,
+      }),
+    [
+      acceptedEditsCount,
+      activeVersion,
+      needsFixMarksCount,
+      openGuestCommentsCount,
+      reviewStatus,
+      shareLinks,
+      versionReady,
+    ],
+  );
+  const scenarioSteps = useMemo(
+    () =>
+      buildScenarioSteps(toolScenario, {
+        layoutObjectCount,
+        hasShareLinkOnCurrentVersion: workflowContext?.hasShareLinkOnCurrentVersion ?? false,
+        openGuestCommentsCount,
+        acceptedEditsCount,
+        versionReady,
+      }),
+    [
+      acceptedEditsCount,
+      layoutObjectCount,
+      openGuestCommentsCount,
+      toolScenario,
+      versionReady,
+      workflowContext?.hasShareLinkOnCurrentVersion,
+    ],
+  );
+  const visibleSectionsForScenario = useMemo(
+    () =>
+      visibleToolSectionIds.filter((id) => visibleToolGroupIds.includes(getSectionGroup(id))),
+    [visibleToolGroupIds, visibleToolSectionIds],
+  );
   const allSectionsOpen =
-    visibleToolSectionIds.length > 0 && visibleToolSectionIds.every((id) => openSections.has(id));
-  const noSectionsOpen = visibleToolSectionIds.every((id) => !openSections.has(id));
+    visibleSectionsForScenario.length > 0 &&
+    visibleSectionsForScenario.every((id) => openSections.has(id));
+  const noSectionsOpen = visibleSectionsForScenario.every((id) => !openSections.has(id));
   function isSectionOpen(id: ToolSectionId) {
     return openSections.has(id);
   }
@@ -479,22 +571,76 @@ export function DocumentPdfOperationsPanel({
       return next;
     });
   }
+  function focusToolSection(sectionId: ToolSectionId) {
+    const group = getSectionGroup(sectionId);
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      next.add(group);
+      return next;
+    });
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      next.add(sectionId);
+      return next;
+    });
+    window.requestAnimationFrame(() => {
+      sectionRefs.current[sectionId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
+  function handleScenarioChange(next: ToolScenario) {
+    setToolScenario(next);
+    writeStoredToolScenario(documentId, next);
+  }
   function expandAllSections() {
-    setOpenSections(new Set(visibleToolSectionIds));
-    setOpenGroups(new Set(TOOL_GROUP_IDS));
+    const sectionIds = visibleToolSectionIds.filter((id) =>
+      visibleToolGroupIds.includes(getSectionGroup(id)),
+    );
+    setOpenSections(new Set(sectionIds));
+    setOpenGroups(new Set(visibleToolGroupIds));
   }
   function collapseAllSections() {
     setOpenSections(new Set());
-    setOpenGroups(new Set(['pdf']));
+    setOpenGroups(new Set());
+  }
+  function visibleSectionsInGroup(groupId: ToolGroupId): ToolSectionId[] {
+    return GROUP_SECTIONS[groupId].filter((id) => visibleToolSectionIds.includes(id));
   }
   function toggleGroup(groupId: ToolGroupId) {
+    const sectionsInGroup = visibleSectionsInGroup(groupId);
+    const soleSection = sectionsInGroup.length === 1 ? sectionsInGroup[0] : null;
+    const opening = !openGroups.has(groupId);
     setOpenGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
+      if (opening) next.add(groupId);
+      else next.delete(groupId);
       return next;
     });
+    if (soleSection) {
+      setOpenSections((prev) => {
+        const next = new Set(prev);
+        if (opening) next.add(soleSection);
+        else next.delete(soleSection);
+        return next;
+      });
+    }
   }
+  useEffect(() => {
+    if (toolScenarioInitializedRef.current || !activeVersion) return;
+    const inferred = inferDefaultToolScenario({
+      activeVersion,
+      acceptedEditsCount,
+      layoutObjectCount,
+      projectId,
+    });
+    setToolScenario(readStoredToolScenario(documentId, inferred));
+    toolScenarioInitializedRef.current = true;
+  }, [
+    acceptedEditsCount,
+    activeVersion,
+    documentId,
+    layoutObjectCount,
+    projectId,
+  ]);
   useEffect(() => {
     if (!editTextInjection) return;
     setOpenGroups((prev) => {
@@ -545,6 +691,35 @@ export function DocumentPdfOperationsPanel({
   const annotationsController = useDocumentAnnotationsPanel(annotationsSharedProps);
   const body = (
     <div className={embedded ? 'space-y-2 p-3' : 'border-t border-slate-100 px-4 pb-4 pt-3 sm:px-5 sm:pb-5'}>
+      {workflowContext && (
+        <DocumentVersionContextBanner
+          context={workflowContext}
+          onOpenShare={() => focusToolSection('share')}
+          onSwitchToLinkedVersion={(versionId) => onSelectVersion(versionId)}
+          onOpenGuestComments={() => focusToolSection('share')}
+        />
+      )}
+
+      <DocumentToolScenarioBar
+        scenario={toolScenario}
+        onScenarioChange={handleScenarioChange}
+        steps={scenarioSteps}
+        onStepClick={focusToolSection}
+      />
+
+      {versionCreatedNotice && onDismissVersionCreatedNotice && (
+        <DocumentVersionCreatedNotice
+          notice={versionCreatedNotice}
+          onDismiss={onDismissVersionCreatedNotice}
+          onCreateShareLink={() => focusToolSection('share')}
+          onCompareVersions={
+            versionCreatedNotice.previousVersionId
+              ? () => focusToolSection('diff')
+              : undefined
+          }
+        />
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
         <p className="text-[11px] text-slate-500">Откройте нужный раздел или все сразу</p>
         <div className="flex shrink-0 gap-1.5">
@@ -571,6 +746,8 @@ export function DocumentPdfOperationsPanel({
       {operationError && <p className="text-sm text-red-600">{operationError}</p>}
 
       <div className="space-y-1.5">
+        {visibleToolGroupIds.includes('pdf') && (
+        <>
         <ToolGroupHeader
           title="PDF и страницы"
           description="Быстрые операции с текущей версией и сравнение готовых версий."
@@ -899,7 +1076,11 @@ export function DocumentPdfOperationsPanel({
           />
         </ToolAccordionSection>
         </div>
+        </>
+        )}
 
+        {visibleToolGroupIds.includes('layout') && (
+        <>
         <ToolGroupHeader
           title="Макет и печать"
           description="Размещение материалов на листах и подготовка пакета для передачи заказчику."
@@ -926,7 +1107,8 @@ export function DocumentPdfOperationsPanel({
               <DocumentLayoutPanel
                 layout={layout}
                 viewerPage={viewerPage}
-                versionReady={versionReady}
+                versionReady={versionReady && canEdit}
+                canEdit={canEdit}
                 documentId={documentId}
                 versionId={activeVersion?.id ?? ''}
                 pageCount={layoutPageCount}
@@ -936,6 +1118,13 @@ export function DocumentPdfOperationsPanel({
                 onGoToPage={onGoToPage}
                 addNotice={layoutAddNotice}
                 onAddImages={onAddLayoutImages}
+              />
+              <DocumentInternalMarkupPanel
+                documentId={documentId}
+                versionId={activeVersion?.id ?? ''}
+                viewerPage={viewerPage}
+                versionReady={versionReady}
+                canEdit={canComment}
               />
             </ToolAccordionSection>
           )}
@@ -968,17 +1157,43 @@ export function DocumentPdfOperationsPanel({
             />
           </ToolAccordionSection>
         </div>
+        </>
+        )}
 
+        {visibleToolGroupIds.includes('approval') && (
+        <>
         <ToolGroupHeader
           title="Согласование"
-          description="Ссылка для заказчика, статусы согласования и комментарии по страницам."
+          description="Команда — для коллег с аккаунтом. Гостевая ссылка — для заказчика без регистрации."
           isOpen={openGroups.has('approval')}
           onToggle={() => toggleGroup('approval')}
         />
         <div className={openGroups.has('approval') ? '' : 'hidden'}>
           <ToolAccordionSection
+            title="Доступ команды"
+            subtitle="Коллеги с аккаунтом Folio Mind"
+            isOpen={isSectionOpen('team-access')}
+            onToggle={() => toggleSection('team-access')}
+            sectionId="team-access"
+            sectionRef={sectionRefCallbacks['team-access']}
+            helpTitle="Команда на документе"
+            helpContent={
+              <>
+                <p>
+                  Пригласите коллег в рабочее пространство. Роль можно менять в списке участников.
+                  Ссылку для присоединения можно скопировать снова из блока «Ожидают присоединения».
+                </p>
+                <p>Для заказчика без аккаунта используйте гостевую ссылку в следующем блоке.</p>
+              </>
+            }
+          >
+            <div className="rounded-xl border-2 border-folio-200 bg-folio-50/30 p-3">
+              <DocumentAccessPanel documentId={documentId} />
+            </div>
+          </ToolAccordionSection>
+          <ToolAccordionSection
             title="Ссылка для заказчика"
-            subtitle="Просмотр в браузере и скачивание ZIP"
+            subtitle="Просмотр без регистрации"
             isOpen={isSectionOpen('share')}
             onToggle={() => toggleSection('share')}
             sectionId="share"
@@ -990,7 +1205,7 @@ export function DocumentPdfOperationsPanel({
                   Создайте ссылку с ограниченным сроком действия. Заказчик видит превью страниц в
                   браузере. Опционально — скачивание ZIP с PDF и JPG (если пакет уже собран).
                 </p>
-                <p>Ссылку можно отозвать в любой момент.</p>
+                <p>Ссылку можно отозвать в любой момент. Регистрация заказчику не нужна.</p>
               </>
             }
           >
@@ -1001,6 +1216,7 @@ export function DocumentPdfOperationsPanel({
               reviewStatus={reviewStatus}
               reviewStatusChangedAt={reviewStatusChangedAt}
               viewerPage={viewerPage}
+              needsFixMarksCount={needsFixMarksCount}
             />
             <div className="mt-4 border-t border-slate-100 pt-4">
               <p className="mb-2 text-xs font-medium text-slate-700">Замечания заказчика</p>
@@ -1022,8 +1238,11 @@ export function DocumentPdfOperationsPanel({
             </div>
           </ToolAccordionSection>
         </div>
+        </>
+        )}
 
         <DocumentAnnotationsControllerProvider value={annotationsController}>
+          {visibleToolGroupIds.includes('approval') && (
           <div className={openGroups.has('approval') ? '' : 'hidden'}>
             <ToolAccordionSection
               title="Комментарии на PDF"
@@ -1042,7 +1261,10 @@ export function DocumentPdfOperationsPanel({
               <DocumentAnnotationsPanel variant="notes" hideSectionHeader />
             </ToolAccordionSection>
           </div>
+          )}
 
+          {visibleToolGroupIds.includes('edits') && (
+          <>
           <ToolGroupHeader
             title="Правки"
             description="Ручные замены, ИИ-предложения и сборка новой версии с правками."
@@ -1080,8 +1302,11 @@ export function DocumentPdfOperationsPanel({
                 pageCount={effectivePageCount}
                 onGoToPage={onGoToPage}
               />
+              <DocumentEditsApplyActions />
             </ToolAccordionSection>
           </div>
+          </>
+          )}
         </DocumentAnnotationsControllerProvider>
       </div>
     </div>

@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { appliedDocxKey, highlightEditsDocxKey, previewPageKey } from '@folio-mind/pdf-contracts';
-import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
+import { findDocumentForUser, getAuthUser, requireDocumentAccess, replyDocumentAccessError } from '../../lib/documents/document-access.js';
+import { resolveUserDocumentRole } from '../../lib/documents/document-permissions.js';
 import { clampPreviewRange } from '../../lib/documents/preview-config.js';
 import type { Env } from '../../lib/config/env.js';
 import { enqueuePreviewPagesJob } from '../../lib/queue/queue.js';
@@ -63,7 +64,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
       const documents = await app.prisma.document.findMany({
         where: {
           tenantId: user.tenantId,
-          ownerId: user.sub,
+          OR: [{ ownerId: user.sub }, { members: { some: { userId: user.sub } } }],
           ...(projectId ? { projectId } : {}),
           ...(decoded
             ? {
@@ -104,6 +105,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
             reviewStatusChangedAt: z.string().nullable(),
             projectId: z.string().nullable(),
             projectName: z.string().nullable(),
+            myRole: z.string(),
             versions: z.array(versionListItemSchema),
           }),
           404: errorBody,
@@ -112,10 +114,10 @@ export const registerReadRoutes: FastifyPluginAsync<{
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
-      if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
-      }
+      const access = await requireDocumentAccess(app.prisma, request.params.documentId, user, 'view');
+      if (!access.ok) return replyDocumentAccessError(reply, access);
+      const document = access.document;
+      const myRole = resolveUserDocumentRole(document, user.sub);
       await app.prisma.auditLog.create({
         data: {
           action: 'document.view',
@@ -147,6 +149,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
         reviewStatusChangedAt: document.reviewStatusChangedAt?.toISOString() ?? null,
         projectId: document.projectId ?? null,
         projectName: document.project?.name ?? null,
+        myRole,
         versions: document.versions.map(
           (v: {
             id: string;

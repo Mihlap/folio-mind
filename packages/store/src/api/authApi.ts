@@ -62,6 +62,13 @@ export const authApi = baseApi.injectEndpoints({
     login: build.mutation<AuthResponse, LoginBody>({
       query: (body) => ({ url: '/auth/login', method: 'POST', body }),
     }),
+    acceptTenantInvite: build.mutation<
+      AuthResponse & { documentId: string | null },
+      { inviteToken: string }
+    >({
+      query: (body) => ({ url: '/auth/accept-tenant-invite', method: 'POST', body }),
+      invalidatesTags: ['Me', 'Documents', 'DocumentMembers'],
+    }),
     me: build.query<AuthUser, void>({
       query: () => '/me',
       providesTags: ['Me'],
@@ -115,6 +122,7 @@ export const {
   useRequestMagicLinkMutation,
   useVerifyMagicLinkMutation,
   useLoginMutation,
+  useAcceptTenantInviteMutation,
   useMeQuery,
   useHealthQuery,
   useForgotPasswordMutation,

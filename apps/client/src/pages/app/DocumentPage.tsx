@@ -9,6 +9,7 @@ import {
   useListAnnotationsQuery,
   useListGuestCommentsQuery,
   useListPageReviewMarksQuery,
+  useListShareLinksQuery,
   fetchMediaAssetDataUrl,
   clearSearch,
   nextSearchMatch,
@@ -36,6 +37,8 @@ import { DocumentSourceDocxBanner } from '../../components/documents/DocumentSou
 import { useDocumentWorkspace } from '../../context/useDocumentWorkspace.js';
 import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js';
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
+import { useDocumentVersionEvents } from '../../hooks/useDocumentVersionEvents.js';
+import { useVersionCreatedNotice } from '../../hooks/useVersionCreatedNotice.js';
 import { useDocumentPdfLoader, pdfLoadStageLabel } from '../../hooks/useDocumentPdfLoader.js';
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { usePanelToggleCenterY } from '../../hooks/usePanelToggleCenterY.js';
@@ -79,6 +82,7 @@ export function DocumentPage() {
   const {
     data: doc,
     isLoading,
+    isError,
     refetch: refetchDocument,
   } = useGetDocumentQuery(id!, {
     skip: !id,
@@ -257,10 +261,25 @@ export function DocumentPage() {
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     {
       skip: !id || !activeVersion?.id || !versionReady,
-      pollingInterval: 4000,
       refetchOnFocus: true,
     },
   );
+  const { data: shareLinksData } = useListShareLinksQuery(id!, {
+    skip: !id || !versionReady,
+  });
+  const hasActiveShareLinkForVersion = useMemo(
+    () =>
+      (shareLinksData?.items ?? []).some(
+        (link) => link.active && link.versionId === activeVersion?.id,
+      ),
+    [shareLinksData?.items, activeVersion?.id],
+  );
+  useDocumentVersionEvents({
+    documentId: id,
+    versionId: activeVersion?.id,
+    token,
+    enabled: Boolean(id && activeVersion?.id && versionReady && hasActiveShareLinkForVersion),
+  });
   const { data: pageReviewData } = useListPageReviewMarksQuery(
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     { skip: !id || !activeVersion?.id || !versionReady },
@@ -269,6 +288,21 @@ export function DocumentPage() {
     () => pageReviewMarksByPage(pageReviewData?.items ?? []),
     [pageReviewData?.items],
   );
+  const openGuestCommentsCount = useMemo(
+    () => (guestCommentsData?.items ?? []).filter((item) => item.status === 'open').length,
+    [guestCommentsData?.items],
+  );
+  const needsFixMarksCount = useMemo(
+    () => (pageReviewData?.items ?? []).filter((item) => item.status === 'needs_fix').length,
+    [pageReviewData?.items],
+  );
+  const shareLinks = shareLinksData?.items ?? [];
+  const { notice: versionCreatedNotice, dismissNotice: dismissVersionCreatedNotice } =
+    useVersionCreatedNotice(versions, activeVersion?.id);
+  useEffect(() => {
+    if (!versionCreatedNotice) return;
+    setRightTab('tools');
+  }, [versionCreatedNotice]);
   const pageMarkers = useMemo(
     () => [
       ...pageReviewMarksToPageMarkers(pageReviewData?.items ?? []),
@@ -303,6 +337,33 @@ export function DocumentPage() {
     setFocusedAnnotationId(annotationId ?? null);
     setPageNavTick((t) => t + 1);
   }, []);
+
+  const openShareTools = useCallback(() => {
+    setRightTab('tools');
+    setToolsFocusSection('share');
+    rightPanel.expand();
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      setMobileSheet('panel');
+    }
+  }, [rightPanel]);
+
+  const openAnnotationsTools = useCallback(() => {
+    setRightTab('tools');
+    setToolsFocusSection('annotations');
+    rightPanel.expand();
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      setMobileSheet('panel');
+    }
+  }, [rightPanel]);
+
+  const openCompareTools = useCallback(() => {
+    setRightTab('tools');
+    setToolsFocusSection('diff');
+    rightPanel.expand();
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      setMobileSheet('panel');
+    }
+  }, [rightPanel]);
 
   useEffect(() => {
     const versionId = searchParams.get('versionId');
@@ -435,12 +496,23 @@ export function DocumentPage() {
         return;
       }
       if (marker.kind === 'guest_comment') {
-        setRightTab('tools');
-        setToolsFocusSection('share');
+        openShareTools();
+        handleGoToPage(marker.page, marker.id);
+        return;
+      }
+      if (marker.kind === 'page_review_ok' || marker.kind === 'page_review_fix') {
+        openShareTools();
+        handleGoToPage(marker.page);
+        return;
+      }
+      if (marker.kind === 'comment' || marker.kind === 'highlight') {
+        openAnnotationsTools();
+        handleGoToPage(marker.page, marker.id);
+        return;
       }
       handleGoToPage(marker.page, marker.id);
     },
-    [handleGoToPage, openAcceptedEditsModal],
+    [handleGoToPage, openAcceptedEditsModal, openAnnotationsTools, openShareTools],
   );
   const handleTextQuoteForEdit = useCallback(
     ({
@@ -531,14 +603,6 @@ export function DocumentPage() {
     setRightTab(tab);
     setMobileSheet('panel');
   }
-  const openCompareTools = useCallback(() => {
-    setRightTab('tools');
-    setToolsFocusSection('diff');
-    rightPanel.expand();
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      setMobileSheet('panel');
-    }
-  }, [rightPanel]);
   const dismissConfidenceNotice = useCallback((versionId: string) => {
     setDismissedConfidenceVersions((prev) => {
       const next = new Set(prev);
@@ -561,6 +625,20 @@ export function DocumentPage() {
     rightPanel.collapsed ? 0 : rightPanel.panelWidth,
   );
   if (!id) return null;
+  if (!isLoading && (isError || !doc)) {
+    return (
+      <div className="p-8">
+        <p className="text-slate-700">Документ не найден или нет доступа.</p>
+        <button
+          type="button"
+          onClick={() => navigate('/app')}
+          className="mt-3 cursor-pointer text-sm font-medium text-folio-600 hover:underline"
+        >
+          К списку документов
+        </button>
+      </div>
+    );
+  }
   if (isLoading || !doc) {
     return <p className="p-8 text-slate-500">Загрузка…</p>;
   }
@@ -860,6 +938,13 @@ export function DocumentPage() {
             documentTitle={doc.title}
             projectId={doc.projectId}
             projectName={doc.projectName}
+            shareLinks={shareLinks}
+            openGuestCommentsCount={openGuestCommentsCount}
+            needsFixMarksCount={needsFixMarksCount}
+            acceptedEditsCount={acceptedEditsList.length}
+            versionCreatedNotice={versionCreatedNotice}
+            onDismissVersionCreatedNotice={dismissVersionCreatedNotice}
+            documentRole={doc.myRole ?? 'owner'}
             collapsed={rightPanel.collapsed}
             onToggleCollapsed={rightPanel.toggleCollapsed}
             onExpand={rightPanel.expand}
@@ -947,6 +1032,7 @@ export function DocumentPage() {
                   annotationId,
                   quote: payload.quote,
                   content: payload.content,
+                  contentFormat: payload.contentFormat ?? 'markdown',
                 }).unwrap();
               }
             : undefined
@@ -1003,6 +1089,13 @@ export function DocumentPage() {
           documentTitle={doc.title}
           projectId={doc.projectId}
           projectName={doc.projectName}
+          shareLinks={shareLinks}
+          openGuestCommentsCount={openGuestCommentsCount}
+          needsFixMarksCount={needsFixMarksCount}
+          acceptedEditsCount={acceptedEditsList.length}
+          versionCreatedNotice={versionCreatedNotice}
+          onDismissVersionCreatedNotice={dismissVersionCreatedNotice}
+          documentRole={doc.myRole ?? 'owner'}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

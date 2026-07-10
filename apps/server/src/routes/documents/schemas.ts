@@ -3,7 +3,12 @@ import { UPLOAD_RATE_LIMIT } from '../../lib/auth/rate-limits.js';
 import { OPTIMIZE_PRESETS, DOCUMENT_REVIEW_STATUSES } from '@folio-mind/pdf-contracts';
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 export const uploadRateLimit = { rateLimit: UPLOAD_RATE_LIMIT };
-export const errorBody = z.object({ error: z.string() });
+export const errorBody = z.object({ error: z.string(), code: z.string().optional() });
+
+export const sharePasswordRequiredBody = z.object({
+  error: z.string(),
+  requiresPassword: z.literal(true),
+});
 export const operationSaveModeSchema = z.enum(['new_version', 'replace_current']).default('new_version');
 export const documentReviewStatusSchema = z.enum(DOCUMENT_REVIEW_STATUSES);
 export const documentSchema = z.object({
@@ -77,6 +82,15 @@ const layoutImageObjectSchema = z.object({
   crop: layoutRectSchema.optional(),
   sourceFileName: z.string().max(255).optional(),
   caption: z.string().max(500).optional(),
+  brightness: z.number().min(-100).max(100).optional(),
+  contrast: z.number().min(-100).max(100).optional(),
+});
+
+const layoutPageChromeSchema = z.object({
+  headerText: z.string().max(200).optional(),
+  footerText: z.string().max(200).optional(),
+  showPageNumbers: z.boolean().optional(),
+  startPageNumber: z.number().int().min(1).max(9999).optional(),
 });
 
 export const applyLayoutPdfSchema = z
@@ -91,6 +105,7 @@ export const applyLayoutPdfSchema = z
       )
       .optional()
       .default([]),
+    pageChrome: layoutPageChromeSchema.optional(),
     saveMode: operationSaveModeSchema,
   })
   .superRefine((body, ctx) => {

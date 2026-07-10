@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { annotationMetaWithContentFormat } from '@folio-mind/edit-markdown';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
+import { serializeDocumentAnnotation } from '../lib/documents/serialize-annotation.js';
+
 const errorBody = z.object({ error: z.string() });
+const contentFormatSchema = z.enum(['plain', 'markdown']);
+
 const annotationSchema = z.object({
   id: z.string(),
   documentId: z.string(),
@@ -12,11 +17,22 @@ const annotationSchema = z.object({
   kind: z.string(),
   content: z.string(),
   quote: z.string().nullable(),
+  contentFormat: contentFormatSchema,
   x: z.number().nullable(),
   y: z.number().nullable(),
+  hideOnExport: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+const annotationKindSchema = z.enum([
+  'comment',
+  'highlight',
+  'accepted_edit',
+  'internal_arrow',
+  'internal_frame',
+]);
+
 const createAnnotationSchema = z
   .object({
     page: z.number().int().min(1),
@@ -25,8 +41,10 @@ const createAnnotationSchema = z
     pageWidthPx: z.number().positive().optional(),
     pageHeightPx: z.number().positive().optional(),
     content: z.string().min(1).max(8000),
-    kind: z.enum(['comment', 'highlight', 'accepted_edit']).default('comment'),
+    kind: annotationKindSchema.default('comment'),
     quote: z.string().max(4000).optional(),
+    contentFormat: contentFormatSchema.optional(),
+    hideOnExport: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.kind === 'accepted_edit' && !data.quote?.trim()) {
@@ -37,20 +55,44 @@ const createAnnotationSchema = z
       });
     }
   });
+
 const updateAnnotationSchema = z
   .object({
     page: z.number().int().min(1).optional(),
     content: z.string().min(1).max(8000).optional(),
     quote: z.string().max(4000).optional(),
+    contentFormat: contentFormatSchema.optional(),
+    hideOnExport: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.content === undefined && data.quote === undefined && data.page === undefined) {
+    if (
+      data.content === undefined &&
+      data.quote === undefined &&
+      data.page === undefined &&
+      data.contentFormat === undefined &&
+      data.hideOnExport === undefined
+    ) {
       ctx.addIssue({
         code: 'custom',
         message: 'Нет полей для обновления',
       });
     }
   });
+
+function resolveCreateContentFormat(
+  kind: z.infer<typeof annotationKindSchema>,
+  contentFormat: 'plain' | 'markdown' | undefined,
+): 'plain' | 'markdown' | undefined {
+  if (kind === 'accepted_edit') return contentFormat ?? 'markdown';
+  return contentFormat;
+}
+
+function requiredCapabilityForAnnotationKind(
+  kind: z.infer<typeof annotationKindSchema>,
+): 'comment' | 'edit' {
+  return kind === 'accepted_edit' ? 'edit' : 'comment';
+}
+
 export const annotationRoutes: FastifyPluginAsync = async (app) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   r.get(
@@ -68,7 +110,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'view' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -80,20 +122,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
       });
       return {
-        items: items.map((item) => ({
-          id: item.id,
-          documentId: item.documentId,
-          versionId: item.versionId,
-          userId: item.userId,
-          page: item.page,
-          kind: item.kind,
-          content: item.content,
-          quote: item.quote,
-          x: item.x,
-          y: item.y,
-          createdAt: item.createdAt.toISOString(),
-          updatedAt: item.updatedAt.toISOString(),
-        })),
+        items: items.map((item) => serializeDocumentAnnotation(item)),
       };
     },
   );
@@ -113,7 +142,8 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const capability = requiredCapabilityForAnnotationKind(request.body.kind);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -121,7 +151,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!version || version.status === 'pending_upload') {
         return reply.code(404).send({ error: 'Version not found' });
       }
-      const { pageWidthPx, pageHeightPx, x, y, ...rest } = request.body;
+      const { pageWidthPx, pageHeightPx, x, y, contentFormat, hideOnExport, ...rest } = request.body;
       const pageAnchor =
         x != null &&
         y != null &&
@@ -131,6 +161,11 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         pageHeightPx > 0
           ? { xNorm: x / pageWidthPx, yNorm: y / pageHeightPx }
           : undefined;
+      const resolvedFormat = resolveCreateContentFormat(rest.kind, contentFormat);
+      const meta = annotationMetaWithContentFormat(
+        pageAnchor ? { pageAnchor } : undefined,
+        resolvedFormat,
+      );
       const created = await app.prisma.documentAnnotation.create({
         data: {
           documentId,
@@ -142,7 +177,8 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           quote: rest.quote,
           x,
           y,
-          ...(pageAnchor ? { meta: { pageAnchor } } : {}),
+          hideOnExport: hideOnExport ?? false,
+          ...(meta ? { meta } : {}),
         },
       });
       await app.prisma.auditLog.create({
@@ -154,20 +190,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId: created.id, versionId, page: created.page },
         },
       });
-      return reply.status(201).send({
-        id: created.id,
-        documentId: created.documentId,
-        versionId: created.versionId,
-        userId: created.userId,
-        page: created.page,
-        kind: created.kind,
-        content: created.content,
-        quote: created.quote,
-        x: created.x,
-        y: created.y,
-        createdAt: created.createdAt.toISOString(),
-        updatedAt: created.updatedAt.toISOString(),
-      });
+      return reply.status(201).send(serializeDocumentAnnotation(created));
     },
   );
   r.patch(
@@ -192,7 +215,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId, annotationId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'comment' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -214,12 +237,18 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!String(nextContent).trim()) {
         return reply.code(400).send({ error: 'Текст правки не может быть пустым' });
       }
+      const nextMeta =
+        request.body.contentFormat !== undefined
+          ? annotationMetaWithContentFormat(annotation.meta, request.body.contentFormat)
+          : undefined;
       const updated = await app.prisma.documentAnnotation.update({
         where: { id: annotationId },
         data: {
           page: request.body.page ?? annotation.page,
           content: nextContent,
           quote: nextQuote,
+          hideOnExport: request.body.hideOnExport ?? annotation.hideOnExport,
+          ...(nextMeta !== undefined ? { meta: nextMeta ?? undefined } : {}),
         },
       });
       await app.prisma.auditLog.create({
@@ -231,20 +260,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId, versionId },
         },
       });
-      return {
-        id: updated.id,
-        documentId: updated.documentId,
-        versionId: updated.versionId,
-        userId: updated.userId,
-        page: updated.page,
-        kind: updated.kind,
-        content: updated.content,
-        quote: updated.quote,
-        x: updated.x,
-        y: updated.y,
-        createdAt: updated.createdAt.toISOString(),
-        updatedAt: updated.updatedAt.toISOString(),
-      };
+      return serializeDocumentAnnotation(updated);
     },
   );
   r.delete(
@@ -263,7 +279,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId, annotationId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'comment' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }

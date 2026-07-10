@@ -20,6 +20,7 @@ import {
   type LayoutTemplateStoredObject,
   type LayoutShapeObject,
   type LayoutBlankInsertion,
+  type LayoutPageChrome,
 } from '@folio-mind/store';
 import { filterImageFiles, isImageFile } from '../lib/layout/isImageFile.js';
 import { compressLayoutImageSrcForDraft } from '../lib/layout/normalizeLayoutImage.js';
@@ -29,6 +30,7 @@ const STORAGE_PREFIX = 'folio-layout-draft:';
 type StoredLayoutDraft = {
   objects: LayoutPageObject[];
   blankInsertions: LayoutBlankInsertion[];
+  pageChrome?: import('@folio-mind/store').LayoutPageChrome;
 };
 
 function readStoredDraft(versionId: string): StoredLayoutDraft {
@@ -102,6 +104,10 @@ export function useLayoutEditor({
   const [marginPresetId, setMarginPresetId] = useState<LayoutMarginPresetId>('a4-safe');
   const [showPageGuides, setShowPageGuides] = useState(true);
   const [cropMode, setCropMode] = useState(false);
+  const [pageChrome, setPageChrome] = useState<LayoutPageChrome>({
+    showPageNumbers: false,
+    startPageNumber: 1,
+  });
   const skipSaveRef = useRef(true);
 
   const pageWidthMm = pdfPointsToMm(pageWidthPt);
@@ -123,6 +129,7 @@ export function useLayoutEditor({
     const draft = readStoredDraft(versionId);
     setObjects(draft.objects);
     setBlankInsertions(draft.blankInsertions);
+    setPageChrome(draft.pageChrome ?? { showPageNumbers: false, startPageNumber: 1 });
     setSelectedId(null);
   }, [versionId]);
 
@@ -134,14 +141,14 @@ export function useLayoutEditor({
     if (!versionId) return;
     const saveTimer = window.setTimeout(() => {
       try {
-        const payload: StoredLayoutDraft = { objects, blankInsertions };
+        const payload: StoredLayoutDraft = { objects, blankInsertions, pageChrome };
         sessionStorage.setItem(`${STORAGE_PREFIX}${versionId}`, JSON.stringify(payload));
       } catch {
         // Session storage is best-effort; layout editing should keep working if it is unavailable.
       }
     }, 350);
     return () => window.clearTimeout(saveTimer);
-  }, [versionId, objects, blankInsertions]);
+  }, [versionId, objects, blankInsertions, pageChrome]);
 
   const addImageFromDataUrl = useCallback(
     async (
@@ -403,6 +410,23 @@ export function useLayoutEditor({
     [selectedId],
   );
 
+  const updateSelectedImageAdjustments = useCallback(
+    (patch: { brightness?: number; contrast?: number }) => {
+      if (!selectedId) return;
+      setObjects((prev) =>
+        prev.map((item) => {
+          if (item.id !== selectedId || !isLayoutImageObject(item)) return item;
+          return {
+            ...item,
+            brightness: patch.brightness ?? item.brightness ?? 0,
+            contrast: patch.contrast ?? item.contrast ?? 0,
+          };
+        }),
+      );
+    },
+    [selectedId],
+  );
+
   const autoCaptionSelected = useCallback(() => {
     if (!selectedId) return;
     setObjects((prev) =>
@@ -506,6 +530,8 @@ export function useLayoutEditor({
     pageGuides,
     cropMode,
     setCropMode,
+    pageChrome,
+    setPageChrome,
     snapStep,
     addImageFromDataUrl,
     addImageFromFile,
@@ -522,6 +548,7 @@ export function useLayoutEditor({
     removeSelected,
     replaceSelectedImageSrc,
     updateSelectedCaption,
+    updateSelectedImageAdjustments,
     autoCaptionSelected,
     autoFillCaptionsFromFilenames,
     alignSelected,

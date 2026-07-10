@@ -88,6 +88,52 @@ async function resizeDataUrlForUpload(dataUrl: string): Promise<string> {
     : canvas.toDataURL('image/jpeg', JPEG_QUALITY);
 }
 
+function applyImageAdjustments(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  brightness = 0,
+  contrast = 0,
+): void {
+  if (brightness === 0 && contrast === 0) return;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const contrastFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+  const brightnessOffset = brightness * 2.55;
+  for (let i = 0; i < data.length; i += 4) {
+    for (let channel = 0; channel < 3; channel += 1) {
+      const index = i + channel;
+      let value = data[index]!;
+      value = contrastFactor * (value - 128) + 128 + brightnessOffset;
+      data[index] = Math.max(0, Math.min(255, Math.round(value)));
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+async function renderAdjustedImageDataUrl(
+  imageSrc: string,
+  crop: LayoutRect | undefined,
+  brightness?: number,
+  contrast?: number,
+): Promise<string> {
+  const cropped = await applyCropToDataUrl(imageSrc, crop);
+  const b = brightness ?? 0;
+  const c = contrast ?? 0;
+  if (b === 0 && c === 0) return cropped;
+  const img = await loadImageElement(cropped);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Не удалось подготовить изображение');
+  ctx.drawImage(img, 0, 0);
+  applyImageAdjustments(ctx, canvas.width, canvas.height, b, c);
+  const head = cropped.trim().slice(0, 32).toLowerCase();
+  if (head.startsWith('data:image/png')) return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+}
+
 export async function normalizeLayoutImageSrcForPdf(imageSrc: string): Promise<string> {
   if (isPdfReadyDataUrl(imageSrc)) return imageSrc;
   if (
@@ -176,12 +222,19 @@ export async function normalizeLayoutObjectsForPdf(
   const result: LayoutImageObject[] = [];
   for (const object of objects) {
     if (isLayoutImageObject(object)) {
-      const cropped = await applyCropToDataUrl(object.imageSrc, object.crop);
+      const adjusted = await renderAdjustedImageDataUrl(
+        object.imageSrc,
+        object.crop,
+        object.brightness,
+        object.contrast,
+      );
       result.push({
         ...object,
         kind: 'image',
-        imageSrc: await compressLayoutImageSrcForUpload(cropped),
+        imageSrc: await compressLayoutImageSrcForUpload(adjusted),
         crop: undefined,
+        brightness: undefined,
+        contrast: undefined,
       });
       continue;
     }

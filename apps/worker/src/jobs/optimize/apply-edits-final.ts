@@ -1,4 +1,5 @@
 import { isUserUploadedSourceDocxKey } from '@folio-mind/pdf-contracts';
+import { readAcceptedEditContentFormat, type EditContentFormat } from '@folio-mind/edit-markdown';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { convertDocxToPdf, isGotenbergConfigured } from '../../lib/convert/gotenberg.js';
@@ -18,6 +19,7 @@ import {
   getPageTextForEdit,
   loadPageTextHints,
 } from '../../lib/docx/page-disambiguation.js';
+import { resolveEditsForDocx, resolveEditsForPdfOverlay } from '../../lib/edits/resolve-edits.js';
 
 type ApplyEditsFinalPayload = WorkerJobPayload & {
   operationJobId?: string;
@@ -37,6 +39,7 @@ type ApplyEditsFinalPayload = WorkerJobPayload & {
 type Edit = {
   originalText: string;
   suggestion: string;
+  contentFormat?: EditContentFormat;
   page: number;
   anchor?: { xNorm: number; yNorm: number };
 };
@@ -229,7 +232,14 @@ async function runDocxPipeline(params: {
     });
     const { modifiedDocx, applied, failed, ambiguous, results } = await applyEditsToDocx(
       buffer,
-      params.edits,
+      resolveEditsForDocx(
+        params.edits.map((edit) => ({
+          originalText: edit.originalText,
+          suggestion: edit.suggestion,
+          contentFormat: edit.contentFormat ?? 'markdown',
+          page: edit.page,
+        })),
+      ),
       {
         pageContextVariants: (edit) =>
           buildPageContextSearchVariants(getPageTextForEdit(pageHints, edit.page), edit.originalText),
@@ -350,6 +360,7 @@ export async function processApplyEditsFinalJob(
       edits.push({
         originalText: quote,
         suggestion: content,
+        contentFormat: readAcceptedEditContentFormat(ann.meta),
         page: ann.page,
         ...(anchor ? { anchor } : {}),
       });
@@ -383,14 +394,23 @@ export async function processApplyEditsFinalJob(
         const ambiguousTotal = docxPipeline.ambiguous;
         let method: ApplyMethod = docxPipeline.method;
 
-        const pendingOverlay = docxPipeline.editResults
-          .filter((r) => r.status === 'failed')
-          .map((r) => ({
-            page: r.page,
-            originalText: r.originalText,
-            suggestion: r.suggestion,
-            anchor: edits.find((e) => e.originalText === r.originalText)?.anchor,
-          }));
+        const pendingOverlay = resolveEditsForPdfOverlay(
+          docxPipeline.editResults
+            .filter((r) => r.status === 'failed')
+            .flatMap((r) => {
+              const source = edits.find((e) => e.originalText === r.originalText);
+              if (!source) return [];
+              return [
+                {
+                  originalText: r.originalText,
+                  suggestion: source.suggestion,
+                  contentFormat: source.contentFormat ?? 'plain',
+                  page: r.page,
+                  anchor: source.anchor,
+                },
+              ];
+            }),
+        );
 
         if (pendingOverlay.length > 0) {
           const hybrid = await applyEditsViaPdfOverlayBuffer(pdfBuffer, pendingOverlay);
@@ -440,7 +460,18 @@ export async function processApplyEditsFinalJob(
       hadUserDocx: hasUserDocx,
       docxPipelineApplied: docxPipeline?.applied ?? 0,
     });
-    const overlay = await applyEditsViaPdfOverlay(overlaySourceS3Key, edits);
+    const overlay = await applyEditsViaPdfOverlay(
+      overlaySourceS3Key,
+      resolveEditsForPdfOverlay(
+        edits.map((edit) => ({
+          originalText: edit.originalText,
+          suggestion: edit.suggestion,
+          contentFormat: edit.contentFormat ?? 'markdown',
+          page: edit.page,
+          anchor: edit.anchor,
+        })),
+      ),
+    );
     if (overlay.applied === 0) {
       throw new Error(
         hasUserDocx

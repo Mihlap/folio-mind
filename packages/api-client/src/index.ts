@@ -20,6 +20,7 @@ export type RegisterBody = {
   name?: string;
   tenantName?: string;
   captchaToken?: string;
+  inviteToken?: string;
 };
 export type RegisterResponse = {
   needsEmailVerification: true;

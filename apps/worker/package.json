@@ -16,6 +16,7 @@
     "@folio-mind/ai-contracts": "workspace:*",
     "@folio-mind/ai-providers": "workspace:*",
     "@folio-mind/observability": "workspace:*",
+    "@folio-mind/edit-markdown": "workspace:*",
     "@folio-mind/pdf-contracts": "workspace:*",
     "@smithy/node-http-handler": "^4.7.3",
     "@napi-rs/canvas": "^0.1.65",

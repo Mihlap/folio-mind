@@ -159,7 +159,7 @@ export function DocumentPageOrderPanel({
   return (
     <div className="space-y-3">
       <p className="text-[11px] leading-snug text-slate-500">
-        Измените порядок, продублируйте лист или добавьте чистый лист кнопкой ниже. Исходная версия
+        Измените порядок, продублируйте лист, удалите страницу (×) или добавьте чистый лист. Исходная версия
         не меняется — будет создана новая.
       </p>
 
@@ -225,7 +225,7 @@ export function DocumentPageOrderPanel({
                   disabled={pending || pageOrder.length <= 1}
                   onClick={() => removeSlot(index)}
                   className="cursor-pointer rounded px-2 py-0.5 text-sm font-semibold leading-none text-rose-600 hover:bg-white disabled:opacity-40"
-                  title="Убрать из итога"
+                  title="Удалить страницу из итога"
                 >
                   ×
                 </button>

@@ -6,6 +6,7 @@ import {
 } from '@folio-mind/pdf-contracts';
 import type { Env } from '../config/env.js';
 import { sha256Hex } from '../auth/password-reset.js';
+import { decryptShareToken } from './share-token-cipher.js';
 
 export type ShareLinkToken = {
   token: string;
@@ -29,6 +30,13 @@ export function hashShareToken(token: string): string {
 export function buildGuestShareUrl(env: Env, token: string): string {
   const base = env.FRONTEND_URL.replace(/\/+$/, '');
   return `${base}/share/${encodeURIComponent(token)}`;
+}
+
+export function resolveShareLinkUrl(env: Env, tokenCipher: string | null | undefined): string | null {
+  if (!tokenCipher) return null;
+  const token = decryptShareToken(tokenCipher, env.JWT_SECRET);
+  if (!token) return null;
+  return buildGuestShareUrl(env, token);
 }
 
 export function isShareLinkActive(link: {

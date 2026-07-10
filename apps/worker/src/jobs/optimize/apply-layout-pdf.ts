@@ -23,6 +23,7 @@ type ApplyLayoutPdfPayload = WorkerJobPayload & {
   targetS3Key?: string;
   layoutObjects?: LayoutImageObject[];
   blankInsertions?: Array<{ afterPage: number; count: number }>;
+  pageChrome?: import('@folio-mind/pdf-contracts').LayoutPageChrome;
   replaceInPlace?: boolean;
 };
 
@@ -39,6 +40,7 @@ export async function processApplyLayoutPdfJob(
     targetS3Key,
     layoutObjects,
     blankInsertions = [],
+    pageChrome,
     replaceInPlace = false,
     requestId,
   } = data;
@@ -82,7 +84,7 @@ export async function processApplyLayoutPdfJob(
 
     const sourceBuffer = await getObjectBuffer(sourceS3Key);
     originalPdfBuffer = sourceBuffer;
-    const applied = await applyLayoutToPdfBuffer(sourceBuffer, layoutObjects, blankInsertions);
+    const applied = await applyLayoutToPdfBuffer(sourceBuffer, layoutObjects, blankInsertions, pageChrome);
 
     const existsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: targetVersionId },

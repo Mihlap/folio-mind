@@ -8,8 +8,10 @@ export type DocumentAnnotation = {
   kind: string;
   content: string;
   quote: string | null;
+  contentFormat: 'plain' | 'markdown';
   x: number | null;
   y: number | null;
+  hideOnExport: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -39,8 +41,10 @@ export const annotationsApi = baseApi.injectEndpoints({
         pageWidthPx?: number;
         pageHeightPx?: number;
         content: string;
-        kind?: 'comment' | 'highlight' | 'accepted_edit';
+        kind?: 'comment' | 'highlight' | 'accepted_edit' | 'internal_arrow' | 'internal_frame';
         quote?: string;
+        contentFormat?: 'plain' | 'markdown';
+        hideOnExport?: boolean;
       }
     >({
       query: ({ documentId, versionId, ...body }) => ({
@@ -59,6 +63,8 @@ export const annotationsApi = baseApi.injectEndpoints({
         page?: number;
         content?: string;
         quote?: string;
+        contentFormat?: 'plain' | 'markdown';
+        hideOnExport?: boolean;
       }
     >({
       query: ({ documentId, versionId, annotationId, ...body }) => ({

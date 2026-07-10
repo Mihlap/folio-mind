@@ -53,7 +53,7 @@ export const registerDeleteRoutes: FastifyPluginAsync<{
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'manage' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -110,7 +110,7 @@ export const registerDeleteRoutes: FastifyPluginAsync<{
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'manage' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
