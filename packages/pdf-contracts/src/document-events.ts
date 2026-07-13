@@ -28,8 +28,18 @@ export type ReviewStatusDocumentEvent = {
   reviewStatus: DocumentReviewStatus;
 };
 
+export type MemberAccessEventAction = 'added' | 'role_changed' | 'removed';
+
+export type MemberAccessDocumentEvent = {
+  type: 'member_access';
+  documentId: string;
+  userId: string;
+  action: MemberAccessEventAction;
+  role?: string;
+};
+
 export type DocumentVersionScopeEvent = GuestCommentDocumentEvent | PageReviewDocumentEvent;
-export type DocumentMetaScopeEvent = ReviewStatusDocumentEvent;
+export type DocumentMetaScopeEvent = ReviewStatusDocumentEvent | MemberAccessDocumentEvent;
 export type DocumentScopeEvent = DocumentVersionScopeEvent | DocumentMetaScopeEvent;
 
 /** @deprecated Use DocumentVersionScopeEvent */
@@ -66,6 +76,16 @@ function isReviewStatusEvent(parsed: DocumentScopeEvent): parsed is ReviewStatus
   return parsed.type === 'review_status' && typeof parsed.documentId === 'string';
 }
 
+function isMemberAccessEvent(parsed: DocumentScopeEvent): parsed is MemberAccessDocumentEvent {
+  if (parsed.type !== 'member_access') return false;
+  if (typeof parsed.documentId !== 'string' || typeof parsed.userId !== 'string') return false;
+  return (
+    parsed.action === 'added' ||
+    parsed.action === 'role_changed' ||
+    parsed.action === 'removed'
+  );
+}
+
 export function parseDocumentVersionScopeEvent(raw: string): DocumentVersionScopeEvent | null {
   try {
     const parsed = JSON.parse(raw) as DocumentScopeEvent;
@@ -79,7 +99,7 @@ export function parseDocumentVersionScopeEvent(raw: string): DocumentVersionScop
 export function parseDocumentMetaScopeEvent(raw: string): DocumentMetaScopeEvent | null {
   try {
     const parsed = JSON.parse(raw) as DocumentScopeEvent;
-    if (isReviewStatusEvent(parsed)) return parsed;
+    if (isReviewStatusEvent(parsed) || isMemberAccessEvent(parsed)) return parsed;
     return null;
   } catch {
     return null;

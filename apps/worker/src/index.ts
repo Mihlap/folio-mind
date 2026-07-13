@@ -16,6 +16,7 @@ import { processExportPagesJob } from './jobs/optimize/export-pages-images.js';
 import { processPrintReadinessJob } from './jobs/optimize/print-readiness.js';
 import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
 import { processPreConvertPdfJob } from './jobs/optimize/pre-convert-pdf.js';
+import { processConvertVersionDocxJob } from './jobs/optimize/convert-version-docx.js';
 import { processImportFromDocxJob } from './jobs/optimize/import-from-docx.js';
 import { processOptimizePdfJob } from './jobs/optimize/optimize-pdf.js';
 import { processMediaOptimizeJob } from './jobs/media/media-optimize.js';
@@ -132,6 +133,8 @@ function createOptimizeWorker() {
           logJob('optimize', job.id, data);
           if (job.name === 'pre-convert-pdf') {
             await processPreConvertPdfJob(env, data);
+          } else if (job.name === 'convert-version-docx') {
+            await processConvertVersionDocxJob(env, data);
           } else if (job.name === 'split-pages') {
             await processSplitPagesJob(env, data);
           } else if (job.name === 'merge-versions') {

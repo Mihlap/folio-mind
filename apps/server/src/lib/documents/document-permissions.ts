@@ -68,6 +68,21 @@ export function resolveUserDocumentRole(
   return 'viewer';
 }
 
+export function isDocumentVersionAccessible(
+  role: DocumentAccessRole,
+  versions: Array<{ id: string; status: string }>,
+  versionId: string,
+): boolean {
+  if (roleHasCapability(role, 'view_history')) {
+    return versions.some((version) => version.id === versionId);
+  }
+  const currentVersion =
+    versions.find((version) => version.status === 'ready') ??
+    versions.find((version) => version.status !== 'pending_upload') ??
+    versions[0];
+  return currentVersion?.id === versionId;
+}
+
 export function parseMemberRole(role: string): DocumentMemberRole | null {
   return isDocumentMemberRole(role) ? role : null;
 }

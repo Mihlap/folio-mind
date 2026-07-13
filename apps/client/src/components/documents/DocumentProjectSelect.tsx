@@ -36,7 +36,7 @@ export function DocumentProjectSelect({
             /* RTK handles error state */
           }
         }}
-        className={`min-w-0 cursor-pointer rounded-lg border border-slate-200 bg-white text-slate-800 disabled:opacity-50 ${
+        className={`select-control min-w-0 truncate ${projectId ? 'select-control--active' : ''} ${
           compact ? 'max-w-[11rem] px-1.5 py-0.5 text-xs' : 'max-w-[14rem] px-2 py-1 text-sm'
         }`}
         title={projectName ? `Проект: ${projectName}` : 'Без проекта'}

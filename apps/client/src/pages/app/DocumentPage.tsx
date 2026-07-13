@@ -21,6 +21,7 @@ import {
   type ViewerDisplayMode,
   zoomIn,
   zoomOut,
+  roleHasCapability,
 } from '@folio-mind/store';
 import { DocumentMobileSheet } from '../../components/documents/DocumentMobileSheet.js';
 import { DocumentThumbnailStrip } from '../../components/documents/DocumentThumbnailStrip.js';
@@ -60,6 +61,7 @@ import type { EditTextInjection } from '../../components/documents/useDocumentAn
 import { useLayoutEditor } from '../../hooks/useLayoutEditor.js';
 import { formatLayoutAddSummary } from '../../lib/layout/layoutAddSummary.js';
 import type { ToolSectionId } from '../../components/ui/ToolAccordionSection.js';
+import { resolveEffectiveDocumentRole, readUserIdFromAuthToken } from '../../lib/documents/document-ui-permissions.js';
 const INITIAL_THUMB_PAGES = 15;
 const RIGHT_PANEL = {
   defaultWidth: 360,
@@ -78,6 +80,8 @@ export function DocumentPage() {
     id: string;
   }>();
   const token = useAppSelector((s) => s.auth.token);
+  const currentUserId =
+    useAppSelector((s) => s.auth.user?.id ?? null) ?? readUserIdFromAuthToken(token);
   const viewer = useAppSelector((s) => s.viewer);
   const {
     data: doc,
@@ -120,6 +124,10 @@ export function DocumentPage() {
     ...RIGHT_PANEL,
   });
   const versions = useMemo(() => doc?.versions ?? [], [doc?.versions]);
+  const documentRole = resolveEffectiveDocumentRole(doc?.myRole, doc?.ownerId, currentUserId);
+  const canEditDocument = roleHasCapability(documentRole, 'edit');
+  const canCommentDocument = roleHasCapability(documentRole, 'comment');
+  const canManageShare = roleHasCapability(documentRole, 'manage_share');
   const hasProcessingVersion = versions.some((v) => v.status === 'processing');
   useEffect(() => {
     const media = window.matchMedia(DESKTOP_PANEL_QUERY);
@@ -216,6 +224,7 @@ export function DocumentPage() {
     setWorkspace({
       documentId: doc.id,
       title: doc.title,
+      documentRole,
       versions,
       selectedVersionId: activeVersion?.id,
       onSelectVersion: handleSelectVersion,
@@ -229,6 +238,7 @@ export function DocumentPage() {
   }, [
     doc?.id,
     doc?.title,
+    documentRole,
     versions,
     activeVersion?.id,
     upload.uploading,
@@ -255,34 +265,28 @@ export function DocumentPage() {
   }, [layoutDisplayPageCount]);
   const { data: annotationsData } = useListAnnotationsQuery(
     { documentId: id!, versionId: activeVersion?.id ?? '' },
-    { skip: !id || !activeVersion?.id },
+    { skip: !id || !activeVersion?.id || !canCommentDocument },
   );
   const { data: guestCommentsData } = useListGuestCommentsQuery(
     { documentId: id!, versionId: activeVersion?.id ?? '' },
     {
-      skip: !id || !activeVersion?.id || !versionReady,
+      skip: !id || !activeVersion?.id || !versionReady || !canManageShare,
       refetchOnFocus: true,
     },
   );
   const { data: shareLinksData } = useListShareLinksQuery(id!, {
-    skip: !id || !versionReady,
+    skip: !id || !versionReady || !canManageShare,
   });
-  const hasActiveShareLinkForVersion = useMemo(
-    () =>
-      (shareLinksData?.items ?? []).some(
-        (link) => link.active && link.versionId === activeVersion?.id,
-      ),
-    [shareLinksData?.items, activeVersion?.id],
-  );
   useDocumentVersionEvents({
     documentId: id,
     versionId: activeVersion?.id,
     token,
-    enabled: Boolean(id && activeVersion?.id && versionReady && hasActiveShareLinkForVersion),
+    currentUserId,
+    enabled: Boolean(id && activeVersion?.id && versionReady && token),
   });
   const { data: pageReviewData } = useListPageReviewMarksQuery(
     { documentId: id!, versionId: activeVersion?.id ?? '' },
-    { skip: !id || !activeVersion?.id || !versionReady },
+    { skip: !id || !activeVersion?.id || !versionReady || !canManageShare },
   );
   const reviewMarkByPage = useMemo(
     () => pageReviewMarksByPage(pageReviewData?.items ?? []),
@@ -447,6 +451,7 @@ export function DocumentPage() {
   );
   const handleLayoutFilesDrop = useCallback(
     async (files: File[], targetPage: number) => {
+      if (!canEditDocument) return;
       try {
         await handleLayoutAddImages(files, {
           distributeAcrossPages: layoutActionsRef.current.distributeAcrossPages,
@@ -456,10 +461,11 @@ export function DocumentPage() {
         setLayoutAddNotice(err instanceof Error ? err.message : 'Не удалось добавить изображения');
       }
     },
-    [handleLayoutAddImages],
+    [canEditDocument, handleLayoutAddImages],
   );
   const handleLayoutMediaAssetDrop = useCallback(
     async (assetId: string, targetPage: number, mediaTitle?: string) => {
+      if (!canEditDocument) return;
       try {
         const dataUrl = await fetchMediaAssetDataUrl(assetId, token);
         if (!layout.enabled) layout.setEnabled(true);
@@ -470,24 +476,26 @@ export function DocumentPage() {
         setLayoutAddNotice(err instanceof Error ? err.message : 'Не удалось вставить из медиатеки');
       }
     },
-    [layout, token],
+    [canEditDocument, layout, token],
   );
   const handlePageLayoutOpen = useCallback(
     (page: number) => {
+      if (!canEditDocument) return;
       if (!layout.enabled) layout.setEnabled(true);
       setRightTab('tools');
       setToolsFocusSection('layout');
       handleGoToPage(page);
     },
-    [handleGoToPage, layout],
+    [canEditDocument, handleGoToPage, layout],
   );
   const openAcceptedEditsModal = useCallback(
     (page: number, annotationId?: string, pageFilter?: number | null) => {
+      if (!canEditDocument) return;
       handleGoToPage(page, annotationId);
       setEditsModalPageFilter(pageFilter ?? null);
       setAcceptedEditsModalOpen(true);
     },
-    [handleGoToPage],
+    [canEditDocument, handleGoToPage],
   );
   const handleMarkerClick = useCallback(
     (marker: PdfPageMarker) => {
@@ -530,6 +538,7 @@ export function DocumentPage() {
       pageWidthPx?: number;
       pageHeightPx?: number;
     }) => {
+      if (!canEditDocument) return;
       editInjectionKeyRef.current += 1;
       setEditTextInjection({
         key: editInjectionKeyRef.current,
@@ -539,7 +548,7 @@ export function DocumentPage() {
       setRightTab('tools');
       handleGoToPage(page);
     },
-    [handleGoToPage],
+    [canEditDocument, handleGoToPage],
   );
   const handlePageAcceptedEditsOpen = useCallback(
     (page: number) => {
@@ -725,7 +734,7 @@ export function DocumentPage() {
                 />
               </div>
             )}
-            {showDocxBanner && (
+            {canEditDocument && showDocxBanner && (
               <div className="mb-2 shrink-0">
                 <DocumentSourceDocxBanner
                   documentId={id}
@@ -789,15 +798,19 @@ export function DocumentPage() {
                       onPrevMatch={() => dispatch(prevSearchMatch())}
                       onNextMatch={() => dispatch(nextSearchMatch())}
                       onClearSearch={() => dispatch(clearSearch())}
-                      layoutMode={layout.enabled}
-                      onLayoutModeChange={(enabled) => {
-                        layout.setEnabled(enabled);
-                        if (enabled) {
-                          setRightTab('tools');
-                          setToolsFocusSection('layout');
-                          rightPanel.expand();
-                        }
-                      }}
+                      layoutMode={canEditDocument && layout.enabled}
+                      onLayoutModeChange={
+                        canEditDocument
+                          ? (enabled) => {
+                              layout.setEnabled(enabled);
+                              if (enabled) {
+                                setRightTab('tools');
+                                setToolsFocusSection('layout');
+                                rightPanel.expand();
+                              }
+                            }
+                          : undefined
+                      }
                       onPresentationStart={() => setPresentationOpen(true)}
                       presentationDisabled={!versionReady || !pdfReadyForUi || layoutPageCount <= 0}
                     />
@@ -874,9 +887,11 @@ export function DocumentPage() {
                           handleGoToPage(page);
                         }}
                         pageNavTick={pageNavTick}
-                        enableTextSelection={versionReady && pdfReadyForUi && !layout.enabled}
-                        onTextQuoteForEdit={handleTextQuoteForEdit}
-                        enabled={layout.enabled}
+                        enableTextSelection={
+                          canEditDocument && versionReady && pdfReadyForUi && !layout.enabled
+                        }
+                        onTextQuoteForEdit={canEditDocument ? handleTextQuoteForEdit : undefined}
+                        enabled={canEditDocument && layout.enabled}
                         objects={layout.objects}
                         selectedObjectId={layout.selectedId}
                         showGrid={layout.showGrid}
@@ -889,10 +904,12 @@ export function DocumentPage() {
                         onLayoutObjectSelect={layout.setSelectedId}
                         onLayoutObjectChange={layout.updateObjectRect}
                         onLayoutObjectCropChange={layout.updateObjectCrop}
-                        onLayoutFilesDrop={handleLayoutFilesDrop}
-                        onLayoutMediaAssetDrop={handleLayoutMediaAssetDrop}
+                        onLayoutFilesDrop={canEditDocument ? handleLayoutFilesDrop : undefined}
+                        onLayoutMediaAssetDrop={
+                          canEditDocument ? handleLayoutMediaAssetDrop : undefined
+                        }
                         pageLayoutCountByPage={layout.objectCountByPage}
-                        onPageLayoutOpen={handlePageLayoutOpen}
+                        onPageLayoutOpen={canEditDocument ? handlePageLayoutOpen : undefined}
                       />
                     </div>
                   )}
@@ -944,7 +961,7 @@ export function DocumentPage() {
             acceptedEditsCount={acceptedEditsList.length}
             versionCreatedNotice={versionCreatedNotice}
             onDismissVersionCreatedNotice={dismissVersionCreatedNotice}
-            documentRole={doc.myRole ?? 'owner'}
+            documentRole={documentRole}
             collapsed={rightPanel.collapsed}
             onToggleCollapsed={rightPanel.toggleCollapsed}
             onExpand={rightPanel.expand}
@@ -999,7 +1016,11 @@ export function DocumentPage() {
         title="Версии документа"
         onClose={() => setMobileSheet(null)}
       >
-        <DocumentVersionsSidebar variant="drawer" onVersionAction={() => setMobileSheet(null)} />
+        <DocumentVersionsSidebar
+          variant="drawer"
+          documentRole={documentRole}
+          onVersionAction={() => setMobileSheet(null)}
+        />
       </DocumentMobileSheet>
 
       <AcceptedEditsModal
@@ -1095,7 +1116,7 @@ export function DocumentPage() {
           acceptedEditsCount={acceptedEditsList.length}
           versionCreatedNotice={versionCreatedNotice}
           onDismissVersionCreatedNotice={dismissVersionCreatedNotice}
-          documentRole={doc.myRole ?? 'owner'}
+          documentRole={documentRole}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}

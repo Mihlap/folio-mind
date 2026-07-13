@@ -3,6 +3,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { Env } from '../../lib/config/env.js';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
+import {
+  isDocumentVersionAccessible,
+  resolveUserDocumentRole,
+} from '../../lib/documents/document-permissions.js';
 import { isDocumentEventsRedisConfigured } from '../../lib/events/document-events-bus.js';
 import { streamDocumentScopeEvents } from '../../lib/events/sse.js';
 import { errorBody } from './schemas.js';
@@ -18,6 +22,7 @@ export const registerDocumentEventsRoutes: FastifyPluginAsync<{ env: Env }> = as
       schema: {
         params: z.object({ documentId: z.string(), versionId: z.string() }),
         response: {
+          403: errorBody,
           404: errorBody,
           503: errorBody,
         },
@@ -33,6 +38,10 @@ export const registerDocumentEventsRoutes: FastifyPluginAsync<{ env: Env }> = as
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
+      }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для этой версии' });
       }
       if (!document.versions.some((v: { id: string }) => v.id === versionId)) {
         return reply.code(404).send({ error: 'Version not found' });

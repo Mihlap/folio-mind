@@ -6,10 +6,12 @@ import {
   BOOKLET_EXPORT_MAX_PAGES,
   exportBookletZipKey,
   exportPagesZipKey,
+  preConvertedDocxKey,
 } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
 import type { Env } from '../../lib/config/env.js';
 import {
+  enqueueConvertVersionDocxJob,
   enqueueExportBookletJob,
   enqueueExportPagesJob,
   enqueuePrintReadinessJob,
@@ -292,6 +294,110 @@ export const registerExportRoutes: FastifyPluginAsync<{ env: Env }> = async (app
       }
       const expiresInSeconds = 3600;
       const url = await getPresignedGetUrl({ key: zipKey, expiresInSeconds });
+      return { url, expiresInSeconds };
+    },
+  );
+
+  r.post(
+    '/documents/:documentId/versions/:versionId/operations/convert-pdf-to-docx',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        response: {
+          200: z.object({ status: z.literal('ready') }),
+          202: z.object({ operationJobId: z.string(), status: z.literal('processing') }),
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const resolved = await resolveReadyVersion(request.params.documentId, request.params.versionId, user);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Document or version not found' });
+      }
+      const { document, version } = resolved;
+      const convertedKey = preConvertedDocxKey(document.id, version.id);
+      if (await s3ObjectExists(convertedKey)) {
+        return { status: 'ready' as const };
+      }
+
+      const operationJob = await app.prisma.job.create({
+        data: {
+          type: 'convert-pdf-to-docx',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: { documentId: document.id, versionId: version.id },
+        },
+      });
+
+      await enqueueConvertVersionDocxJob(env, {
+        jobId: `convert-version-docx-${operationJob.id}`,
+        operationJobId: operationJob.id,
+        documentId: document.id,
+        versionId: version.id,
+        tenantId: user.tenantId,
+        sourcePdfS3Key: version.s3Key,
+        userSourceDocxKey: (version as { sourceDocxKey?: string | null }).sourceDocxKey ?? null,
+        requestId: request.requestId,
+      });
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.convert_pdf_to_docx',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId: document.id,
+          meta: { versionId: version.id, operationJobId: operationJob.id },
+        },
+      });
+
+      return reply.status(202).send({ operationJobId: operationJob.id, status: 'processing' });
+    },
+  );
+
+  r.get(
+    '/documents/:documentId/versions/:versionId/converted-docx-url',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        response: {
+          200: z.object({ url: z.string(), expiresInSeconds: z.number() }),
+          404: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const resolved = await resolveReadyVersion(request.params.documentId, request.params.versionId, user);
+      if (!resolved) {
+        return reply.code(404).send({ error: 'Document or version not found' });
+      }
+      const docxKey = preConvertedDocxKey(resolved.document.id, resolved.version.id);
+      if (!(await s3ObjectExists(docxKey))) {
+        return reply.code(404).send({ error: 'DOCX ещё не готов — сначала запустите конвертацию' });
+      }
+      const expiresInSeconds = 3600;
+      const url = await getPresignedGetUrl({ key: docxKey, expiresInSeconds });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.download_converted_docx',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId: resolved.document.id,
+          meta: { versionId: resolved.version.id, docxKey },
+        },
+      });
       return { url, expiresInSeconds };
     },
   );

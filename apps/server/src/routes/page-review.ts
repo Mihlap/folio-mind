@@ -31,7 +31,9 @@ export const pageReviewRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { 
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'view' });
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, {
+        capability: 'manage_share',
+      });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -78,7 +80,9 @@ export const pageReviewRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { 
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, { capability: 'edit' });
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, {
+        capability: 'manage_share',
+      });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }

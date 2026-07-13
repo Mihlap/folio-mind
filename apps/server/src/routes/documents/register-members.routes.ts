@@ -17,6 +17,7 @@ import {
   resolveTenantInviteRegisterUrl,
 } from '../../lib/tenant/tenant-invite.js';
 import { encryptShareToken, decryptShareToken } from '../../lib/share/share-token-cipher.js';
+import { publishMemberAccessDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody } from './schemas.js';
 
 const memberRoleSchema = z.enum(DOCUMENT_MEMBER_ROLES);
@@ -76,6 +77,7 @@ function mapPendingInvite(
 }
 
 export const registerMembersRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) => {
+  const { env } = opts;
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.get(
@@ -90,13 +92,19 @@ export const registerMembersRoutes: FastifyPluginAsync<{ env: Env }> = async (ap
             owner: ownerSchema,
             members: z.array(memberSchema),
           }),
+          403: errorBody,
           404: errorBody,
         },
       },
     },
     async (request, reply) => {
       const user = getAuthUser(request);
-      const access = await requireDocumentAccess(app.prisma, request.params.documentId, user, 'view');
+      const access = await requireDocumentAccess(
+        app.prisma,
+        request.params.documentId,
+        user,
+        'manage_members',
+      );
       if (!access.ok) return replyDocumentAccessError(reply, access);
 
       const { document } = access;
@@ -172,6 +180,15 @@ export const registerMembersRoutes: FastifyPluginAsync<{ env: Env }> = async (ap
         return reply.code(403).send({ error: 'Нельзя изменить свою роль через этот интерфейс' });
       }
 
+      const existingMember = await app.prisma.documentMember.findUnique({
+        where: {
+          documentId_userId: {
+            documentId: access.document.id,
+            userId: targetUser.id,
+          },
+        },
+      });
+
       const member = await app.prisma.documentMember.upsert({
         where: {
           documentId_userId: {
@@ -200,6 +217,16 @@ export const registerMembersRoutes: FastifyPluginAsync<{ env: Env }> = async (ap
 
       await app.prisma.tenantInvite.deleteMany({
         where: { documentId: access.document.id, email, usedAt: null },
+      });
+
+      void publishMemberAccessDocumentEvent(
+        env,
+        access.document.id,
+        targetUser.id,
+        existingMember ? 'role_changed' : 'added',
+        request.body.role,
+      ).catch((err) => {
+        request.log.warn({ err }, 'member access event publish failed');
       });
 
       return reply.code(201).send({
@@ -450,6 +477,18 @@ export const registerMembersRoutes: FastifyPluginAsync<{ env: Env }> = async (ap
         include: { user: { select: { email: true, name: true } } },
       });
 
+      if (existing.role !== request.body.role) {
+        void publishMemberAccessDocumentEvent(
+          env,
+          access.document.id,
+          updated.userId,
+          'role_changed',
+          request.body.role,
+        ).catch((err) => {
+          request.log.warn({ err }, 'member access event publish failed');
+        });
+      }
+
       return {
         userId: updated.userId,
         email: updated.user.email,
@@ -504,6 +543,15 @@ export const registerMembersRoutes: FastifyPluginAsync<{ env: Env }> = async (ap
           documentId: access.document.id,
           meta: { memberUserId: request.params.memberUserId },
         },
+      });
+
+      void publishMemberAccessDocumentEvent(
+        env,
+        access.document.id,
+        request.params.memberUserId,
+        'removed',
+      ).catch((err) => {
+        request.log.warn({ err }, 'member access event publish failed');
       });
 
       return reply.code(204).send(null);

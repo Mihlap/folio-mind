@@ -17,9 +17,9 @@ import {
 } from '@folio-mind/store';
 
 const ROLE_HINTS: Record<DocumentMemberRole, string> = {
-  editor: 'Макет, операции PDF, ссылки, статусы',
-  commenter: 'Просмотр и заметки команды',
-  viewer: 'Только просмотр в браузере',
+  editor: 'Версии, макет, операции PDF и правки',
+  commenter: 'Текущая версия и комментарии команды',
+  viewer: 'Только просмотр текущей версии',
 };
 
 function getMutationError(err: unknown, fallback: string): string {
@@ -142,7 +142,7 @@ export function DocumentAccessPanel({ documentId }: Props) {
   return (
     <div className="space-y-4 text-sm text-slate-700">
       <p className="text-[11px] leading-snug text-slate-500">
-        Для <strong>коллег с аккаунтом Folio Mind</strong> в вашем рабочем пространстве. Это не
+        Для <strong>коллег с аккаунтом РазУм</strong> в вашем рабочем пространстве. Это не
         гостевая ссылка для заказчика.
       </p>
       <p className="text-[11px] text-slate-600">

@@ -4,10 +4,12 @@ import {
   documentVersionEventsChannel,
   parseDocumentMetaScopeEvent,
   parseDocumentVersionScopeEvent,
+  type DocumentMemberRole,
   type DocumentMetaScopeEvent,
   type DocumentReviewStatus,
   type DocumentVersionScopeEvent,
   type GuestCommentEventAction,
+  type MemberAccessEventAction,
   type PageReviewEventAction,
 } from '@folio-mind/pdf-contracts';
 import type { Env } from '../config/env.js';
@@ -87,6 +89,22 @@ export async function publishReviewStatusDocumentEvent(
     type: 'review_status',
     documentId,
     reviewStatus,
+  });
+}
+
+export async function publishMemberAccessDocumentEvent(
+  env: Env,
+  documentId: string,
+  userId: string,
+  action: MemberAccessEventAction,
+  role?: DocumentMemberRole,
+): Promise<void> {
+  await publishDocumentMetaScopeEvent(env, {
+    type: 'member_access',
+    documentId,
+    userId,
+    action,
+    ...(role ? { role } : {}),
   });
 }
 

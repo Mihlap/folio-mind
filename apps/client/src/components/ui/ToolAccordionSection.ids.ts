@@ -3,6 +3,7 @@ export type ToolSectionId =
   | 'split'
   | 'pages'
   | 'merge'
+  | 'export'
   | 'annotations'
   | 'edits'
   | 'diff'
@@ -17,6 +18,7 @@ export const TOOL_SECTION_IDS: ToolSectionId[] = [
   'pages',
   'merge',
   'diff',
+  'export',
   'layout',
   'booklet',
   'team-access',

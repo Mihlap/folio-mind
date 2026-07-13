@@ -3,7 +3,11 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { appliedDocxKey, highlightEditsDocxKey, previewPageKey } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser, requireDocumentAccess, replyDocumentAccessError } from '../../lib/documents/document-access.js';
-import { resolveUserDocumentRole } from '../../lib/documents/document-permissions.js';
+import {
+  isDocumentVersionAccessible,
+  resolveUserDocumentRole,
+} from '../../lib/documents/document-permissions.js';
+import { roleHasCapability } from '@folio-mind/pdf-contracts';
 import { clampPreviewRange } from '../../lib/documents/preview-config.js';
 import type { Env } from '../../lib/config/env.js';
 import { enqueuePreviewPagesJob } from '../../lib/queue/queue.js';
@@ -101,6 +105,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
           200: z.object({
             id: z.string(),
             title: z.string(),
+            ownerId: z.string(),
             reviewStatus: documentReviewStatusSchema,
             reviewStatusChangedAt: z.string().nullable(),
             projectId: z.string().nullable(),
@@ -118,6 +123,15 @@ export const registerReadRoutes: FastifyPluginAsync<{
       if (!access.ok) return replyDocumentAccessError(reply, access);
       const document = access.document;
       const myRole = resolveUserDocumentRole(document, user.sub);
+      const currentVersion =
+        document.versions.find((version) => version.status === 'ready') ??
+        document.versions.find((version) => version.status !== 'pending_upload') ??
+        document.versions[0];
+      const accessibleVersions = roleHasCapability(myRole, 'view_history')
+        ? document.versions
+        : currentVersion
+          ? [currentVersion]
+          : [];
       await app.prisma.auditLog.create({
         data: {
           action: 'document.view',
@@ -130,7 +144,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
         ? await Promise.race([
             checkAppliedDocxVersionIds(
               document.id,
-              document.versions
+              accessibleVersions
                 .filter(
                   (v: { version: number; status: string }) =>
                     v.version > 1 && v.status !== 'pending_upload',
@@ -145,12 +159,13 @@ export const registerReadRoutes: FastifyPluginAsync<{
       return {
         id: document.id,
         title: document.title,
+        ownerId: document.ownerId,
         reviewStatus: toDocumentReviewStatus(document.reviewStatus),
         reviewStatusChangedAt: document.reviewStatusChangedAt?.toISOString() ?? null,
         projectId: document.projectId ?? null,
         projectName: document.project?.name ?? null,
         myRole,
-        versions: document.versions.map(
+        versions: accessibleVersions.map(
           (v: {
             id: string;
             version: number;
@@ -202,6 +217,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
         }),
         response: {
           200: versionIntegrityResponseSchema,
+          403: errorBody,
           404: errorBody,
         },
       },
@@ -209,10 +225,9 @@ export const registerReadRoutes: FastifyPluginAsync<{
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
-      if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
-      }
+      const access = await requireDocumentAccess(app.prisma, documentId, user, 'view_history');
+      if (!access.ok) return replyDocumentAccessError(reply, access);
+      const document = access.document;
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version) {
         return reply.code(404).send({ error: 'Version not found' });
@@ -263,6 +278,10 @@ export const registerReadRoutes: FastifyPluginAsync<{
       const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
+      }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, request.params.versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для просмотра этой версии' });
       }
       const version = document.versions.find(
         (v: { id: string }) => v.id === request.params.versionId,
@@ -358,6 +377,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
             status: z.enum(['processing', 'ready', 'partial', 'unavailable']),
             pendingPages: z.array(z.number()).optional(),
           }),
+          403: errorBody,
           404: errorBody,
           503: errorBody,
         },
@@ -372,6 +392,10 @@ export const registerReadRoutes: FastifyPluginAsync<{
       const document = await findDocumentForUser(app.prisma, documentId, user);
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
+      }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для просмотра этой версии' });
       }
       const version = document.versions.find(
         (v: { id: string; status: string; pageCount?: number | null; s3Key: string }) =>
@@ -472,7 +496,9 @@ export const registerReadRoutes: FastifyPluginAsync<{
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, {
+        capability: 'download',
+      });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -518,7 +544,9 @@ export const registerReadRoutes: FastifyPluginAsync<{
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, {
+        capability: 'download',
+      });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -575,7 +603,9 @@ export const registerReadRoutes: FastifyPluginAsync<{
         return reply.code(503).send({ error: 'S3 is not configured' });
       }
       const user = getAuthUser(request);
-      const document = await findDocumentForUser(app.prisma, request.params.documentId, user);
+      const document = await findDocumentForUser(app.prisma, request.params.documentId, user, {
+        capability: 'download',
+      });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
@@ -612,6 +642,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
             statusDelta: z.string().nullable(),
             scoreDelta: z.number().nullable(),
           }),
+          403: errorBody,
           404: errorBody,
         },
       },
@@ -619,10 +650,9 @@ export const registerReadRoutes: FastifyPluginAsync<{
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId, otherVersionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user);
-      if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
-      }
+      const access = await requireDocumentAccess(app.prisma, documentId, user, 'view_history');
+      if (!access.ok) return replyDocumentAccessError(reply, access);
+      const document = access.document;
       const fetchIntegrity = async (vid: string) => {
         const v = document.versions.find((x: { id: string }) => x.id === vid);
         if (!v) return null;

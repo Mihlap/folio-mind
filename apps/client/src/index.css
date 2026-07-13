@@ -97,3 +97,15 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: rgb(148 163 184);
 }
+
+@layer components {
+  .select-control {
+    @apply cursor-pointer rounded-lg border border-slate-200/90 bg-white text-slate-700 shadow-none outline-none transition-[border-color,box-shadow];
+    @apply focus:border-slate-300 focus:ring-1 focus:ring-slate-200/70 focus:outline-none;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .select-control--active {
+    @apply border-slate-300/80;
+  }
+}

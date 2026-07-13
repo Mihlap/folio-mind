@@ -40,24 +40,39 @@ export function DocumentToolScenarioBar({
       </div>
 
       {steps.length > 0 && (
-        <ul className="space-y-1">
-          {steps.map((step) => (
-            <li key={step.id}>
-              <button
-                type="button"
-                onClick={() => onStepClick(step.sectionId)}
-                className={`flex w-full cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-left text-[11px] leading-snug transition hover:bg-white/80 ${
-                  step.active ? 'text-folio-800' : 'text-slate-600'
-                }`}
-              >
-                <span aria-hidden className="mt-0.5 shrink-0">
-                  {step.done ? '✓' : step.active ? '●' : '○'}
-                </span>
-                <span className={step.done ? 'text-slate-500 line-through' : ''}>{step.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="text-[10px] leading-snug text-slate-500">
+            Клик откроет нужный раздел. ✓ — шаг уже выполнен.
+          </p>
+          <ul className="space-y-1">
+            {steps.map((step) => {
+              const isRecommended = step.active && !step.done;
+              return (
+                <li key={step.id}>
+                  <button
+                    type="button"
+                    onClick={() => onStepClick(step.sectionId)}
+                    className="flex w-full cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-left text-[11px] leading-snug text-slate-600 transition hover:bg-white/80"
+                  >
+                    <span aria-hidden className="mt-0.5 shrink-0">
+                      {step.done ? '✓' : '○'}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={step.done ? 'text-slate-500 line-through' : ''}>
+                        {step.label}
+                      </span>
+                      {isRecommended && (
+                        <span className="ml-1.5 text-[10px] font-normal text-slate-400">
+                          рекомендуем
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );

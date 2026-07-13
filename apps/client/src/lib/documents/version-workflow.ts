@@ -9,6 +9,7 @@ export type ToolSectionId =
   | 'split'
   | 'pages'
   | 'merge'
+  | 'export'
   | 'annotations'
   | 'edits'
   | 'diff'

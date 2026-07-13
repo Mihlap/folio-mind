@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   isDocumentReviewStatus,
   useDeleteDocumentMutation,
   useGetProjectQuery,
   useListDocumentsQuery,
+  useUpdateDocumentProjectMutation,
   getVersionListStatusLabel,
 } from '@folio-mind/store';
 import { DocumentReviewStatusBadge } from '../../components/documents/DocumentReviewStatusControl.js';
 import { DeleteDocumentButton } from '../../components/documents/DeleteDocumentButton.js';
-import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
+import { DocumentUploadZone } from '../../components/documents/DocumentUploadZone.js';
 import { ProjectRenameControl } from '../../components/projects/ProjectRenameControl.js';
 import { ProjectDropTarget } from '../../components/projects/ProjectDropTarget.js';
 import { DocumentDragHandle } from '../../components/documents/DocumentDragHandle.js';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
-import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 import { useAppSelector } from '../../hooks/index.js';
 
 function getDisplayStatus(status: string): string {
@@ -23,7 +23,6 @@ function getDisplayStatus(status: string): string {
 
 export function ProjectDetailPage() {
   const { projectId = '' } = useParams();
-  const inputRef = useRef<HTMLInputElement>(null);
   const {
     data,
     refetch,
@@ -34,11 +33,10 @@ export function ProjectDetailPage() {
   });
   const { data: allDocuments } = useListDocumentsQuery({ limit: 50 });
   const [deleteDocument] = useDeleteDocumentMutation();
+  const [updateDocumentProject, { isLoading: detaching }] = useUpdateDocumentProjectMutation();
   const [localError, setLocalError] = useState<string | null>(null);
   const uploadState = useAppSelector((s) => s.backgroundUpload);
-  const { uploadFromDashboard, uploadFromDocxOnly } = useBackgroundUpload();
   const active = uploadState.active && uploadState.kind === 'dashboard';
-  const progress = active ? uploadState.progress : 0;
   const uploadWasActiveRef = useRef(false);
 
   useEffect(() => {
@@ -51,18 +49,6 @@ export function ProjectDetailPage() {
       void refetch();
     }
   }, [active, refetch]);
-
-  const startUpload = useCallback(
-    (pdfFile: File, docxFile?: File) => {
-      if (pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
-        setLocalError('Только PDF');
-        return;
-      }
-      setLocalError(null);
-      uploadFromDashboard(pdfFile, docxFile, projectId);
-    },
-    [projectId, uploadFromDashboard],
-  );
 
   if (isLoading) {
     return <div className="p-6 text-sm text-slate-500">Загрузка…</div>;
@@ -144,46 +130,14 @@ export function ProjectDetailPage() {
         </div>
       )}
 
-      <div className="mb-8 rounded-2xl border border-dashed border-slate-300 bg-white p-5 sm:p-6">
-        <p className="text-sm font-medium text-slate-700">Загрузить документ в этот проект</p>
-        <p className="mt-1 text-xs text-slate-400">
-          PDF или DOCX — как на главной странице документов
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf,.pdf,.docx"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            if (file.name.toLowerCase().endsWith('.docx')) {
-              uploadFromDocxOnly(file, projectId);
-            } else {
-              startUpload(file);
-            }
-            if (inputRef.current) inputRef.current.value = '';
-          }}
-        />
-        <button
-          type="button"
-          disabled={active}
-          onClick={() => inputRef.current?.click()}
-          className="mt-4 rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700 disabled:opacity-50"
-        >
-          {active ? `Загрузка ${progress}%…` : 'Выбрать файл'}
-        </button>
-        {active && <p className="mt-2 text-xs text-slate-500">{getUploadStage(progress)}</p>}
-        {(localError || uploadState.error) && (
-          <p className="mt-2 text-sm text-red-600">{localError ?? uploadState.error}</p>
-        )}
-        {uploadState.error && (
-          <p className="mt-1 text-xs text-slate-500">
-            Если документ уже создан, он может отображаться ниже со статусом «не загружен» —
-            откройте его и загрузите файл повторно.
-          </p>
-        )}
-      </div>
+      <DocumentUploadZone
+        className="mb-8"
+        projectId={projectId}
+        title="Загрузить документ в этот проект"
+        subtitle="PDF или DOCX — как на главной странице. После выбора PDF можно добавить исходный Word."
+      />
+
+      {localError && <p className="mb-4 text-sm text-red-600">{localError}</p>}
 
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
         Документы ({documents.length})
@@ -215,6 +169,31 @@ export function ProjectDetailPage() {
                 </span>
               )}
             </Link>
+            <button
+              type="button"
+              title="Отвязать от проекта"
+              disabled={detaching}
+              className="shrink-0 cursor-pointer rounded-lg px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    `Отвязать «${doc.title}» от проекта «${project.name}»?\n\nДокумент останется на главной странице.`,
+                  )
+                ) {
+                  return;
+                }
+                setLocalError(null);
+                try {
+                  await updateDocumentProject({ documentId: doc.id, projectId: null }).unwrap();
+                  await refetch();
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : 'Не удалось отвязать документ';
+                  setLocalError(msg);
+                }
+              }}
+            >
+              Отвязать
+            </button>
             <DeleteDocumentButton
               title={`Удалить документ «${doc.title}»`}
               variant="list"

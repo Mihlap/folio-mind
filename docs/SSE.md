@@ -18,7 +18,7 @@ Server-Sent Events (SSE) для мгновенной доставки измен
 | Канал | События |
 |-------|---------|
 | `folio:doc-events:{documentId}:{versionId}` | `guest_comment`, `page_review` |
-| `folio:doc-events:{documentId}:_meta` | `review_status` |
+| `folio:doc-events:{documentId}:_meta` | `review_status`, `member_access` |
 
 ## Endpoints
 
@@ -30,7 +30,9 @@ Authorization: Bearer <jwt>
 Accept: text/event-stream
 ```
 
-Подписка на version-канал + meta-канал (`review_status`).
+Подписка на version-канал + meta-канал (`review_status`, `member_access`).
+
+`member_access` публикуется при добавлении, смене роли или удалении участника документа. Клиент обновляет права **только у пользователя, чей `userId` в событии** — владелец при смене роли коллеги не перезагружает свой доступ.
 
 ### Гость (share token)
 
@@ -50,13 +52,14 @@ Accept: text/event-stream
 | `guest_comment` | `{ action, commentId, versionId }` | create / update / delete / clear |
 | `page_review` | `{ action, page, versionId }` | метка страницы изменена / снята |
 | `review_status` | `{ reviewStatus, documentId }` | статус согласования документа (только владелец) |
+| `member_access` | `{ userId, action, role?, documentId }` | роль участника изменена (`added` / `role_changed` / `removed`) |
 | `: ping` | — | heartbeat каждые 30 с |
 
 ## Клиент
 
 | Экран | Хук |
 |-------|-----|
-| `DocumentPage` | `useDocumentVersionEvents` — при активной share-ссылке |
+| `DocumentPage` | `useDocumentVersionEvents` — при открытом документе (гостевые комментарии, метки, смена роли участника) |
 | `GuestSharePage` | `useGuestShareEvents` — при открытой гостевой ссылке |
 
 - `@microsoft/fetch-event-source` — кастомные заголовки (Bearer / пароль ссылки).
