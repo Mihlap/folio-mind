@@ -83,4 +83,23 @@ describe('parseDocumentMetaScopeEvent', () => {
       reviewStatus: 'in_review',
     });
   });
+
+  it('parses member_access event', () => {
+    const event = parseDocumentMetaScopeEvent(
+      JSON.stringify({
+        type: 'member_access',
+        documentId: 'doc-1',
+        userId: 'user-1',
+        action: 'role_changed',
+        role: 'commenter',
+      }),
+    );
+    expect(event).toEqual({
+      type: 'member_access',
+      documentId: 'doc-1',
+      userId: 'user-1',
+      action: 'role_changed',
+      role: 'commenter',
+    });
+  });
 });

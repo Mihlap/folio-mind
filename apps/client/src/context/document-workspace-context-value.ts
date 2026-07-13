@@ -4,6 +4,7 @@ import type { DocumentVersionItem } from '../components/documents/DocumentVersio
 export type DocumentWorkspaceData = {
   documentId: string;
   title: string;
+  documentRole: string | null;
   versions: DocumentVersionItem[];
   selectedVersionId: string | undefined;
   onSelectVersion: (versionId: string) => void;

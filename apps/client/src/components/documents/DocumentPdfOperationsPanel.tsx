@@ -47,8 +47,9 @@ import { DocumentGuestCommentsPanel } from './DocumentGuestCommentsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 import type { DocumentReviewStatus, ShareLinkItem } from '@folio-mind/store';
-import { roleHasCapability, type DocumentAccessRole } from '@folio-mind/store';
+import { roleHasCapability } from '@folio-mind/store';
 import { useDocumentAnnotationsPanel } from './useDocumentAnnotationsPanel.js';
+import { DocumentVersionExportPanel } from './DocumentVersionExportPanel.js';
 import { DocumentVersionContextBanner } from './DocumentVersionContextBanner.js';
 import { DocumentToolScenarioBar } from './DocumentToolScenarioBar.js';
 import { DocumentVersionCreatedNotice } from './DocumentVersionCreatedNotice.js';
@@ -62,6 +63,11 @@ import {
   writeStoredToolScenario,
   type ToolScenario,
 } from '../../lib/documents/version-workflow.js';
+import {
+  canUseDocumentToolSection,
+  normalizeDocumentRole,
+  ROLE_RESTRICTION_HINT,
+} from '../../lib/documents/document-ui-permissions.js';
 function parsePageNumbers(input: string, maxPage: number): number[] | string {
   const parts = input
     .split(/[,;\s]+/)
@@ -100,7 +106,7 @@ function getMutationError(err: unknown): string {
 type ToolGroupId = 'pdf' | 'layout' | 'approval' | 'edits';
 const TOOL_GROUP_IDS: ToolGroupId[] = ['pdf', 'layout', 'approval', 'edits'];
 const GROUP_SECTIONS: Record<ToolGroupId, ToolSectionId[]> = {
-  pdf: ['optimize', 'split', 'pages', 'merge', 'diff'],
+  pdf: ['optimize', 'split', 'pages', 'merge', 'diff', 'export'],
   layout: ['layout', 'booklet'],
   approval: ['team-access', 'share', 'annotations'],
   edits: ['edits'],
@@ -118,11 +124,15 @@ function ToolGroupHeader({
   description,
   isOpen,
   onToggle,
+  disabled = false,
+  disabledReason,
 }: {
   title: string;
   description: string;
   isOpen: boolean;
   onToggle: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   return (
     <div className="pt-1 first:pt-0">
@@ -130,8 +140,10 @@ function ToolGroupHeader({
         <button
           type="button"
           onClick={onToggle}
+          disabled={disabled}
+          title={disabled ? disabledReason : undefined}
           aria-expanded={isOpen}
-          className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-slate-100/80"
+          className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-slate-100/80 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
         >
           <span className="mt-0.5 shrink-0 text-[10px] text-slate-400" aria-hidden>
             {isOpen ? '▼' : '▶'}
@@ -141,6 +153,9 @@ function ToolGroupHeader({
               {title}
             </p>
             <p className="hidden text-[11px] leading-snug text-slate-500 sm:block">{description}</p>
+            {disabled && disabledReason && (
+              <p className="mt-1 text-[10px] leading-snug text-amber-700">{disabledReason}</p>
+            )}
           </div>
         </button>
       </div>
@@ -214,11 +229,12 @@ export function DocumentPdfOperationsPanel({
   acceptedEditsCount = 0,
   versionCreatedNotice = null,
   onDismissVersionCreatedNotice,
-  documentRole = 'owner',
+  documentRole = 'viewer',
 }: Props) {
-  const accessRole = (documentRole ?? 'owner') as DocumentAccessRole;
+  const accessRole = normalizeDocumentRole(documentRole);
   const canEdit = roleHasCapability(accessRole, 'edit');
   const canComment = roleHasCapability(accessRole, 'comment');
+  const restrictionHint = ROLE_RESTRICTION_HINT[accessRole];
   const [expanded, setExpanded] = useState(embedded);
   const [openSections, setOpenSections] = useState<Set<ToolSectionId>>(() => new Set());
   const [openGroups, setOpenGroups] = useState<Set<ToolGroupId>>(() => new Set());
@@ -508,6 +524,12 @@ export function DocumentPdfOperationsPanel({
     () => TOOL_SECTION_IDS.filter((id) => id !== 'layout' || hasLayoutTools),
     [hasLayoutTools],
   );
+  const isSectionAllowed = (sectionId: ToolSectionId) =>
+    canUseDocumentToolSection(accessRole, sectionId);
+  const isGroupAllowed = (groupId: ToolGroupId) =>
+    GROUP_SECTIONS[groupId].some(
+      (sectionId) => visibleToolSectionIds.includes(sectionId) && isSectionAllowed(sectionId),
+    );
   const visibleToolGroupIds = useMemo(
     () => TOOL_GROUP_IDS.filter((groupId) => isToolGroupVisible(groupId, toolScenario)),
     [toolScenario],
@@ -541,7 +563,7 @@ export function DocumentPdfOperationsPanel({
         openGuestCommentsCount,
         acceptedEditsCount,
         versionReady,
-      }),
+      }).filter((step) => isSectionAllowed(step.sectionId)),
     [
       acceptedEditsCount,
       layoutObjectCount,
@@ -549,12 +571,15 @@ export function DocumentPdfOperationsPanel({
       toolScenario,
       versionReady,
       workflowContext?.hasShareLinkOnCurrentVersion,
+      accessRole,
     ],
   );
   const visibleSectionsForScenario = useMemo(
     () =>
-      visibleToolSectionIds.filter((id) => visibleToolGroupIds.includes(getSectionGroup(id))),
-    [visibleToolGroupIds, visibleToolSectionIds],
+      visibleToolSectionIds.filter(
+        (id) => visibleToolGroupIds.includes(getSectionGroup(id)) && isSectionAllowed(id),
+      ),
+    [accessRole, visibleToolGroupIds, visibleToolSectionIds],
   );
   const allSectionsOpen =
     visibleSectionsForScenario.length > 0 &&
@@ -564,6 +589,7 @@ export function DocumentPdfOperationsPanel({
     return openSections.has(id);
   }
   function toggleSection(id: ToolSectionId) {
+    if (!isSectionAllowed(id)) return;
     setOpenSections((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -572,6 +598,7 @@ export function DocumentPdfOperationsPanel({
     });
   }
   function focusToolSection(sectionId: ToolSectionId) {
+    if (!isSectionAllowed(sectionId)) return;
     const group = getSectionGroup(sectionId);
     setOpenGroups((prev) => {
       const next = new Set(prev);
@@ -593,10 +620,10 @@ export function DocumentPdfOperationsPanel({
   }
   function expandAllSections() {
     const sectionIds = visibleToolSectionIds.filter((id) =>
-      visibleToolGroupIds.includes(getSectionGroup(id)),
+      visibleToolGroupIds.includes(getSectionGroup(id)) && isSectionAllowed(id),
     );
     setOpenSections(new Set(sectionIds));
-    setOpenGroups(new Set(visibleToolGroupIds));
+    setOpenGroups(new Set(visibleToolGroupIds.filter((groupId) => isGroupAllowed(groupId))));
   }
   function collapseAllSections() {
     setOpenSections(new Set());
@@ -606,6 +633,7 @@ export function DocumentPdfOperationsPanel({
     return GROUP_SECTIONS[groupId].filter((id) => visibleToolSectionIds.includes(id));
   }
   function toggleGroup(groupId: ToolGroupId) {
+    if (!isGroupAllowed(groupId)) return;
     const sectionsInGroup = visibleSectionsInGroup(groupId);
     const soleSection = sectionsInGroup.length === 1 ? sectionsInGroup[0] : null;
     const opening = !openGroups.has(groupId);
@@ -753,6 +781,8 @@ export function DocumentPdfOperationsPanel({
           description="Быстрые операции с текущей версией и сравнение готовых версий."
           isOpen={openGroups.has('pdf')}
           onToggle={() => toggleGroup('pdf')}
+          disabled={!isGroupAllowed('pdf')}
+          disabledReason={restrictionHint}
         />
         <div className={openGroups.has('pdf') ? 'space-y-2' : 'hidden'}>
           <ToolAccordionSection
@@ -760,6 +790,8 @@ export function DocumentPdfOperationsPanel({
           subtitle="Меньший файл для почты и чатов"
           isOpen={isSectionOpen('optimize')}
           onToggle={() => toggleSection('optimize')}
+          disabled={!isSectionAllowed('optimize')}
+          disabledReason={restrictionHint}
           sectionId="optimize"
           sectionRef={sectionRefCallbacks.optimize}
           helpTitle="Пресеты сжатия"
@@ -850,6 +882,8 @@ export function DocumentPdfOperationsPanel({
           subtitle={versionSubtitle}
           isOpen={isSectionOpen('split')}
           onToggle={() => toggleSection('split')}
+          disabled={!isSectionAllowed('split')}
+          disabledReason={restrictionHint}
           sectionId="split"
           sectionRef={sectionRefCallbacks.split}
           helpTitle="Извлечь страницы"
@@ -930,6 +964,8 @@ export function DocumentPdfOperationsPanel({
           subtitle={versionSubtitle}
           isOpen={isSectionOpen('pages')}
           onToggle={() => toggleSection('pages')}
+          disabled={!isSectionAllowed('pages')}
+          disabledReason={restrictionHint}
           sectionId="pages"
           sectionRef={sectionRefCallbacks.pages}
           helpTitle="Порядок и дубликаты страниц"
@@ -959,6 +995,8 @@ export function DocumentPdfOperationsPanel({
           subtitle={mergeSubtitle}
           isOpen={isSectionOpen('merge')}
           onToggle={() => toggleSection('merge')}
+          disabled={!isSectionAllowed('merge')}
+          disabledReason={restrictionHint}
           sectionId="merge"
           sectionRef={sectionRefCallbacks.merge}
           helpTitle="Объединить версии"
@@ -1055,6 +1093,8 @@ export function DocumentPdfOperationsPanel({
           subtitle="Текст и правки между версиями"
           isOpen={isSectionOpen('diff')}
           onToggle={() => toggleSection('diff')}
+          disabled={!isSectionAllowed('diff')}
+          disabledReason={restrictionHint}
           sectionId="diff"
           sectionRef={sectionRefCallbacks.diff}
           helpTitle="Сравнение версий"
@@ -1075,6 +1115,37 @@ export function DocumentPdfOperationsPanel({
             hideSectionHeader
           />
         </ToolAccordionSection>
+
+        <ToolAccordionSection
+          title="Экспорт и конвертация"
+          subtitle="PDF, DOCX, картинки, ZIP"
+          isOpen={isSectionOpen('export')}
+          onToggle={() => toggleSection('export')}
+          disabled={!isSectionAllowed('export')}
+          disabledReason={restrictionHint}
+          sectionId="export"
+          sectionRef={sectionRefCallbacks.export}
+          helpTitle="Форматы экспорта"
+          helpContent={
+            <>
+              <p>Скачайте выбранную версию в PDF, Word или как набор картинок.</p>
+              <p>
+                «DOCX из PDF» конвертирует текущий PDF в Word — удобно для правок, если исходный
+                Word не загружали.
+              </p>
+            </>
+          }
+        >
+          {activeVersion ? (
+            <DocumentVersionExportPanel
+              documentId={documentId}
+              version={activeVersion}
+              versionReady={versionReady}
+            />
+          ) : (
+            <p className="text-xs text-slate-500">Выберите версию слева.</p>
+          )}
+        </ToolAccordionSection>
         </div>
         </>
         )}
@@ -1086,6 +1157,8 @@ export function DocumentPdfOperationsPanel({
           description="Размещение материалов на листах и подготовка пакета для передачи заказчику."
           isOpen={openGroups.has('layout')}
           onToggle={() => toggleGroup('layout')}
+          disabled={!isGroupAllowed('layout')}
+          disabledReason={restrictionHint}
         />
         <div className={openGroups.has('layout') ? 'space-y-2' : 'hidden'}>
           {layout && (
@@ -1094,6 +1167,8 @@ export function DocumentPdfOperationsPanel({
               subtitle="Добавить изображения, сетка и линейки"
               isOpen={isSectionOpen('layout')}
               onToggle={() => toggleSection('layout')}
+              disabled={!isSectionAllowed('layout')}
+              disabledReason={restrictionHint}
               sectionId="layout"
               sectionRef={sectionRefCallbacks.layout}
               helpTitle="Режим макета"
@@ -1134,6 +1209,8 @@ export function DocumentPdfOperationsPanel({
             subtitle="Подготовка, проверка печати, ZIP для заказчика"
             isOpen={isSectionOpen('booklet')}
             onToggle={() => toggleSection('booklet')}
+            disabled={!isSectionAllowed('booklet')}
+            disabledReason={restrictionHint}
             sectionId="booklet"
             sectionRef={sectionRefCallbacks.booklet}
             helpTitle="Буклет для заказчика"
@@ -1167,13 +1244,17 @@ export function DocumentPdfOperationsPanel({
           description="Команда — для коллег с аккаунтом. Гостевая ссылка — для заказчика без регистрации."
           isOpen={openGroups.has('approval')}
           onToggle={() => toggleGroup('approval')}
+          disabled={!isGroupAllowed('approval')}
+          disabledReason={restrictionHint}
         />
         <div className={openGroups.has('approval') ? '' : 'hidden'}>
           <ToolAccordionSection
             title="Доступ команды"
-            subtitle="Коллеги с аккаунтом Folio Mind"
+            subtitle="Коллеги с аккаунтом РазУм"
             isOpen={isSectionOpen('team-access')}
             onToggle={() => toggleSection('team-access')}
+            disabled={!isSectionAllowed('team-access')}
+            disabledReason={restrictionHint}
             sectionId="team-access"
             sectionRef={sectionRefCallbacks['team-access']}
             helpTitle="Команда на документе"
@@ -1196,6 +1277,8 @@ export function DocumentPdfOperationsPanel({
             subtitle="Просмотр без регистрации"
             isOpen={isSectionOpen('share')}
             onToggle={() => toggleSection('share')}
+            disabled={!isSectionAllowed('share')}
+            disabledReason={restrictionHint}
             sectionId="share"
             sectionRef={sectionRefCallbacks.share}
             helpTitle="Гостевой просмотр"
@@ -1249,6 +1332,8 @@ export function DocumentPdfOperationsPanel({
               subtitle="Комментарии к страницам PDF"
               isOpen={isSectionOpen('annotations')}
               onToggle={() => toggleSection('annotations')}
+              disabled={!isSectionAllowed('annotations')}
+              disabledReason={restrictionHint}
               sectionId="annotations"
               sectionRef={sectionRefCallbacks.annotations}
               helpTitle="Комментарии на PDF"
@@ -1270,6 +1355,8 @@ export function DocumentPdfOperationsPanel({
             description="Ручные замены, ИИ-предложения и сборка новой версии с правками."
             isOpen={openGroups.has('edits')}
             onToggle={() => toggleGroup('edits')}
+            disabled={!isGroupAllowed('edits')}
+            disabledReason={restrictionHint}
           />
           <div className={openGroups.has('edits') ? '' : 'hidden'}>
             <ToolAccordionSection
@@ -1277,6 +1364,8 @@ export function DocumentPdfOperationsPanel({
               subtitle="Ручные и ИИ-правки, сборка новой версии"
               isOpen={isSectionOpen('edits')}
               onToggle={() => toggleSection('edits')}
+              disabled={!isSectionAllowed('edits')}
+              disabledReason={restrictionHint}
               sectionId="edits"
               sectionRef={sectionRefCallbacks.edits}
               helpTitle="Правки в PDF"

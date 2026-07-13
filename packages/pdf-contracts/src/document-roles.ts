@@ -4,19 +4,39 @@ export type DocumentMemberRole = (typeof DOCUMENT_MEMBER_ROLES)[number];
 
 export type DocumentAccessRole = 'owner' | DocumentMemberRole;
 
-export type DocumentCapability = 'view' | 'comment' | 'edit' | 'manage' | 'manage_members';
+export type DocumentCapability =
+  | 'view'
+  | 'view_history'
+  | 'download'
+  | 'comment'
+  | 'edit'
+  | 'manage_share'
+  | 'manage'
+  | 'manage_members';
 
 const CAPABILITY_RANK: Record<DocumentCapability, number> = {
   view: 1,
-  comment: 2,
-  edit: 3,
-  manage: 4,
-  manage_members: 5,
+  view_history: 2,
+  download: 3,
+  comment: 4,
+  edit: 5,
+  manage_share: 6,
+  manage: 7,
+  manage_members: 8,
 };
 
 const ROLE_CAPABILITIES: Record<DocumentAccessRole, DocumentCapability[]> = {
-  owner: ['view', 'comment', 'edit', 'manage', 'manage_members'],
-  editor: ['view', 'comment', 'edit'],
+  owner: [
+    'view',
+    'view_history',
+    'download',
+    'comment',
+    'edit',
+    'manage_share',
+    'manage',
+    'manage_members',
+  ],
+  editor: ['view', 'view_history', 'download', 'comment', 'edit'],
   commenter: ['view', 'comment'],
   viewer: ['view'],
 };

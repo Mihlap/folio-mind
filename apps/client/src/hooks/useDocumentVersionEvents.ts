@@ -1,12 +1,18 @@
 import { useEffect, useRef } from 'react';
-import { apiBaseUrl, documentsApi, guestCommentsApi, pageReviewApi } from '@folio-mind/store';
+import { apiBaseUrl, documentMembersApi, documentsApi, guestCommentsApi, pageReviewApi } from '@folio-mind/store';
+import { readUserIdFromAuthToken } from '../lib/documents/document-ui-permissions.js';
 import { connectEventSource, SseConnectionError } from './connectEventSource.js';
 import { useAppDispatch } from './index.js';
+
+type MemberAccessEventData = {
+  userId?: string;
+};
 
 type Options = {
   documentId: string | undefined;
   versionId: string | undefined;
   token: string | null;
+  currentUserId?: string | null;
   enabled: boolean;
 };
 
@@ -14,12 +20,15 @@ export function useDocumentVersionEvents({
   documentId,
   versionId,
   token,
+  currentUserId,
   enabled,
 }: Options): void {
   const dispatch = useAppDispatch();
   const openedOnceRef = useRef(false);
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
+  const currentUserIdRef = useRef(currentUserId ?? readUserIdFromAuthToken(token));
+  currentUserIdRef.current = currentUserId ?? readUserIdFromAuthToken(token);
 
   useEffect(() => {
     openedOnceRef.current = false;
@@ -31,19 +40,29 @@ export function useDocumentVersionEvents({
     const abort = new AbortController();
     const url = `${apiBaseUrl}/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/events`;
 
-    const invalidateLiveData = () => {
+    const invalidateCollaborationData = () => {
       dispatchRef.current(
         guestCommentsApi.util.invalidateTags([{ type: 'GuestComments', id: versionId }]),
       );
       dispatchRef.current(
         pageReviewApi.util.invalidateTags([{ type: 'Documents', id: `page-marks-${versionId}` }]),
       );
+    };
+
+    const invalidateDocumentMeta = () => {
       dispatchRef.current(documentsApi.util.invalidateTags([{ type: 'Documents', id: documentId }]));
+    };
+
+    const invalidateMemberAccessForCurrentUser = () => {
+      dispatchRef.current(documentsApi.util.invalidateTags([{ type: 'Documents', id: documentId }]));
+      dispatchRef.current(
+        documentMembersApi.util.invalidateTags([{ type: 'DocumentMembers', id: documentId }]),
+      );
     };
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        invalidateLiveData();
+        invalidateCollaborationData();
       }
     };
 
@@ -55,17 +74,35 @@ export function useDocumentVersionEvents({
       headers: { Authorization: `Bearer ${token}` },
       onOpen: () => {
         if (openedOnceRef.current) {
-          invalidateLiveData();
+          invalidateCollaborationData();
         }
         openedOnceRef.current = true;
       },
       onMessage: (message) => {
+        if (message.event === 'member_access') {
+          let affectedUserId: string | null = null;
+          try {
+            const data = JSON.parse(message.data) as MemberAccessEventData;
+            affectedUserId = typeof data.userId === 'string' ? data.userId : null;
+          } catch {
+            affectedUserId = null;
+          }
+          if (affectedUserId && affectedUserId === currentUserIdRef.current) {
+            invalidateMemberAccessForCurrentUser();
+          }
+          return;
+        }
+
         if (
           message.event === 'guest_comment' ||
-          message.event === 'page_review' ||
-          message.event === 'review_status'
+          message.event === 'page_review'
         ) {
-          invalidateLiveData();
+          invalidateCollaborationData();
+          return;
+        }
+
+        if (message.event === 'review_status') {
+          invalidateDocumentMeta();
         }
       },
     }).catch((error: unknown) => {

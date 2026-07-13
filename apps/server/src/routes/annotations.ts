@@ -3,6 +3,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { annotationMetaWithContentFormat } from '@folio-mind/edit-markdown';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
+import {
+  isDocumentVersionAccessible,
+  resolveUserDocumentRole,
+} from '../lib/documents/document-permissions.js';
 import { serializeDocumentAnnotation } from '../lib/documents/serialize-annotation.js';
 
 const errorBody = z.object({ error: z.string() });
@@ -103,6 +107,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         params: z.object({ documentId: z.string(), versionId: z.string() }),
         response: {
           200: z.object({ items: z.array(annotationSchema) }),
+          403: errorBody,
           404: errorBody,
         },
       },
@@ -113,6 +118,10 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'view' });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
+      }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для этой версии' });
       }
       if (!document.versions.some((v: { id: string }) => v.id === versionId)) {
         return reply.code(404).send({ error: 'Version not found' });
@@ -135,6 +144,7 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         body: createAnnotationSchema,
         response: {
           201: annotationSchema,
+          403: errorBody,
           404: errorBody,
         },
       },
@@ -146,6 +156,10 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability });
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
+      }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для этой версии' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status === 'pending_upload') {
@@ -219,11 +233,23 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для этой версии' });
+      }
       const annotation = await app.prisma.documentAnnotation.findFirst({
         where: { id: annotationId, documentId, versionId },
       });
       if (!annotation) {
         return reply.code(404).send({ error: 'Annotation not found' });
+      }
+      if (annotation.kind === 'accepted_edit') {
+        const editable = await findDocumentForUser(app.prisma, documentId, user, {
+          capability: 'edit',
+        });
+        if (!editable) {
+          return reply.code(403).send({ error: 'Недостаточно прав для изменения правки' });
+        }
       }
       if (annotation.userId !== user.sub) {
         return reply.code(403).send({ error: 'Можно изменить только свою заметку' });
@@ -283,11 +309,23 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для этой версии' });
+      }
       const annotation = await app.prisma.documentAnnotation.findFirst({
         where: { id: annotationId, documentId, versionId },
       });
       if (!annotation) {
         return reply.code(404).send({ error: 'Annotation not found' });
+      }
+      if (annotation.kind === 'accepted_edit') {
+        const editable = await findDocumentForUser(app.prisma, documentId, user, {
+          capability: 'edit',
+        });
+        if (!editable) {
+          return reply.code(403).send({ error: 'Недостаточно прав для удаления правки' });
+        }
       }
       if (annotation.userId !== user.sub) {
         return reply.code(403).send({ error: 'Можно удалить только свою заметку' });

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  roleHasCapability,
   useDeleteDocumentVersionMutation,
   useLazyGetSourceDocxUrlQuery,
   getVersionStatusLabel,
@@ -15,6 +16,7 @@ import { DocumentVersionIntegrityBadge } from './DocumentVersionIntegrityBadge.j
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
 import { docxBadgeLabel, docxBadgeTitle, docxDownloadLabel, docxDownloadTitle, versionHasDocxDownload } from '../../lib/documents/sourceDocx.js';
 import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
+import { normalizeDocumentRole } from '../../lib/documents/document-ui-permissions.js';
 function formatVersionMeta(size: string, pageCount?: number | null) {
   const parts: string[] = [];
   if (pageCount && pageCount > 0) parts.push(`${pageCount} стр.`);
@@ -42,8 +44,13 @@ const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
 type Props = {
   variant?: 'sidebar' | 'drawer';
   onVersionAction?: () => void;
+  documentRole?: string | null;
 };
-export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }: Props) {
+export function DocumentVersionsSidebar({
+  variant = 'sidebar',
+  onVersionAction,
+  documentRole,
+}: Props) {
   const ctx = useDocumentWorkspaceOptional();
   const workspace = ctx?.workspace;
   const token = useAppSelector((s) => s.auth.token);
@@ -125,6 +132,11 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
   const deleteBlocked = versions.length <= 1;
   const isDrawer = variant === 'drawer';
   const displayError = localError ?? uploadError;
+  const accessRole = normalizeDocumentRole(documentRole ?? workspace.documentRole);
+  const canEdit = roleHasCapability(accessRole, 'edit');
+  const canManage = roleHasCapability(accessRole, 'manage');
+  const canDownload = roleHasCapability(accessRole, 'download');
+  const canViewHistory = roleHasCapability(accessRole, 'view_history');
   return (
     <div
       className={isDrawer ? 'flex min-h-0 flex-1 flex-col' : 'flex h-full min-h-0 flex-1 flex-col overflow-hidden'}
@@ -141,16 +153,21 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
           <div className="flex items-center gap-1">
             <button
               type="button"
-              disabled={uploadingNewVersion}
+              disabled={uploadingNewVersion || !canEdit}
               onClick={onRequestNewDocxVersion}
               className="cursor-pointer rounded-md border border-emerald-200 bg-emerald-50/60 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
-              title="Новая версия из DOCX (PDF создастся автоматически)"
+              title={
+                canEdit
+                  ? 'Новая версия из DOCX (PDF создастся автоматически)'
+                  : 'Недоступно для вашей роли'
+              }
             >
               {uploadingNewVersion ? '+ …' : '+ DOCX'}
             </button>
             <button
               type="button"
-              disabled={uploadingNewVersion}
+              disabled={uploadingNewVersion || !canEdit}
+              title={canEdit ? 'Загрузить новую PDF-версию' : 'Недоступно для вашей роли'}
               onClick={onRequestNewVersion}
               className="cursor-pointer rounded-md bg-folio-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-folio-700 disabled:opacity-50"
             >
@@ -181,8 +198,14 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
               >
                 <button
                   type="button"
-                  disabled={!selectable}
-                  title={!selectable ? TITLE_VERSION_PREPARING : undefined}
+                  disabled={!selectable || !canViewHistory}
+                  title={
+                    !canViewHistory
+                      ? 'Для вашей роли доступна только текущая версия'
+                      : !selectable
+                        ? TITLE_VERSION_PREPARING
+                        : undefined
+                  }
                   onClick={() => handleSelectVersion(v.id)}
                   className="w-full cursor-pointer rounded-md text-left disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -245,13 +268,13 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                     />
                   </div>
                 )}
-                {v.status !== 'pending_upload' && (
+                {v.status !== 'pending_upload' && (canEdit || canDownload || canManage) && (
                   <div
                     className="mt-1.5 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-1.5"
                     role="toolbar"
                     aria-label={`Скачать v${v.version}`}
                   >
-                    <div className="mr-1 inline-flex items-center gap-1">
+                    {canEdit && <div className="mr-1 inline-flex items-center gap-1">
                       {VERSION_LABELS.map((item) => {
                         const selected = v.versionLabel === item.id;
                         return (
@@ -277,8 +300,8 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                           </button>
                         );
                       })}
-                    </div>
-                    {v.status === 'ready' && (
+                    </div>}
+                    {canDownload && v.status === 'ready' && (
                       <button
                         type="button"
                         title="Скачать PDF этой версии"
@@ -289,7 +312,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                         <span>PDF</span>
                       </button>
                     )}
-                    {versionHasDocxDownload(v) && (
+                    {canDownload && versionHasDocxDownload(v) && (
                       <button
                         type="button"
                         title={docxDownloadTitle(v)}
@@ -300,7 +323,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                         <span>{docxDownloadLabel(v)}</span>
                       </button>
                     )}
-                    <span className="relative z-[1] ml-auto">
+                    {canManage && <span className="relative z-[1] ml-auto">
                       <DeleteDocumentButton
                         title={
                           deleteBlocked
@@ -312,7 +335,7 @@ export function DocumentVersionsSidebar({ variant = 'sidebar', onVersionAction }
                         onClick={() => setPendingDelete({ versionId: v.id, versionNumber: v.version })}
                         variant="list"
                       />
-                    </span>
+                    </span>}
                   </div>
                 )}
               </div>

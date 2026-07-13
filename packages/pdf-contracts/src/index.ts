@@ -261,6 +261,8 @@ export {
   type GuestCommentDocumentEvent,
   type PageReviewDocumentEvent,
   type ReviewStatusDocumentEvent,
+  type MemberAccessDocumentEvent,
+  type MemberAccessEventAction,
   type GuestCommentEventAction,
   type PageReviewEventAction,
 } from './document-events.js';

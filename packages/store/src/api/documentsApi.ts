@@ -63,6 +63,7 @@ export const documentsApi = baseApi.injectEndpoints({
       {
         id: string;
         title: string;
+        ownerId: string;
         reviewStatus: DocumentReviewStatus;
         reviewStatusChangedAt: string | null;
         projectId: string | null;
@@ -691,6 +692,22 @@ export const documentsApi = baseApi.injectEndpoints({
       query: ({ documentId, versionId }) =>
         `/documents/${documentId}/versions/${versionId}/pages-export-url`,
     }),
+    convertPdfToDocx: build.mutation<
+      { status: 'ready' } | { operationJobId: string; status: 'processing' },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/operations/convert-pdf-to-docx`,
+        method: 'POST',
+      }),
+    }),
+    getConvertedDocxUrl: build.query<
+      { url: string; expiresInSeconds: number },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) =>
+        `/documents/${documentId}/versions/${versionId}/converted-docx-url`,
+    }),
     getHighlightDocxUrl: build.query<
       { url: string; expiresInSeconds: number },
       { documentId: string; versionId: string }
@@ -825,6 +842,8 @@ export const {
   usePrintReadinessMutation,
   useLazyGetBookletExportUrlQuery,
   useLazyGetPagesExportUrlQuery,
+  useConvertPdfToDocxMutation,
+  useLazyGetConvertedDocxUrlQuery,
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useUpdateDocumentReviewStatusMutation,

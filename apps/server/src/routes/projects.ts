@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { getAuthUser } from '../lib/documents/document-access.js';
+import { getAuthUser, findDocumentForUser } from '../lib/documents/document-access.js';
+import { deleteDocumentWithArtifacts } from '../lib/documents/delete-document.js';
+import type { Env } from '../lib/config/env.js';
 import { findProjectForTenant } from '../lib/projects/project-access.js';
 import { mapDocumentListItem } from './documents/helpers.js';
 import { toDocumentReviewStatus } from '../lib/documents/document-review-status.js';
@@ -15,7 +17,7 @@ const projectSchema = z.object({
   updatedAt: z.string(),
 });
 
-export const projectRoutes: FastifyPluginAsync = async (app) => {
+export const projectRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { env }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.get(
@@ -182,6 +184,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         params: z.object({ projectId: z.string() }),
         response: {
           204: z.void(),
+          403: errorBody,
           404: errorBody,
         },
       },
@@ -196,13 +199,57 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       if (!existing) {
         return reply.code(404).send({ error: 'Project not found' });
       }
+
+      const documents = await app.prisma.document.findMany({
+        where: { projectId: existing.id, tenantId: user.tenantId },
+        include: {
+          versions: {
+            orderBy: { version: 'asc' },
+            select: { id: true, s3Key: true, sourceDocxKey: true, version: true },
+          },
+        },
+      });
+
+      for (const document of documents) {
+        const manageable = await findDocumentForUser(app.prisma, document.id, user, {
+          capability: 'manage',
+        });
+        if (!manageable) {
+          return reply.code(403).send({
+            error:
+              'Нельзя удалить проект: в нём есть документы, которые вы не можете удалить. Отвяжите их от проекта («Без проекта») или попросите владельца удалить документы.',
+          });
+        }
+      }
+
+      for (const document of documents) {
+        await deleteDocumentWithArtifacts(app.prisma, env, document, request.log);
+        await app.prisma.auditLog.create({
+          data: {
+            action: 'document.delete',
+            userId: user.sub,
+            tenantId: user.tenantId,
+            meta: {
+              documentId: document.id,
+              title: document.title,
+              viaProjectDelete: existing.id,
+            },
+          },
+        });
+      }
+
       await app.prisma.project.delete({ where: { id: existing.id } });
       await app.prisma.auditLog.create({
         data: {
           action: 'project.delete',
           userId: user.sub,
           tenantId: user.tenantId,
-          meta: { projectId: existing.id, name: existing.name },
+          meta: {
+            projectId: existing.id,
+            name: existing.name,
+            deletedDocumentCount: documents.length,
+            deletedDocumentIds: documents.map((document) => document.id),
+          },
         },
       });
       return reply.code(204).send();

@@ -196,6 +196,8 @@ export {
   usePrintReadinessMutation,
   useLazyGetBookletExportUrlQuery,
   useLazyGetPagesExportUrlQuery,
+  useConvertPdfToDocxMutation,
+  useLazyGetConvertedDocxUrlQuery,
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useCompareVersionIntegrityQuery,

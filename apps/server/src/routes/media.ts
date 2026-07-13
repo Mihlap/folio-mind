@@ -236,7 +236,9 @@ export const mediaRoutes: FastifyPluginAsync<{ env: Env }> = async (app, opts) =
       }
 
       if (documentId) {
-        const document = await findDocumentForUser(app.prisma, documentId, user);
+        const document = await findDocumentForUser(app.prisma, documentId, user, {
+          capability: 'edit',
+        });
         if (!document) {
           return reply.code(404).send({ error: 'Document not found' });
         }

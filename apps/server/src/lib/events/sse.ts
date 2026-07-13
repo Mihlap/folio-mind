@@ -62,11 +62,23 @@ export function writeVersionScopeSseEvent(
 }
 
 export function writeMetaScopeSseEvent(reply: FastifyReply, event: DocumentMetaScopeEvent): void {
-  if (event.type === 'review_status') {
-    writeSseEvent(reply, 'review_status', {
-      reviewStatus: event.reviewStatus,
-      documentId: event.documentId,
-    });
+  switch (event.type) {
+    case 'review_status':
+      writeSseEvent(reply, 'review_status', {
+        reviewStatus: event.reviewStatus,
+        documentId: event.documentId,
+      });
+      break;
+    case 'member_access':
+      writeSseEvent(reply, 'member_access', {
+        documentId: event.documentId,
+        userId: event.userId,
+        action: event.action,
+        role: event.role ?? null,
+      });
+      break;
+    default:
+      break;
   }
 }
 

@@ -384,6 +384,23 @@ export async function enqueuePreConvertJob(
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('pre-convert-pdf', payload, { jobId: payload.jobId });
 }
+
+export async function enqueueConvertVersionDocxJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    sourcePdfS3Key: string;
+    userSourceDocxKey?: string | null;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('convert-version-docx', payload, { jobId: payload.jobId });
+}
 export async function enqueueImportFromDocxJob(
   env: Env,
   payload: {

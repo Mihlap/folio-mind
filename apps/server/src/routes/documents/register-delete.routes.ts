@@ -3,9 +3,9 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { deleteCachedSummaries } from '../../lib/ai/ai-cache.js';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
+import { deleteDocumentWithArtifacts } from '../../lib/documents/delete-document.js';
 import type { Env } from '../../lib/config/env.js';
 import {
-  deleteDocumentArtifacts,
   deleteVersionArtifacts,
   isS3Configured,
   type S3DeleteResult,
@@ -114,32 +114,8 @@ export const registerDeleteRoutes: FastifyPluginAsync<{
       if (!document) {
         return reply.code(404).send({ error: 'Document not found' });
       }
-      const versionIds = document.versions.map((v: { id: string }) => v.id);
-      if (isS3Configured()) {
-        const result = await deleteDocumentArtifacts(
-          document.id,
-          document.versions.map(
-            (v: { id: string; s3Key: string; sourceDocxKey?: string | null; version: number }) => ({
-              versionId: v.id,
-              s3Key: v.s3Key,
-              sourceDocxKey: v.sourceDocxKey,
-              versionNumber: v.version,
-            }),
-          ),
-        );
-        logS3CleanupIssues(
-          request.log,
-          result,
-          { documentId: document.id },
-          'S3 cleanup incomplete for deleted document',
-        );
-      }
-      await clearVersionLineageRefs(app.prisma, versionIds);
-      await deleteCachedSummaries(env, versionIds);
-      await app.prisma.documentAnnotation.deleteMany({ where: { documentId: document.id } });
-      await app.prisma.aiSuggestion.deleteMany({ where: { documentId: document.id } });
       try {
-        await app.prisma.document.delete({ where: { id: document.id } });
+        await deleteDocumentWithArtifacts(app.prisma, env, document, request.log);
       } catch (err) {
         const missing =
           typeof err === 'object' &&

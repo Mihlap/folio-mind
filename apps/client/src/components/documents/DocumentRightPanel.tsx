@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, useEffect } from 'react';
 import { shellPanelToolbarClass } from '../layout/shell-chrome.js';
 import { PanelResizeHandle } from '../layout/PanelResizeHandle.js';
 import { PanelViewportToggle } from '../layout/PanelViewportToggle.js';
@@ -9,8 +9,13 @@ import { DocumentReportPanel } from './DocumentReportPanel.js';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import type { ToolSectionId } from '../ui/ToolAccordionSection.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
-import type { DocumentReviewStatus, ShareLinkItem } from '@folio-mind/store';
+import {
+  roleHasCapability,
+  type DocumentReviewStatus,
+  type ShareLinkItem,
+} from '@folio-mind/store';
 import type { VersionCreatedNotice } from '../../hooks/useVersionCreatedNotice.js';
+import { normalizeDocumentRole } from '../../lib/documents/document-ui-permissions.js';
 export type DocumentRightTab = 'chat' | 'tools' | 'report';
 type Props = {
   documentId: string;
@@ -96,7 +101,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   acceptedEditsCount = 0,
     versionCreatedNotice = null,
     onDismissVersionCreatedNotice,
-    documentRole = 'owner',
+    documentRole = 'viewer',
     collapsed,
   onToggleCollapsed,
   onExpand,
@@ -110,6 +115,11 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   ref,
 ) {
   const isDrawer = mode === 'drawer';
+  const accessRole = normalizeDocumentRole(documentRole);
+  const canUseAi = roleHasCapability(accessRole, 'edit');
+  useEffect(() => {
+    if (!canUseAi && activeTab !== 'tools') onTabChange('tools');
+  }, [activeTab, canUseAi, onTabChange]);
   const viewportToggle = !isDrawer ? (
     <PanelViewportToggle
       side="right"
@@ -133,12 +143,13 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             <button
               key={tab.id}
               type="button"
-              title={tab.label}
+              disabled={!canUseAi && tab.id !== 'tools'}
+              title={!canUseAi && tab.id !== 'tools' ? 'Недоступно для вашей роли' : tab.label}
               onClick={() => {
                 onTabChange(tab.id);
                 onExpand();
               }}
-              className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-lg transition ${
+              className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg text-lg transition disabled:cursor-not-allowed disabled:opacity-40 ${
                 activeTab === tab.id
                   ? 'bg-folio-50 text-folio-700 ring-1 ring-folio-200'
                   : 'text-slate-500 hover:bg-slate-50'
@@ -171,8 +182,10 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
           <button
             key={tab.id}
             type="button"
+            disabled={!canUseAi && tab.id !== 'tools'}
+            title={!canUseAi && tab.id !== 'tools' ? 'Недоступно для вашей роли' : undefined}
             onClick={() => onTabChange(tab.id)}
-            className={`flex h-full min-w-0 flex-1 cursor-pointer items-center justify-center border-b-2 px-1 text-xs font-medium transition sm:px-2 sm:text-sm ${
+            className={`flex h-full min-w-0 flex-1 cursor-pointer items-center justify-center border-b-2 px-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:px-2 sm:text-sm ${
               activeTab === tab.id
                 ? 'border-folio-600 text-folio-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
