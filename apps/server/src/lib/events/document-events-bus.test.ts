@@ -6,13 +6,13 @@ import {
 } from './document-events-bus.js';
 import type { Env } from '../config/env.js';
 
+const redisUrl = process.env.REDIS_URL?.trim();
+
 const testEnv = {
-  REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
+  REDIS_URL: redisUrl ?? '',
 } as Env;
 
-const redisAvailable = Boolean(testEnv.REDIS_URL?.trim());
-
-describe.skipIf(!redisAvailable)('document-events-bus', () => {
+describe.skipIf(!redisUrl)('document-events-bus', () => {
   afterEach(() => {
     resetDocumentEventsRedisForTests();
   });
@@ -35,9 +35,7 @@ describe.skipIf(!redisAvailable)('document-events-bus', () => {
 
     await publishGuestCommentDocumentEvent(testEnv, documentId, versionId, 'created', 'cmt-1');
 
-    await expect
-      .poll(() => received, { timeout: 2000 })
-      .toEqual(['created']);
+    await expect.poll(() => received, { timeout: 2000 }).toEqual(['created']);
 
     await subscription.close();
   });

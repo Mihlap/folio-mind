@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
+
+const databaseUrl = process.env.DATABASE_URL?.trim();
+const runDbIntegration = Boolean(databaseUrl);
+
 const testEnv = {
   NODE_ENV: 'test' as const,
   PORT: 3001,
@@ -9,8 +13,8 @@ const testEnv = {
   FRONTEND_URL: 'http://localhost:5173',
   PASSWORD_RESET_TOKEN_TTL_MINUTES: 30,
   SMTP_SECURE: false,
-  REDIS_URL: 'redis://localhost:6379',
-  DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://folio:folio@localhost:5434/folio_mind',
+  REDIS_URL: process.env.REDIS_URL?.trim() || '',
+  DATABASE_URL: databaseUrl,
   S3_REGION: 'ru-1',
   S3_FORCE_PATH_STYLE: true as const,
   AI_PROVIDER: 'gigachat' as const,
@@ -32,6 +36,7 @@ const testEnv = {
   SMS_PROVIDER: 'dummy' as const,
   SMS_CODE_TTL_MINUTES: 5,
 };
+
 describe('API /health', () => {
   it('returns ok without database', async () => {
     const app = await buildApp({
@@ -46,7 +51,8 @@ describe('API /health', () => {
     await app.close();
   });
 });
-describe('API DELETE with empty JSON body', () => {
+
+describe.skipIf(!runDbIntegration)('API DELETE with empty JSON body', () => {
   it('does not fail body parsing before auth', async () => {
     const app = await buildApp({ env: testEnv });
     const res = await app.inject({
@@ -63,7 +69,8 @@ describe('API DELETE with empty JSON body', () => {
     await app.close();
   });
 });
-describe('API /auth/register', () => {
+
+describe.skipIf(!runDbIntegration)('API /auth/register', () => {
   it('creates tenant and user', async () => {
     const app = await buildApp({ env: testEnv });
     const email = `reg-${Date.now()}@folio-mind.test`;

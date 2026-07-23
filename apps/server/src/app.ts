@@ -70,7 +70,7 @@ export async function buildApp(options: BuildAppOptions) {
     }
   });
   if (!options.skipDatabase && options.env.DATABASE_URL) {
-    await app.register(prismaPlugin);
+    await app.register(prismaPlugin, { databaseUrl: options.env.DATABASE_URL });
     await app.register(healthRoutes, { env: options.env });
     await app.register(authRoutes, { env: options.env });
     await app.register(oauthRoutes, { env: options.env });
