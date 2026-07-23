@@ -18,9 +18,19 @@ type WtSegment = {
   openTag: string;
   text: string;
 };
+function stripIllegalXmlControls(text: string): string {
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    // XML 1.0 allows TAB (0x09), LF (0x0A), CR (0x0D); other C0 controls are illegal.
+    if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) continue;
+    out += text[i];
+  }
+  return out;
+}
+
 function escapeXml(text: string): string {
-  return text
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+  return stripIllegalXmlControls(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
