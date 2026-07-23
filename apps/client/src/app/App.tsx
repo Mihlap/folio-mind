@@ -5,6 +5,7 @@ import { AppShell } from '../components/layout/AppShell.js';
 import { DocumentWorkspaceProvider } from '../context/document-workspace-context.js';
 import { BackgroundUploadProvider } from '../context/background-upload-provider.js';
 import { LandingPage } from '../pages/public/LandingPage.js';
+import { PendingVerifyRedirect } from '../components/auth/PendingVerifyRedirect.js';
 
 const DashboardPage = lazy(() =>
   import('../pages/app/DashboardPage.js').then((module) => ({ default: module.DashboardPage })),
@@ -87,9 +88,23 @@ export function App() {
   return (
     <Suspense fallback={<PageFallback />}>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/"
+          element={
+            <PendingVerifyRedirect>
+              <LandingPage />
+            </PendingVerifyRedirect>
+          }
+        />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route
+          path="/register"
+          element={
+            <PendingVerifyRedirect>
+              <RegisterPage />
+            </PendingVerifyRedirect>
+          }
+        />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />

@@ -253,6 +253,8 @@ CREATE TABLE "DocumentVersion" (
     "confidenceSummary" TEXT,
     "confidenceDetails" JSONB,
     "confidenceAnalyzedAt" TIMESTAMP(3),
+    "textSource" TEXT,
+    "visionOcrStatus" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "DocumentVersion_pkey" PRIMARY KEY ("id")
@@ -347,6 +349,20 @@ CREATE TABLE "RagChunk" (
     "embedding" vector(384),
 
     CONSTRAINT "RagChunk_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "DocumentChunk" (
+    "id" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "versionId" TEXT NOT NULL,
+    "tenantId" TEXT NOT NULL,
+    "chunkIndex" INTEGER NOT NULL,
+    "page" INTEGER,
+    "content" TEXT NOT NULL,
+    "embedding" vector(384),
+
+    CONSTRAINT "DocumentChunk_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -452,10 +468,10 @@ CREATE INDEX "GuestShareComment_documentId_versionId_createdAt_idx" ON "GuestSha
 CREATE INDEX "GuestShareComment_shareLinkId_createdAt_idx" ON "GuestShareComment"("shareLinkId", "createdAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "DocumentMember_documentId_userId_key" ON "DocumentMember"("documentId", "userId");
+CREATE INDEX "DocumentMember_userId_idx" ON "DocumentMember"("userId");
 
 -- CreateIndex
-CREATE INDEX "DocumentMember_userId_idx" ON "DocumentMember"("userId");
+CREATE UNIQUE INDEX "DocumentMember_documentId_userId_key" ON "DocumentMember"("documentId", "userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "TenantInvite_tokenHash_key" ON "TenantInvite"("tokenHash");
@@ -504,6 +520,18 @@ CREATE INDEX "RagChunk_sourceId_idx" ON "RagChunk"("sourceId");
 
 -- CreateIndex
 CREATE INDEX "RagChunk_tenantId_idx" ON "RagChunk"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "DocumentChunk_documentId_idx" ON "DocumentChunk"("documentId");
+
+-- CreateIndex
+CREATE INDEX "DocumentChunk_versionId_idx" ON "DocumentChunk"("versionId");
+
+-- CreateIndex
+CREATE INDEX "DocumentChunk_tenantId_idx" ON "DocumentChunk"("tenantId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DocumentChunk_versionId_chunkIndex_key" ON "DocumentChunk"("versionId", "chunkIndex");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ApiKey_keyHash_key" ON "ApiKey"("keyHash");
@@ -591,6 +619,12 @@ ALTER TABLE "RagSource" ADD CONSTRAINT "RagSource_tenantId_fkey" FOREIGN KEY ("t
 
 -- AddForeignKey
 ALTER TABLE "RagChunk" ADD CONSTRAINT "RagChunk_sourceId_fkey" FOREIGN KEY ("sourceId") REFERENCES "RagSource"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentChunk" ADD CONSTRAINT "DocumentChunk_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DocumentChunk" ADD CONSTRAINT "DocumentChunk_versionId_fkey" FOREIGN KEY ("versionId") REFERENCES "DocumentVersion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ApiKey" ADD CONSTRAINT "ApiKey_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;

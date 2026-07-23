@@ -87,6 +87,8 @@ export const documentsApi = baseApi.injectEndpoints({
           sourceVersionId: string | null;
           sourceDocxKey: string | null;
           hasAppliedDocx: boolean;
+          textSource: string | null;
+          visionOcrStatus: string | null;
         }>;
       },
       string

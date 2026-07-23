@@ -1,5 +1,12 @@
-import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
-import { computeLayoutImageDrawParams, formatLayoutPageChromeText, type LayoutImageObject, type LayoutBlankInsertion, type LayoutPageChrome } from '@folio-mind/pdf-contracts';
+import { PDFDocument, degrees, rgb } from 'pdf-lib';
+import {
+  computeLayoutImageDrawParams,
+  formatLayoutPageChromeText,
+  type LayoutImageObject,
+  type LayoutBlankInsertion,
+  type LayoutPageChrome,
+} from '@folio-mind/pdf-contracts';
+import { embedCyrillicFont, registerPdfFontkit } from './pdf-cyrillic-font.js';
 
 export type ApplyLayoutPdfResult = {
   buffer: Buffer;
@@ -105,6 +112,7 @@ export async function applyLayoutToPdfBuffer(
   }
 
   const pdfDoc = await PDFDocument.load(sourceBuffer, { ignoreEncryption: true });
+  registerPdfFontkit(pdfDoc);
   const initialPageCount = pdfDoc.getPageCount();
   const firstPage = initialPageCount > 0 ? pdfDoc.getPage(0) : null;
   const pageSize = firstPage?.getSize() ?? { width: 595, height: 842 };
@@ -116,7 +124,8 @@ export async function applyLayoutToPdfBuffer(
   const maxObjectPage = objects.reduce((max, object) => Math.max(max, object.page), 0);
   appendTrailingBlankPages(pdfDoc, pdfDoc.getPageCount(), maxObjectPage, pageSize);
   const pageCount = pdfDoc.getPageCount();
-  const captionFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  // Helvetica/WinAnsi cannot encode Cyrillic (headers like «Договор…», captions).
+  const textFont = await embedCyrillicFont(pdfDoc);
   let appliedCount = 0;
   let skippedCount = 0;
 
@@ -151,16 +160,16 @@ export async function applyLayoutToPdfBuffer(
       const fontSize = Math.max(7, Math.min(11, draw.width * 0.04));
       const maxWidth = draw.width * 0.95;
       let text = caption;
-      while (text.length > 1 && captionFont.widthOfTextAtSize(text, fontSize) > maxWidth) {
+      while (text.length > 1 && textFont.widthOfTextAtSize(text, fontSize) > maxWidth) {
         text = text.slice(0, -1);
       }
       if (text.length < caption.length) text = `${text.slice(0, Math.max(0, text.length - 1))}…`;
-      const textWidth = captionFont.widthOfTextAtSize(text, fontSize);
+      const textWidth = textFont.widthOfTextAtSize(text, fontSize);
       page.drawText(text, {
         x: draw.x + (draw.width - textWidth) / 2,
         y: Math.max(4, draw.y - fontSize - 2),
         size: fontSize,
-        font: captionFont,
+        font: textFont,
         color: rgb(0.2, 0.2, 0.2),
       });
     }
@@ -169,7 +178,7 @@ export async function applyLayoutToPdfBuffer(
   }
 
   for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-    drawPageChrome(pdfDoc.getPage(pageIndex), pageIndex, pageCount, pageChrome, captionFont);
+    drawPageChrome(pdfDoc.getPage(pageIndex), pageIndex, pageCount, pageChrome, textFont);
   }
 
   if (appliedCount === 0) {

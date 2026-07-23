@@ -14,6 +14,10 @@ import { PhoneAuthForm } from '../../components/auth/PhoneAuthForm.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
+import {
+  clearPendingVerifyEmail,
+  getPendingVerifyEmail,
+} from '../../lib/auth/pending-verify-email.js';
 
 type AuthTab = 'email' | 'phone';
 
@@ -33,7 +37,7 @@ export function LoginPage() {
   const [acceptTenantInvite] = useAcceptTenantInviteMutation();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => getPendingVerifyEmail() ?? '');
   const [password, setPassword] = useState('');
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [invitePreview, setInvitePreview] = useState<TenantInvitePreview | null>(null);
@@ -85,6 +89,7 @@ export function LoginPage() {
         password,
         captchaToken: captchaToken ?? undefined,
       }).unwrap();
+      clearPendingVerifyEmail();
       dispatch(setCredentials(res));
 
       if (inviteToken) {

@@ -1,38 +1,60 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGetJobQuery, useRequestRagCompareMutation } from '@folio-mind/store';
+import {
+  clearDocumentRagCompareDraft,
+  loadDocumentRagCompareDraft,
+  saveDocumentRagCompareDraft,
+} from '../../lib/documents/document-rag-compare-draft.js';
 import { FeatureHelpActionButton, PanelSectionHeader } from '../ui/FeatureHelp.js';
 import { reportActionBtnSoft, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
 import { ReportTextBlock } from './ReportTextBlock.js';
+
 type Props = {
   documentId: string;
   versionId: string;
   versionReady: boolean;
 };
+
 export function DocumentRagComparePanel({ documentId, versionId, versionReady }: Props) {
   const [requestCompare, { isLoading: requesting }] = useRequestRagCompareMutation();
   const [jobId, setJobId] = useState<string | null>(null);
   const [pollJob, setPollJob] = useState(false);
   const [report, setReport] = useState<string | null>(null);
-  const [reportDismissed, setReportDismissed] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: job } = useGetJobQuery(jobId!, {
     skip: !jobId,
     pollingInterval: pollJob ? 2000 : 0,
   });
+
   useEffect(() => {
     setJobId(null);
     setPollJob(false);
-    setReport(null);
-    setReportDismissed(false);
     setError(null);
+    const draft = loadDocumentRagCompareDraft(versionId);
+    if (draft) {
+      setReport(draft.report);
+      setCollapsed(draft.collapsed);
+    } else {
+      setReport(null);
+      setCollapsed(false);
+    }
   }, [versionId]);
+
+  useEffect(() => {
+    if (!versionId || !report) {
+      return;
+    }
+    saveDocumentRagCompareDraft(versionId, { report, collapsed });
+  }, [versionId, report, collapsed]);
+
   useEffect(() => {
     if (!job) return;
     if (job.status === 'completed') {
       setPollJob(false);
       if (job.payload?.report) {
-        setReportDismissed(false);
+        setCollapsed(false);
         setReport(job.payload.report);
       }
     }
@@ -51,10 +73,12 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
       );
     }
   }, [job]);
+
   async function handleCompare() {
     setError(null);
-    setReportDismissed(false);
     setReport(null);
+    setCollapsed(false);
+    clearDocumentRagCompareDraft(versionId);
     try {
       const result = await requestCompare({ documentId, versionId }).unwrap();
       setJobId(result.jobId);
@@ -63,8 +87,18 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
       setError(e instanceof Error ? e.message : 'Не удалось запустить сверку');
     }
   }
+
+  function handleDismiss() {
+    setJobId(null);
+    setPollJob(false);
+    setReport(null);
+    setCollapsed(false);
+    setError(null);
+    clearDocumentRagCompareDraft(versionId);
+  }
+
   const loading = requesting || pollJob;
-  const reportText = reportDismissed ? null : report;
+
   return (
     <div className="space-y-2.5 border-t border-slate-100 pt-3">
       <PanelSectionHeader title="Сверка с регламентом" />
@@ -83,7 +117,8 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
               </p>
               <p>Ниже появится отчёт: совпадения с вашими правилами, риски и рекомендации.</p>
               <p>
-                Отчёт можно свернуть, открыть в отдельном окне («В окне») или удалить крестиком ×.
+                Отчёт сохраняется до перезагрузки страницы (можно свернуть и вернуться в «Отчёт»).
+                Крестик × удаляет отчёт. «В окне» — отдельное окно.
               </p>
               <p>Нужен хотя бы один регламент со статусом «готов к проверке».</p>
             </>
@@ -113,25 +148,21 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
         </div>
       )}
 
-      {reportText && (
+      {report && (
         <ReportTextBlock
           title="Отчёт по сверке"
           windowTitle="Сверка с регламентом"
           collapsible
-          onDismiss={() => {
-            setReportDismissed(true);
-            setJobId(null);
-            setPollJob(false);
-            setReport(null);
-            setError(null);
-          }}
+          expanded={!collapsed}
+          onExpandedChange={(next) => setCollapsed(!next)}
+          onDismiss={handleDismiss}
           dismissLabel="Закрыть и очистить отчёт"
         >
-          {reportText}
+          {report}
         </ReportTextBlock>
       )}
 
-      {!loading && !reportText && !error && versionReady && (
+      {!loading && !report && !error && versionReady && (
         <p className="text-[11px] text-slate-400">
           Нажмите «Сверить с регламентом» — ниже появится текстовый отчёт.
         </p>

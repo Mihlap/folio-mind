@@ -103,6 +103,10 @@ export {
   MSG_OPTIMIZE_ASSEMBLED,
   formatOptimizeWaitHint,
   readJobProgressLabel,
+  buildExtractionDisplayRows,
+  formatExtractionPlainText,
+  type ExtractionDisplayRow,
+  type ExtractionFieldSchema,
 } from '@folio-mind/pdf-contracts';
 export { apiBaseUrl } from './api/baseApi.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
@@ -219,6 +223,8 @@ export {
   useUpdateAiSuggestionMutation,
   useApplyAcceptedSuggestionsMutation,
   useRequestRagCompareMutation,
+  useGetExtractionTemplatesQuery,
+  useRequestDocumentExtractMutation,
 } from './api/aiApi.js';
 export {
   annotationsApi,
@@ -251,6 +257,7 @@ export {
   useCompleteRagSourceMutation,
   useUploadRagSourceFileMutation,
   useDeleteRagSourceMutation,
+  useReindexRagSourceMutation,
   useQueryRagMutation,
 } from './api/ragApi.js';
 export {

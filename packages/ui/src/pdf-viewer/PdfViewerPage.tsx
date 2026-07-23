@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
-import * as pdfjs from 'pdfjs-dist';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { PdfAcceptedEditsHint } from '../PdfAcceptedEditsHint.js';
 import { PdfLayoutObjectsHint } from '../PdfLayoutObjectsHint.js';
 import { PdfTextSelectionHighlight } from '../PdfTextSelectionHighlight.js';
@@ -157,13 +157,13 @@ export function PdfViewerPage({
         const baseViewport = page.getViewport({ scale: 1 });
         const cssScale = computeScale(baseViewport.width);
         const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-        const viewport = page.getViewport({ scale: cssScale * dpr });
-        const context = canvas.getContext('2d');
+        const viewport = page.getViewport({ scale: cssScale });
+        const context = canvas.getContext('2d', { alpha: false });
         if (!context || cancelled) return;
-        const widthPx = baseViewport.width * cssScale;
-        const heightPx = baseViewport.height * cssScale;
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
+        const widthPx = viewport.width;
+        const heightPx = viewport.height;
+        canvas.width = Math.floor(widthPx * dpr);
+        canvas.height = Math.floor(heightPx * dpr);
         canvas.style.width = `${widthPx}px`;
         canvas.style.height = `${heightPx}px`;
         textLayer.style.width = canvas.style.width;
@@ -175,10 +175,11 @@ export function PdfViewerPage({
           widthPt: baseViewport.width,
           heightPt: baseViewport.height,
         });
+        const transform = dpr !== 1 ? ([dpr, 0, 0, dpr, 0, 0] as const) : null;
         renderTask = page.render({
           canvasContext: context,
           viewport,
-          canvas,
+          ...(transform ? { transform } : {}),
         } as Parameters<typeof page.render>[0]);
         await renderTask.promise;
         if (cancelled) return;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as pdfjs from 'pdfjs-dist';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { searchPdfText, type PdfSearchMatch } from './pdf-search.js';
 import { PdfTextSelectionPrompt } from './PdfTextSelectionPrompt.js';
 import { clearDocumentSelection } from './pdf-text-selection.js';

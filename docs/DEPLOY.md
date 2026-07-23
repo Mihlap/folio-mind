@@ -127,6 +127,42 @@ OTEL_ENABLED=true
 
 ---
 
+## PWA и Android (фаза 4)
+
+### PWA
+
+Клиент (`apps/client`) собирается с `vite-plugin-pwa`: manifest «РазУм», иконки в `public/icons/`, service worker кэширует **статику**. Нужен **HTTPS** в проде.
+
+Установка: Chrome/Edge «Установить» / iOS Safari «На экран „Домой“».
+
+### Capacitor APK
+
+См. [`apps/mobile/README.md`](../apps/mobile/README.md).
+
+Проверенный CLI (Windows + Android Studio):
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:VITE_API_URL = "http://10.0.2.2:3001"   # эмулятор → API на хосте
+pnpm mobile:sync
+pnpm mobile:apk:debug
+# APK: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+- `CORS_ORIGIN` — список через запятую, для WebView: `…,https://localhost`
+- `VITE_API_URL` задавайте **на время build** клиента (не `localhost` с точки зрения эмулятора/телефона)
+
+### Smoke RAG (спринт 11)
+
+```bash
+pnpm smoke:rag
+```
+
+Нужны API + worker + S3 + настроенный ИИ. Проверяет длинный PDF (≥100 стр.) → индекс → чат с `chatMode=rag` и sources.
+
+---
+
 ## CI
 
 GitHub Actions: lint, typecheck, test, build (см. `.github/workflows/ci.yml`).

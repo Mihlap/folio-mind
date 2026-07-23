@@ -41,8 +41,39 @@ export {
   normalizePageTexts,
   parseExtractedTextJson,
   type ExtractedDocumentText,
+  type ExtractedTextSource,
   type PageText,
 } from './extracted-text.js';
+export {
+  VISION_OCR_MAX_PAGES,
+  VISION_OCR_MIN_CHARS_PER_PAGE,
+  VISION_OCR_MIN_TOTAL_CHARS,
+  buildExtractedTextPayload,
+  isVisionOcrStatus,
+  needsVisionOcr,
+  type VisionOcrStatus,
+} from './vision-ocr.js';
+export {
+  EXTRACTION_TEMPLATE_IDS,
+  isExtractionTemplateId,
+  schemaToPromptLines,
+  validateExtractionSchema,
+  type ExtractionFieldSchema,
+  type ExtractionFieldType,
+  type ExtractionTemplate,
+  type ExtractionTemplateId,
+} from './extraction-schema.js';
+export {
+  buildExtractionDisplayRows,
+  formatExtractionPlainText,
+  isBlankExtractedValue,
+  sanitizeExtractedValue,
+  type ExtractionDisplayRow,
+} from './extraction-display.js';
+export {
+  getExtractionTemplate,
+  listExtractionTemplates,
+} from './extraction-templates/index.js';
 export {
   arePageTextsEquivalent,
   compareVersionTexts,

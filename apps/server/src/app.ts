@@ -8,6 +8,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type { Env } from './lib/config/env.js';
+import { parseCorsOrigins } from './lib/config/cors-origins.js';
 import { GLOBAL_RATE_LIMIT } from './lib/auth/rate-limits.js';
 import { prismaPlugin } from './plugins/prisma.js';
 import { jsonBodyPlugin } from './plugins/json-body.js';
@@ -42,7 +43,7 @@ export async function buildApp(options: BuildAppOptions) {
   await app.register(requestIdPlugin);
   await app.register(tracingPlugin);
   await app.register(cors, {
-    origin: options.env.CORS_ORIGIN,
+    origin: parseCorsOrigins(options.env.CORS_ORIGIN),
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Folio-Share-Password'],
   });

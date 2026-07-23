@@ -3,7 +3,7 @@ import {
   parseExtractedTextJson,
   type PageText,
 } from '@folio-mind/pdf-contracts';
-import { extractTextFromPdf, extractTextFromPdfForAi, extractSinglePageTextFromPdf } from './pdf-text.js';
+import { extractTextFromPdf, extractTextFromPdfForAi, extractSinglePageTextFromPdf, getAiExtractMaxPages } from './pdf-text.js';
 import { tryGetObjectBuffer } from '../storage/s3.js';
 
 export type AiSuggestionsScope = 'document' | 'page';
@@ -47,7 +47,8 @@ function isPagesExtractionIncomplete(
 ): boolean {
   if (pages.length === 0) return true;
   const totalChars = pages.reduce((sum, page) => sum + page.text.length, 0);
-  const expectedPages = pdfPageCount ? Math.min(pdfPageCount, 50) : null;
+  const aiMaxPages = getAiExtractMaxPages();
+  const expectedPages = pdfPageCount ? Math.min(pdfPageCount, aiMaxPages) : null;
   const lastPage = pages[pages.length - 1]?.page ?? 0;
 
   if (totalChars >= PREVIEW_TEXT_CHAR_CAP - 256) {
@@ -59,7 +60,7 @@ function isPagesExtractionIncomplete(
   return lastPage < expectedPages;
 }
 
-/** Для ИИ: при необходимости перечитывает PDF с лимитом ~100k символов (кэш превью — только 12k). */
+/** Для ИИ/RAG: при неполном кэше превью перечитывает PDF (до EXTRACT_AI_MAX_PAGES). */
 export async function loadDocumentPagesForAi(
   documentId: string,
   versionId: string,

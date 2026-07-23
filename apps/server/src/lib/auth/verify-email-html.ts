@@ -5,7 +5,9 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
 const AUTH_CHANNEL = 'folio-auth';
+
 function crossTabNotifyScript(): string {
   return `<script>
 (function () {
@@ -17,13 +19,24 @@ function crossTabNotifyScript(): string {
 })();
 </script>`;
 }
+
 export function renderVerifyEmailHtmlPage(outcome: 'success' | 'error', detail?: string): string {
   const isSuccess = outcome === 'success';
   const title = isSuccess ? 'Спасибо!' : 'Не удалось подтвердить';
   const subtitle = isSuccess ? 'Почта подтверждена' : 'Ссылка недействительна';
   const body = isSuccess
-    ? 'Можете закрыть эту вкладку и вернуться на страницу регистрации или войти в РазУм.'
-    : (detail ?? 'Ссылка устарела или уже была использована. Запросите новое письмо на сайте.');
+    ? 'Вернитесь в приложение РазУм и нажмите «Войти» — используйте email и пароль, которые указали при регистрации. Повторно регистрироваться не нужно.'
+    : (detail ?? 'Ссылка устарела или уже была использована. Запросите новое письмо в приложении.');
+
+  const openAppBlock = isSuccess
+    ? `
+    <p style="margin-top:1.25rem">
+      <a class="btn" href="intent://login#Intent;scheme=https;hostname=localhost;package=ru.razum.app;end">Открыть РазУм</a>
+    </p>
+    <p class="hint">Если кнопка не сработала — сверните браузер и откройте иконку РазУм → «Уже есть аккаунт».</p>
+    `
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -40,7 +53,7 @@ export function renderVerifyEmailHtmlPage(outcome: 'success' | 'error', detail?:
       justify-content: center;
       padding: 1.5rem;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: linear-gradient(135deg, #f0f9ff 0%, #fff 50%, #f8fafc 100%);
+      background: linear-gradient(135deg, #eef2ff 0%, #fff 50%, #f8fafc 100%);
       color: #0f172a;
     }
     .card {
@@ -56,10 +69,7 @@ export function renderVerifyEmailHtmlPage(outcome: 'success' | 'error', detail?:
     .brand {
       font-size: 1.75rem;
       font-weight: 600;
-      background: linear-gradient(90deg, #0369a1, #0f172a);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: #4338ca;
     }
     h1 { margin: 1.5rem 0 0; font-size: 1.5rem; font-weight: 800; }
     .badge {
@@ -69,11 +79,21 @@ export function renderVerifyEmailHtmlPage(outcome: 'success' | 'error', detail?:
       border-radius: 0.75rem;
       font-size: 0.875rem;
       font-weight: 500;
-      background: ${isSuccess ? '#f0f9ff' : '#fef2f2'};
-      color: ${isSuccess ? '#0c4a6e' : '#991b1b'};
+      background: ${isSuccess ? '#eef2ff' : '#fef2f2'};
+      color: ${isSuccess ? '#3730a3' : '#991b1b'};
     }
-    p { margin: 2rem 0 0; font-size: 0.875rem; line-height: 1.5; color: #475569; }
+    p { margin: 1.25rem 0 0; font-size: 0.875rem; line-height: 1.5; color: #475569; }
     .icon { font-size: 2.5rem; margin-top: 1rem; }
+    .btn {
+      display: inline-block;
+      padding: 0.75rem 1.25rem;
+      border-radius: 0.75rem;
+      background: #4338ca;
+      color: #fff !important;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .hint { font-size: 0.75rem; color: #94a3b8; }
   </style>
 </head>
 <body>
@@ -83,6 +103,7 @@ export function renderVerifyEmailHtmlPage(outcome: 'success' | 'error', detail?:
     <h1>${escapeHtml(title)}</h1>
     <div class="badge">${escapeHtml(subtitle)}</div>
     <p>${escapeHtml(body)}</p>
+    ${openAppBlock}
   </div>
   ${isSuccess ? crossTabNotifyScript() : ''}
 </body>

@@ -6,7 +6,9 @@ type Props = {
   windowTitle?: string;
   children: ReactNode;
   collapsible?: boolean;
-  defaultExpanded?: boolean;
+  defaultExpanded?: boolean; 
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   onDismiss?: () => void;
   dismissLabel?: string;
 };
@@ -17,11 +19,20 @@ export function ReportTextBlock({
   children,
   collapsible = false,
   defaultExpanded = true,
+  expanded: expandedProp,
+  onExpandedChange,
   onDismiss,
   dismissLabel = 'Закрыть и очистить',
 }: Props) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
   const [windowOpen, setWindowOpen] = useState(false);
+  const isControlled = expandedProp !== undefined;
+  const expanded = isControlled ? expandedProp : internalExpanded;
+
+  function setExpanded(next: boolean) {
+    if (!isControlled) setInternalExpanded(next);
+    onExpandedChange?.(next);
+  }
 
   return (
     <>
@@ -40,7 +51,7 @@ export function ReportTextBlock({
             {collapsible && (
               <button
                 type="button"
-                onClick={() => setExpanded((prev) => !prev)}
+                onClick={() => setExpanded(!expanded)}
                 className="cursor-pointer rounded px-2 py-0.5 text-xs text-slate-600 hover:bg-folio-100"
               >
                 {expanded ? 'Свернуть' : 'Развернуть'}

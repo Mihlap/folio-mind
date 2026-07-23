@@ -12,8 +12,21 @@
   --color-folio-950: #1e1b4b;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   @apply bg-slate-50 font-sans text-slate-900 antialiased;
+  min-height: 100%;
+  min-height: 100dvh;
+}
+
+@media (max-width: 767px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 .textLayer {
@@ -96,6 +109,14 @@ body {
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: rgb(148 163 184);
+}
+
+.document-mobile-sheet__body {
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 @layer components {

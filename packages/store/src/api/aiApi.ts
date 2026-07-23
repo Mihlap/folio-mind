@@ -27,6 +27,14 @@ export type AiJobPayload = {
   ragChunkCount?: number;
   errorDetail?: string;
   rawText?: string;
+  chatMode?: 'rag' | 'full';
+  sources?: Array<{
+    page: number | null;
+    excerpt: string;
+  }>;
+  extracted?: Record<string, unknown>;
+  templateId?: string | null;
+  templateTitle?: string;
 };
 export const aiApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
@@ -216,6 +224,46 @@ export const aiApi = baseApi.injectEndpoints({
         body: { query, provider },
       }),
     }),
+    getExtractionTemplates: build.query<
+      {
+        templates: Array<{
+          id: 'contract' | 'contract_sections' | 'act' | 'tz';
+          title: string;
+          description: string;
+          schema: Array<{
+            name: string;
+            label: string;
+            type: string;
+            description: string;
+            children?: Array<{
+              name: string;
+              label: string;
+              type: string;
+              description: string;
+              children?: unknown[];
+            }>;
+          }>;
+        }>;
+      },
+      void
+    >({
+      query: () => '/ai/extraction-templates',
+    }),
+    requestDocumentExtract: build.mutation<
+      SummaryJobResponse,
+      {
+        documentId: string;
+        versionId: string;
+        templateId?: 'contract' | 'contract_sections' | 'act' | 'tz';
+        provider?: AiProviderId;
+      }
+    >({
+      query: ({ documentId, versionId, templateId, provider }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/ai/extract`,
+        method: 'POST',
+        body: { templateId, provider },
+      }),
+    }),
   }),
 });
 export const {
@@ -230,4 +278,6 @@ export const {
   useUpdateAiSuggestionMutation,
   useApplyAcceptedSuggestionsMutation,
   useRequestRagCompareMutation,
+  useGetExtractionTemplatesQuery,
+  useRequestDocumentExtractMutation,
 } = aiApi;

@@ -71,4 +71,31 @@ describe('applyLayoutToPdfBuffer', () => {
     const sourceBuffer = Buffer.from(await source.save());
     await expect(applyLayoutToPdfBuffer(sourceBuffer, [])).rejects.toThrow(/Нет объектов/);
   });
+
+  it('draws Cyrillic headers, footers and captions without WinAnsi errors', async () => {
+    const source = await PDFDocument.create();
+    source.addPage([300, 400]);
+    const sourceBuffer = Buffer.from(await source.save());
+
+    const objects: LayoutImageObject[] = [
+      {
+        id: 'a',
+        page: 1,
+        imageSrc: TINY_PNG_DATA_URL,
+        rotation: 0,
+        caption: 'Подпись на русском',
+        rect: { x: 0.1, y: 0.2, width: 0.4, height: 0.3 },
+      },
+    ];
+
+    const result = await applyLayoutToPdfBuffer(sourceBuffer, objects, [], {
+      headerText: 'Договор начало',
+      footerText: 'Договор конец',
+      showPageNumbers: true,
+      startPageNumber: 1,
+    });
+
+    expect(result.appliedCount).toBe(1);
+    expect(result.buffer.length).toBeGreaterThan(sourceBuffer.length);
+  });
 });

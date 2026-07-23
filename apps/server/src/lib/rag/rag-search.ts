@@ -1,10 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import {
-  embedTextLocal,
   embeddingToPgVector,
   extractRagSearchTerms,
+  resolveEmbeddingVector,
 } from '@folio-mind/ai-contracts';
+
 const chunkInclude = { source: { select: { id: true, title: true } } } as const;
+
 export type RagChunkHit = {
   id: string;
   sourceId: string;
@@ -15,13 +17,34 @@ export type RagChunkHit = {
     title: string;
   };
 };
+
+export type RagSearchOptions = {
+  limit?: number;
+  /** Optional provider embed; falls back to local when missing/failing/wrong dim. */
+  embed?: (text: string) => Promise<number[]>;
+};
+
+function dedupeHits(hits: RagChunkHit[], limit: number): RagChunkHit[] {
+  const seen = new Set<string>();
+  const out: RagChunkHit[] = [];
+  for (const hit of hits) {
+    if (seen.has(hit.id)) continue;
+    seen.add(hit.id);
+    out.push(hit);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 async function searchRagChunksByVector(
   prisma: PrismaClient,
   tenantId: string,
   query: string,
   limit: number,
+  embed?: (text: string) => Promise<number[]>,
 ): Promise<RagChunkHit[] | null> {
-  const vectorLiteral = embeddingToPgVector(embedTextLocal(query));
+  const { values } = await resolveEmbeddingVector(query, embed);
+  const vectorLiteral = embeddingToPgVector(values);
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;
@@ -54,27 +77,33 @@ async function searchRagChunksByVector(
     source: { id: row.source_id, title: row.source_title },
   }));
 }
-async function searchRagChunksByKeyword(
+
+async function searchRagChunksByKeywordTerms(
   prisma: PrismaClient,
   tenantId: string,
   query: string,
   limit: number,
-) {
+): Promise<RagChunkHit[]> {
   const terms = extractRagSearchTerms(query, 6);
-  if (terms.length > 0) {
-    const matched = await prisma.ragChunk.findMany({
-      where: {
-        tenantId,
-        source: { status: 'ready' },
-        OR: terms.map((term) => ({
-          content: { contains: term, mode: 'insensitive' as const },
-        })),
-      },
-      take: limit,
-      include: chunkInclude,
-    });
-    if (matched.length > 0) return matched;
-  }
+  if (terms.length === 0) return [];
+  return prisma.ragChunk.findMany({
+    where: {
+      tenantId,
+      source: { status: 'ready' },
+      OR: terms.map((term) => ({
+        content: { contains: term, mode: 'insensitive' as const },
+      })),
+    },
+    take: limit,
+    include: chunkInclude,
+  });
+}
+
+async function searchRagChunksAny(
+  prisma: PrismaClient,
+  tenantId: string,
+  limit: number,
+): Promise<RagChunkHit[]> {
   return prisma.ragChunk.findMany({
     where: { tenantId, source: { status: 'ready' } },
     orderBy: [{ sourceId: 'asc' }, { chunkIndex: 'asc' }],
@@ -82,17 +111,38 @@ async function searchRagChunksByKeyword(
     include: chunkInclude,
   });
 }
+
+/**
+ * Hybrid RAG search: keyword hits first (stable during embedding migrations),
+ * then vector fill, then any-chunk fallback. Vector failures never break search.
+ */
 export async function searchRagChunks(
   prisma: PrismaClient,
   tenantId: string,
   query: string,
-  limit = 8,
+  limitOrOptions: number | RagSearchOptions = 8,
 ): Promise<RagChunkHit[]> {
+  const options: RagSearchOptions =
+    typeof limitOrOptions === 'number' ? { limit: limitOrOptions } : limitOrOptions;
+  const limit = options.limit ?? 8;
+
+  const keywordHits = await searchRagChunksByKeywordTerms(prisma, tenantId, query, limit);
+
+  let vectorHits: RagChunkHit[] = [];
   try {
-    const vectorHits = await searchRagChunksByVector(prisma, tenantId, query, limit);
-    if (vectorHits && vectorHits.length > 0) return vectorHits;
+    const hits = await searchRagChunksByVector(
+      prisma,
+      tenantId,
+      query,
+      limit,
+      options.embed,
+    );
+    if (hits) vectorHits = hits;
   } catch {
-    // Vector search is optional; keyword fallback keeps RAG usable without pgvector.
+    // Vector search is optional; keyword/any fallback keeps RAG usable.
   }
-  return searchRagChunksByKeyword(prisma, tenantId, query, limit);
+
+  const merged = dedupeHits([...keywordHits, ...vectorHits], limit);
+  if (merged.length > 0) return merged;
+  return searchRagChunksAny(prisma, tenantId, limit);
 }

@@ -213,4 +213,6 @@ export const versionListItemSchema = z.object({
   sourceVersionId: z.string().nullable(),
   sourceDocxKey: z.string().nullable(),
   hasAppliedDocx: z.boolean(),
+  textSource: z.string().nullable(),
+  visionOcrStatus: z.string().nullable(),
 });

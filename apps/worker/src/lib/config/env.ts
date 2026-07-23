@@ -17,6 +17,7 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   AI_PROVIDER: z.enum(['gigachat', 'yandex']).default('gigachat'),
+  AI_CHAT_MODE: z.enum(['auto', 'rag', 'full']).default('auto'),
   GIGACHAT_CREDENTIALS: z.string().optional(),
   GIGACHAT_SCOPE: z.string().default('GIGACHAT_API_PERS'),
   GIGACHAT_MODEL: z.string().default('GigaChat'),

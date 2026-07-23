@@ -126,7 +126,7 @@ export async function enqueueAiJob(
     documentId: string;
     versionId: string;
     tenantId: string;
-    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare' | 'booklet-title';
+    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare' | 'booklet-title' | 'document-extract';
     prompt?: string;
     requestId?: string;
   },
@@ -142,11 +142,26 @@ export async function enqueueRagIndexJob(
     tenantId: string;
     s3Key: string;
     fileName: string;
+    provider?: 'gigachat' | 'yandex';
     requestId?: string;
   },
 ): Promise<void> {
   const { previewQueue } = getQueues(env);
   await previewQueue.add('rag-index', payload, { jobId: payload.jobId });
+}
+export async function enqueueDocumentIndexJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    provider?: 'gigachat' | 'yandex';
+    requestId?: string;
+  },
+): Promise<void> {
+  const { previewQueue } = getQueues(env);
+  await previewQueue.add('document-index', payload, { jobId: payload.jobId });
 }
 export async function enqueueSplitPagesJob(
   env: Env,
