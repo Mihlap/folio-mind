@@ -23,6 +23,7 @@ async function loadRagChunksForCompare(
   prisma: ReturnType<typeof getPrisma>,
   tenantId: string,
   documentText: string,
+  embed?: (text: string) => Promise<number[]>,
 ) {
   const readyWhere = {
     tenantId,
@@ -46,7 +47,7 @@ async function loadRagChunksForCompare(
       'Нет готовых регламентов. Проверьте статус файлов в разделе «Регламенты» (нужен «готов к проверке»).',
     );
   }
-  return searchRagChunks(prisma, tenantId, documentText, CHUNK_LIMIT);
+  return searchRagChunks(prisma, tenantId, documentText, { limit: CHUNK_LIMIT, embed });
 }
 export async function processRagCompareJob(env: WorkerEnv, data: RagComparePayload): Promise<void> {
   const prisma = getPrisma();
@@ -81,14 +82,15 @@ export async function processRagCompareJob(env: WorkerEnv, data: RagComparePaylo
     if (!documentText.trim()) {
       throw new Error('Нет текстового слоя в документе');
     }
-    const ragChunks = await loadRagChunksForCompare(prisma, tenantId, documentText);
+    const llm = createLLMFromWorkerEnv(env, provider);
+    const embed = llm.embed ? (text: string) => llm.embed!(text) : undefined;
+    const ragChunks = await loadRagChunksForCompare(prisma, tenantId, documentText, embed);
     const regulationsBlock = ragChunks
       .map(
         (chunk, index) =>
           `[${index + 1}] ${chunk.source.title} (фрагмент ${chunk.chunkIndex + 1}):\n${chunk.content}`,
       )
       .join('\n\n');
-    const llm = createLLMFromWorkerEnv(env, provider);
     const result = await llm.complete({
       system: RAG_COMPARE_SYSTEM,
       prompt: `Сверка договора с внутренними регламентами.\n\nТекст договора:\n${documentText.slice(0, 80000)}\n\nФрагменты регламентов:\n${regulationsBlock}`,

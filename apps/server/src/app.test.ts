@@ -14,6 +14,7 @@ const testEnv = {
   S3_REGION: 'ru-1',
   S3_FORCE_PATH_STYLE: true as const,
   AI_PROVIDER: 'gigachat' as const,
+  AI_CHAT_MODE: 'auto' as const,
   GIGACHAT_SCOPE: 'GIGACHAT_API_PERS',
   GIGACHAT_MODEL: 'GigaChat',
   GIGACHAT_TIMEOUT: 180,

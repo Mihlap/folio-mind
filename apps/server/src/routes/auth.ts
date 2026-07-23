@@ -18,6 +18,7 @@ import {
 } from '../lib/auth/password-reset.js';
 import {
   buildVerifyEmailUrl,
+  buildVerifyEmailEmulatorUrl,
   createEmailVerificationToken,
 } from '../lib/auth/email-verification.js';
 import { renderVerifyEmailHtmlPage } from '../lib/auth/verify-email-html.js';
@@ -148,8 +149,9 @@ async function sendVerificationEmailForUser(
     data: { userId, tokenHash, expiresAt },
   });
   const verifyUrl = buildVerifyEmailUrl(env, token);
+  const verifyUrlEmulator = buildVerifyEmailEmulatorUrl(env, token);
   const mailer = createMailer(env, log);
-  await mailer.sendEmailVerification({ to: email, verifyUrl });
+  await mailer.sendEmailVerification({ to: email, verifyUrl, verifyUrlEmulator });
 }
 export const authRoutes: FastifyPluginAsync<{
   env: Env;

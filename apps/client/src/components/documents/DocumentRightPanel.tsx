@@ -169,14 +169,14 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
       style={isDrawer ? undefined : { width: panelWidth }}
       className={
         isDrawer
-          ? 'relative flex h-full min-h-0 flex-col overflow-hidden bg-white'
+          ? 'relative bg-white'
           : `relative hidden h-full min-h-0 shrink-0 flex-col overflow-visible border-l border-slate-200 bg-white md:flex ${isResizing ? '' : 'transition-[width] duration-200'}`
       }
     >
       {viewportToggle}
       {!isDrawer && <PanelResizeHandle edge="left" onMouseDown={onResizeStart} />}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className={isDrawer ? undefined : 'flex min-h-0 flex-1 flex-col overflow-hidden'}>
       <div className={`${shellPanelToolbarClass} ${isDrawer ? 'hidden' : ''}`}>
         {TABS.map((tab) => (
           <button
@@ -198,7 +198,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
       <div
         className={
           isDrawer
-            ? 'relative min-h-0 flex-1 overflow-visible'
+            ? 'relative'
             : 'scrollbar-thin relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain'
         }
       >

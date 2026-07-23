@@ -6,15 +6,23 @@ import {
   type AiProviderId,
   type ChatMessage,
 } from '@folio-mind/store';
+
 type DocumentAiPanelProps = {
   documentId: string;
   versionId: string;
   versionReady: boolean;
   embedded?: boolean;
 };
+
+type ChatUiMessage = ChatMessage & {
+  sources?: Array<{ page: number | null; excerpt: string }>;
+  chatMode?: 'rag' | 'full';
+};
+
 function isJobPending(status: string | undefined) {
   return status === 'queued' || status === 'processing';
 }
+
 export function DocumentAiPanel({
   documentId,
   versionId,
@@ -27,7 +35,7 @@ export function DocumentAiPanel({
   const [chatJobId, setChatJobId] = useState<string | null>(null);
   const [pollChat, setPollChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatUiMessage[]>([]);
   const activeProvider = provider ?? providersData?.defaultProvider ?? 'gigachat';
   const { data: chatJob } = useGetJobQuery(chatJobId!, {
     skip: !chatJobId,
@@ -36,25 +44,39 @@ export function DocumentAiPanel({
   const chatPending = isJobPending(chatJob?.status);
   const chatError = chatJob?.payload?.error;
   const chatReply = chatJob?.payload?.reply;
+  const chatSources = chatJob?.payload?.sources;
+  const chatMode = chatJob?.payload?.chatMode;
+
   useEffect(() => {
     setChatJobId(null);
     setPollChat(false);
     setMessages([]);
     setChatInput('');
   }, [versionId]);
+
   useEffect(() => {
     if (chatJob?.status === 'completed' && chatReply) {
       setPollChat(false);
-      setMessages((prev) => [...prev, { role: 'assistant', content: chatReply }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: chatReply,
+          sources: chatSources,
+          chatMode,
+        },
+      ]);
     }
     if (chatJob?.status === 'failed') {
       setPollChat(false);
     }
-  }, [chatJob?.status, chatReply]);
+  }, [chatJob?.status, chatReply, chatSources, chatMode]);
+
   const configuredProviders = providersData?.providers.filter((p) => p.configured) ?? [];
   const messagesMaxHeight = embedded
     ? 'max-h-[min(42vh,360px)]'
     : 'max-h-[38vh] sm:max-h-[40vh] lg:max-h-[48vh]';
+
   return (
     <section className={embedded ? 'flex flex-col' : 'space-y-3 sm:space-y-4'}>
       <div
@@ -109,14 +131,38 @@ export function DocumentAiPanel({
                 key={`${idx}-${msg.role}`}
                 className={`rounded-xl px-3 py-2 text-sm ${
                   msg.role === 'user'
-                    ? 'ml-8 bg-folio-50 text-slate-800'
-                    : 'mr-8 bg-slate-50 text-slate-700'
+                    ? 'ml-4 sm:ml-8 bg-folio-50 text-slate-800'
+                    : 'mr-4 sm:mr-8 bg-slate-50 text-slate-700'
                 }`}
               >
                 <p className="mb-1 text-xs font-medium text-slate-500">
                   {msg.role === 'user' ? 'Вы' : 'ИИ'}
+                  {msg.role === 'assistant' && msg.chatMode === 'rag' && (
+                    <span className="ml-1.5 font-normal text-slate-400">· по фрагментам</span>
+                  )}
                 </p>
                 <p className="whitespace-pre-wrap">{msg.content}</p>
+                {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                  <details className="mt-2 rounded-lg border border-slate-200/80 bg-white/70 px-2.5 py-1.5">
+                    <summary className="cursor-pointer text-[11px] font-medium text-slate-500">
+                      Источники ({msg.sources.length})
+                    </summary>
+                    <ul className="mt-1.5 space-y-1.5">
+                      {msg.sources.map((source, sourceIdx) => (
+                        <li key={`${idx}-src-${sourceIdx}`} className="text-[11px] text-slate-600">
+                          <span className="font-medium text-slate-500">
+                            {source.page != null ? `Стр. ${source.page}` : `Фрагмент ${sourceIdx + 1}`}
+                            :
+                          </span>{' '}
+                          <span className="whitespace-pre-wrap">
+                            {source.excerpt}
+                            {source.excerpt.length >= 220 ? '…' : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </div>
             ))}
             {chatPending && <p className="text-sm text-slate-500">ИИ думает…</p>}
@@ -130,7 +176,14 @@ export function DocumentAiPanel({
             e.preventDefault();
             const prompt = chatInput.trim();
             if (!prompt || !versionReady || chatSending || chatPending) return;
-            const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: prompt }];
+            const historyForApi: ChatMessage[] = messages.map(({ role, content }) => ({
+              role,
+              content,
+            }));
+            const nextMessages: ChatUiMessage[] = [
+              ...messages,
+              { role: 'user', content: prompt },
+            ];
             setMessages(nextMessages);
             setChatInput('');
             const result = await requestChat({
@@ -138,7 +191,7 @@ export function DocumentAiPanel({
               versionId,
               prompt,
               provider: activeProvider,
-              history: messages,
+              history: historyForApi,
             }).unwrap();
             setChatJobId(result.jobId);
             setPollChat(true);

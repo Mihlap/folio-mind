@@ -139,7 +139,7 @@ export function DocumentVersionsSidebar({
   const canViewHistory = roleHasCapability(accessRole, 'view_history');
   return (
     <div
-      className={isDrawer ? 'flex min-h-0 flex-1 flex-col' : 'flex h-full min-h-0 flex-1 flex-col overflow-hidden'}
+      className={isDrawer ? '' : 'flex h-full min-h-0 flex-1 flex-col overflow-hidden'}
     >
       <div
         className={`shrink-0 bg-white ${
@@ -185,7 +185,7 @@ export function DocumentVersionsSidebar({
       </div>
 
       <ul
-        className={`min-h-0 space-y-0.5 overflow-y-auto overscroll-y-contain pr-3 ${isDrawer ? 'flex-1 pt-1' : 'flex-1 px-1.5 pb-2 pt-1.5 md:px-2'}`}
+        className={`space-y-0.5 pr-3 ${isDrawer ? 'pt-1' : 'min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 pb-2 pt-1.5 md:px-2'}`}
       >
         {versions.map((v, index) => {
           const isSelected = v.id === selectedVersionId;

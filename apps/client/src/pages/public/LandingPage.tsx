@@ -5,7 +5,7 @@ export function LandingPage() {
   const { data: health } = useHealthQuery(undefined, { skip: import.meta.env.MODE === 'test' });
   return (
     <div className="min-h-screen">
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6 sm:py-6">
+      <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-5 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6 sm:py-6">
         <span className="font-display text-xl text-folio-950 sm:text-2xl">РазУм</span>
         <div className="flex shrink-0 gap-2 sm:gap-3">
           <Link to="/login">
@@ -28,7 +28,7 @@ export function LandingPage() {
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:mt-6 sm:text-lg">
           Просмотр, версии, проверка рисков и совместная работа — без цикла «скачай, сожми,
-          перекинь». Для юристов, архитекторов и команд, которые живут в PDF.
+          перекинь». Для архитекторов, юристов и команд, которые живут в PDF.
         </p>
         <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:gap-4">
           <Link to="/register" className="w-full sm:w-auto">

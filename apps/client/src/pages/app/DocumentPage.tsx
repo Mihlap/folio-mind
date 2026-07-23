@@ -35,6 +35,8 @@ import {
 import { DocumentVersionsSidebar } from '../../components/documents/DocumentVersionsSidebar.js';
 import { DocumentConfidenceNotice } from '../../components/documents/DocumentConfidenceNotice.js';
 import { DocumentSourceDocxBanner } from '../../components/documents/DocumentSourceDocxBanner.js';
+import { DocumentVisionOcrBanner } from '../../components/documents/DocumentVisionOcrBanner.js';
+import { isVisionOcrInProgress } from '../../components/documents/DocumentVisionOcrBanner.utils.js';
 import { useDocumentWorkspace } from '../../context/useDocumentWorkspace.js';
 import { useCreateDocumentUpload } from '../../hooks/useCreateDocumentUpload.js';
 import { useDocumentVersionUpload } from '../../hooks/useDocumentVersionUpload.js';
@@ -44,6 +46,13 @@ import { useDocumentPdfLoader, pdfLoadStageLabel } from '../../hooks/useDocument
 import { useHorizontalPanelResize } from '../../hooks/useHorizontalPanelResize.js';
 import { usePanelToggleCenterY } from '../../hooks/usePanelToggleCenterY.js';
 import { useAppDispatch, useAppSelector } from '../../hooks/index.js';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus.js';
+import { DocumentOfflineBanner } from '../../components/documents/DocumentOfflineBanner.js';
+import {
+  loadBookletPreviewCache,
+  saveBookletPreviewCache,
+  type OfflineBookletCacheEntry,
+} from '../../lib/offline/booklet-preview-cache.js';
 import { annotationsToPageMarkers } from '../../lib/documents/annotationMarkers.js';
 import { guestCommentsToPageMarkers } from '../../lib/documents/guestCommentMarkers.js';
 import { isDocumentVersionSelectable } from '../../lib/documents/versionSelection.js';
@@ -110,6 +119,9 @@ export function DocumentPage() {
   const [dismissedDocxBannerVersions, setDismissedDocxBannerVersions] = useState<Set<string>>(
     () => new Set(),
   );
+  const [dismissedVisionOcrVersions, setDismissedVisionOcrVersions] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [layoutAddNotice, setLayoutAddNotice] = useState<string | null>(null);
   const [presentationOpen, setPresentationOpen] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
@@ -128,7 +140,9 @@ export function DocumentPage() {
   const canEditDocument = roleHasCapability(documentRole, 'edit');
   const canCommentDocument = roleHasCapability(documentRole, 'comment');
   const canManageShare = roleHasCapability(documentRole, 'manage_share');
-  const hasProcessingVersion = versions.some((v) => v.status === 'processing');
+  const hasProcessingVersion = versions.some(
+    (v) => v.status === 'processing' || isVisionOcrInProgress(v.visionOcrStatus),
+  );
   useEffect(() => {
     const media = window.matchMedia(DESKTOP_PANEL_QUERY);
     const sync = () => setShowDockedRightPanel(media.matches);
@@ -596,6 +610,51 @@ export function DocumentPage() {
     previews?.pages.length,
     previews?.status,
   ]);
+
+  const online = useOnlineStatus();
+  const [offlineCache, setOfflineCache] = useState<OfflineBookletCacheEntry | null>(null);
+
+  useEffect(() => {
+    if (online || !id || !activeVersion?.id) {
+      setOfflineCache(null);
+      return;
+    }
+    let cancelled = false;
+    void loadBookletPreviewCache(id, activeVersion.id).then((entry) => {
+      if (!cancelled) setOfflineCache(entry);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [online, id, activeVersion?.id]);
+
+  useEffect(() => {
+    if (!online || !id || !activeVersion?.id || !previews?.pages?.length) return;
+    const title = doc?.title ?? 'Документ';
+    void saveBookletPreviewCache({
+      documentId: id,
+      versionId: activeVersion.id,
+      title,
+      pageCount: versionPageCount || previews.pageCount || previews.pages.length,
+      pages: previews.pages,
+    }).catch(() => {
+      /* best-effort offline cache */
+    });
+  }, [
+    online,
+    id,
+    activeVersion?.id,
+    doc?.title,
+    versionPageCount,
+    previews?.pageCount,
+    previews?.pages,
+  ]);
+
+  const displayPreviewPages =
+    !online && offlineCache && offlineCache.pages.length > 0
+      ? offlineCache.pages.map((p) => ({ page: p.page, url: p.dataUrl }))
+      : (previews?.pages ?? []);
+  const showOfflineBanner = !online && (offlineCache?.pages.length ?? 0) > 0;
   const handleSearchMatches = useCallback(
     (
       matches: Array<{
@@ -621,6 +680,13 @@ export function DocumentPage() {
   }, []);
   const dismissDocxBanner = useCallback((versionId: string) => {
     setDismissedDocxBannerVersions((prev) => {
+      const next = new Set(prev);
+      next.add(versionId);
+      return next;
+    });
+  }, []);
+  const dismissVisionOcrBanner = useCallback((versionId: string) => {
+    setDismissedVisionOcrVersions((prev) => {
       const next = new Set(prev);
       next.add(versionId);
       return next;
@@ -665,6 +731,10 @@ export function DocumentPage() {
   const showDocxBanner =
     Boolean(id && activeVersion?.id && activeVersion.status === 'ready') &&
     !dismissedDocxBannerVersions.has(activeVersion.id);
+  const showVisionOcrBanner =
+    Boolean(activeVersion?.id && activeVersion.visionOcrStatus) &&
+    activeVersion.visionOcrStatus !== 'not_needed' &&
+    !dismissedVisionOcrVersions.has(activeVersion.id);
   const sizeLabel = activeVersion?.size
     ? `${(Number(activeVersion.size) / (1024 * 1024)).toFixed(1)} МБ`
     : null;
@@ -745,6 +815,23 @@ export function DocumentPage() {
                 />
               </div>
             )}
+            {showVisionOcrBanner && (
+              <DocumentVisionOcrBanner
+                status={activeVersion!.visionOcrStatus}
+                textSource={activeVersion!.textSource}
+                onDismiss={
+                  isVisionOcrInProgress(activeVersion!.visionOcrStatus)
+                    ? undefined
+                    : () => dismissVisionOcrBanner(activeVersion!.id)
+                }
+              />
+            )}
+            {showOfflineBanner && offlineCache && (
+              <DocumentOfflineBanner
+                cachedPages={offlineCache.pages.length}
+                savedAt={offlineCache.savedAt}
+              />
+            )}
             {pdfReadyForUi &&
               activeVersion?.status === 'ready' &&
               (previews?.status === 'partial' ||
@@ -760,7 +847,7 @@ export function DocumentPage() {
             <div className="flex min-h-0 flex-1 gap-2 sm:gap-3">
               <DocumentThumbnailStrip
                 versionId={activeVersion?.id}
-                pages={previews?.pages ?? []}
+                pages={displayPreviewPages}
                 viewerPage={viewerPage}
                 initialThumbPages={INITIAL_THUMB_PAGES}
                 layout="vertical"
@@ -771,7 +858,7 @@ export function DocumentPage() {
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                 <DocumentThumbnailStrip
                   versionId={activeVersion?.id}
-                  pages={previews?.pages ?? []}
+                  pages={displayPreviewPages}
                   viewerPage={viewerPage}
                   initialThumbPages={INITIAL_THUMB_PAGES}
                   layout="horizontal"
@@ -1001,7 +1088,7 @@ export function DocumentPage() {
                 }
                 openMobilePanel(item.id);
               }}
-              className={`flex flex-1 cursor-pointer flex-col items-center py-2.5 text-[11px] font-medium transition ${
+              className={`touch-target flex flex-1 cursor-pointer flex-col items-center justify-center py-2.5 text-[11px] font-medium transition ${
                 isActive ? 'bg-folio-50 text-folio-700' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >

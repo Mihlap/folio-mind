@@ -25,7 +25,10 @@ import {
   processGeneratePreviewsJob,
   processPreviewPagesJob,
 } from './jobs/preview/generate-previews.js';
+import { processVisionOcrJob } from './jobs/preview/vision-ocr.js';
+import { processDocumentExtractJob } from './jobs/ai/document-extract.js';
 import { processRagIndexJob } from './jobs/rag/rag-index.js';
+import { processDocumentIndexJob } from './jobs/rag/document-index.js';
 import { loadWorkerEnv } from './lib/config/env.js';
 import { loadAppEnv } from './lib/config/load-env.js';
 import type { WorkerJobPayload } from './lib/config/job-types.js';
@@ -75,8 +78,12 @@ function createPreviewWorker() {
             await processGeneratePreviewsJob(env, data);
           } else if (job.name === 'preview-pages') {
             await processPreviewPagesJob(env, data);
+          } else if (job.name === 'vision-ocr') {
+            await processVisionOcrJob(env, data);
           } else if (job.name === 'rag-index') {
             await processRagIndexJob(env, data);
+          } else if (job.name === 'document-index') {
+            await processDocumentIndexJob(env, data);
           }
           return { ok: true };
         },
@@ -107,6 +114,8 @@ function createAiWorker() {
             await processAiSuggestionsJob(env, data);
           } else if (job.name === 'rag-compare') {
             await processRagCompareJob(env, data);
+          } else if (job.name === 'document-extract') {
+            await processDocumentExtractJob(env, data);
           } else if (job.name === 'booklet-title') {
             await processBookletTitleDraftJob(env, data);
           }

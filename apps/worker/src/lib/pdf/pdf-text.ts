@@ -9,9 +9,10 @@ GlobalWorkerOptions.workerSrc = pathToFileURL(
   join(pdfjsPkgDir, 'legacy/build/pdf.worker.mjs'),
 ).href;
 const standardFontDataUrl = `${pathToFileURL(join(pdfjsPkgDir, 'standard_fonts')).href}/`;
-const MAX_PAGES = 50;
-const PREVIEW_MAX_CHARS = 12000;
-const AI_MAX_CHARS = 100000;
+const PREVIEW_MAX_PAGES = 50;
+const AI_MAX_PAGES = Number(process.env.EXTRACT_AI_MAX_PAGES ?? 500);
+const PREVIEW_MAX_CHARS = 12_000;
+const AI_MAX_CHARS = Number(process.env.EXTRACT_AI_MAX_CHARS ?? 500_000);
 
 export type ExtractTextResult = {
   text: string;
@@ -62,12 +63,15 @@ async function extractTextFromPdfWithLimits(
 }
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<ExtractTextResult> {
-  return extractTextFromPdfWithLimits(buffer, PREVIEW_MAX_CHARS, MAX_PAGES);
+  return extractTextFromPdfWithLimits(buffer, PREVIEW_MAX_CHARS, PREVIEW_MAX_PAGES);
 }
 
-/** Полное извлечение для ИИ: до 50 страниц и ~100k символов (кэш превью обрезает до 12k). */
 export async function extractTextFromPdfForAi(buffer: Buffer): Promise<ExtractTextResult> {
-  return extractTextFromPdfWithLimits(buffer, AI_MAX_CHARS, MAX_PAGES);
+  return extractTextFromPdfWithLimits(buffer, AI_MAX_CHARS, AI_MAX_PAGES);
+}
+
+export function getAiExtractMaxPages(): number {
+  return AI_MAX_PAGES;
 }
 
 export async function extractSinglePageTextFromPdf(

@@ -5,6 +5,11 @@ import {
   useGetJobQuery,
   useRequestSummaryMutation,
 } from '@folio-mind/store';
+import {
+  clearDocumentSummaryDraft,
+  loadDocumentSummaryDraft,
+  saveDocumentSummaryDraft,
+} from '../../lib/documents/document-summary-draft.js';
 import { FeatureHelpButton } from '../ui/FeatureHelp.js';
 import {
   reportActionBtnSoft,
@@ -13,6 +18,7 @@ import {
   reportToolbarRowClass,
 } from '../ui/FeatureHelp.styles.js';
 import { DocumentRagComparePanel } from './DocumentRagComparePanel.js';
+import { DocumentExtractPanel } from './DocumentExtractPanel.js';
 import { ReportTextBlock } from './ReportTextBlock.js';
 
 function openDownloadUrl(url: string, target: '_self' | '_blank' = '_self') {
@@ -22,11 +28,13 @@ function openDownloadUrl(url: string, target: '_self' | '_blank' = '_self') {
   }
   window.location.assign(url);
 }
+
 type Props = {
   documentId: string;
   versionId: string;
   versionReady: boolean;
 };
+
 export function DocumentReportPanel({ documentId, versionId, versionReady }: Props) {
   const { data: providersData } = useGetAiProvidersQuery();
   const [requestSummary, { isLoading: summaryRequestLoading }] = useRequestSummaryMutation();
@@ -36,37 +44,46 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportFormatLoading, setExportFormatLoading] = useState<'pdf' | 'word' | null>(null);
-  const [storedSummary, setStoredSummary] = useState<string | null>(null);
-  const [summaryDismissed, setSummaryDismissed] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const { data: summaryJob } = useGetJobQuery(summaryJobId!, {
     skip: !summaryJobId,
     pollingInterval: pollSummary ? 2000 : 0,
   });
-  const summaryFromJob =
-    summaryJobId && summaryJob?.status === 'completed'
-      ? (summaryJob.payload?.summary ?? null)
-      : null;
-  const summaryText = summaryDismissed ? null : (storedSummary ?? summaryFromJob);
+
   const summaryPending =
     summaryJob?.status === 'queued' ||
     summaryJob?.status === 'processing' ||
-    (summaryRequestLoading && !summaryText);
-  const canExportReport = versionReady && Boolean(summaryText);
+    (summaryRequestLoading && !summary);
+  const canExportReport = versionReady && Boolean(summary);
+
   useEffect(() => {
     setSummaryJobId(null);
     setPollSummary(false);
     setSummaryError(null);
     setExportError(null);
     setExportFormatLoading(null);
-    setStoredSummary(null);
-    setSummaryDismissed(false);
+    const draft = loadDocumentSummaryDraft(versionId);
+    if (draft) {
+      setSummary(draft.summary);
+      setCollapsed(draft.collapsed);
+    } else {
+      setSummary(null);
+      setCollapsed(false);
+    }
   }, [versionId]);
+
+  useEffect(() => {
+    if (!versionId || !summary) return;
+    saveDocumentSummaryDraft(versionId, { summary, collapsed });
+  }, [versionId, summary, collapsed]);
+
   useEffect(() => {
     if (summaryJob?.status === 'completed' || summaryJob?.status === 'failed') {
       setPollSummary(false);
       if (summaryJob.status === 'completed' && summaryJob.payload?.summary) {
-        setSummaryDismissed(false);
-        setStoredSummary(summaryJob.payload.summary);
+        setCollapsed(false);
+        setSummary(summaryJob.payload.summary);
       }
       if (summaryJob.status === 'failed') {
         const msg =
@@ -85,6 +102,16 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
       }
     }
   }, [summaryJob?.payload, summaryJob?.status]);
+
+  function handleDismissSummary() {
+    setSummaryJobId(null);
+    setPollSummary(false);
+    setSummary(null);
+    setCollapsed(false);
+    setSummaryError(null);
+    clearDocumentSummaryDraft(versionId);
+  }
+
   return (
     <div className="space-y-3 p-3 sm:p-4">
       <p className="text-[11px] leading-snug text-slate-500">
@@ -98,8 +125,9 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
             onClick={async () => {
               try {
                 setSummaryError(null);
-                setSummaryDismissed(false);
-                setStoredSummary(null);
+                setSummary(null);
+                setCollapsed(false);
+                clearDocumentSummaryDraft(versionId);
                 const result = await requestSummary({
                   documentId,
                   versionId,
@@ -120,8 +148,8 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
           <FeatureHelpButton title="Пересказ и экспорт отчёта" corner>
             <p>
               <strong className="text-slate-800">Получить пересказ</strong> — ИИ читает текст этой
-              версии PDF и показывает краткое содержание договора на вкладке. Кнопка «В окне» или
-              клик по тексту откроют пересказ в отдельном изменяемом окне.
+              версии PDF и показывает краткое содержание договора. Пересказ сохраняется до
+              перезагрузки страницы (можно свернуть и вернуться в «Отчёт»). Крестик × удаляет.
             </p>
             <p>
               <strong className="text-slate-800">PDF</strong> — скачивает файл отчёта с пересказом
@@ -192,24 +220,25 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
       </div>
       {summaryError && <p className="text-sm text-red-600">{summaryError}</p>}
       {exportError && <p className="text-sm text-red-600">{exportError}</p>}
-      {summaryText && (
+      {summary && (
         <ReportTextBlock
           title="Пересказ"
           collapsible
-          onDismiss={() => {
-            setSummaryDismissed(true);
-            setSummaryJobId(null);
-            setPollSummary(false);
-            setStoredSummary(null);
-            setSummaryError(null);
-          }}
+          expanded={!collapsed}
+          onExpandedChange={(next) => setCollapsed(!next)}
+          onDismiss={handleDismissSummary}
           dismissLabel="Закрыть и очистить пересказ"
         >
-          {summaryText}
+          {summary}
         </ReportTextBlock>
       )}
 
       <DocumentRagComparePanel
+        documentId={documentId}
+        versionId={versionId}
+        versionReady={versionReady}
+      />
+      <DocumentExtractPanel
         documentId={documentId}
         versionId={versionId}
         versionReady={versionReady}

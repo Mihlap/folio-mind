@@ -183,6 +183,8 @@ export const registerReadRoutes: FastifyPluginAsync<{
             confidenceDetails: unknown;
             sourceVersionId: string | null;
             sourceDocxKey: string | null;
+            textSource?: string | null;
+            visionOcrStatus?: string | null;
           }) => ({
             id: v.id,
             version: v.version,
@@ -201,6 +203,8 @@ export const registerReadRoutes: FastifyPluginAsync<{
             sourceVersionId: (v as { sourceVersionId?: string | null }).sourceVersionId ?? null,
             sourceDocxKey: v.sourceDocxKey ?? null,
             hasAppliedDocx: appliedDocxVersionIds.has(v.id),
+            textSource: v.textSource ?? null,
+            visionOcrStatus: v.visionOcrStatus ?? null,
           }),
         ),
       };

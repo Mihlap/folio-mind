@@ -18,6 +18,7 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   AI_PROVIDER: z.enum(['gigachat', 'yandex']).default('gigachat'),
+  AI_CHAT_MODE: z.enum(['auto', 'rag', 'full']).default('auto'),
   GIGACHAT_CREDENTIALS: z.string().optional(),
   GIGACHAT_SCOPE: z.string().default('GIGACHAT_API_PERS'),
   GIGACHAT_MODEL: z.string().default('GigaChat'),
@@ -35,7 +36,10 @@ const envSchema = z.object({
   PDF_TO_DOCX_URL: z.string().url().optional(),
   QUEUE_WARN_WAITING: z.coerce.number().int().min(1).default(50),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+
   API_PUBLIC_URL: z.string().url().optional(),
+
+  API_EMULATOR_URL: z.string().url().optional(),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: z.coerce
     .number()
     .int()
@@ -65,8 +69,9 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  SMTP_FROM: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),  
+  SMTP_FROM: z.string().optional(), 
+  SMTP_FROM_NAME: z.string().optional(),
   GUEST_COMMENT_WEBHOOK_URL: z.string().url().optional(),
   GUEST_COMMENT_TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   GUEST_COMMENT_TELEGRAM_CHAT_ID: z.string().min(1).optional(),

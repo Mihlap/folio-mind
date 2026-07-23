@@ -1,12 +1,20 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FeatureHelpButton } from '../../components/ui/FeatureHelp.js';
 import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
 import { useAppSelector } from '../../hooks/index.js';
+import {
+  clearRegulationsSearchDraft,
+  loadRegulationsSearchDraft,
+  saveRegulationsSearchDraft,
+  type RegulationsSearchHit,
+} from '../../lib/documents/regulations-search-draft.js';
 import { getUploadStage } from '../../lib/uploads/uploadStage.js';
 import {
   useDeleteRagSourceMutation,
   useListRagSourcesQuery,
+  useQueryRagMutation,
+  useReindexRagSourceMutation,
   VERSION_STATUS_LABELS,
 } from '@folio-mind/store';
 
@@ -20,8 +28,20 @@ const STATUS_LABEL: Record<string, string> = {
 export function RegulationsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(
+    () => loadRegulationsSearchDraft()?.query ?? '',
+  );
+  const [searchHits, setSearchHits] = useState<RegulationsSearchHit[] | null>(
+    () => loadRegulationsSearchDraft()?.hits ?? null,
+  );
+  const [searchCollapsed, setSearchCollapsed] = useState(
+    () => loadRegulationsSearchDraft()?.collapsed ?? false,
+  );
+  const [searchError, setSearchError] = useState<string | null>(null);
   const { data, refetch } = useListRagSourcesQuery(undefined, { pollingInterval: 5000 });
   const [deleteSource] = useDeleteRagSourceMutation();
+  const [reindexSource, { isLoading: reindexing }] = useReindexRagSourceMutation();
+  const [queryRag, { isLoading: searching }] = useQueryRagMutation();
   const uploadState = useAppSelector((s) => s.backgroundUpload);
   const { error: uploadError, clearError, uploadRegulation, fileLabel } = useBackgroundUpload();
 
@@ -29,6 +49,16 @@ export function RegulationsPage() {
   const progress = uploading ? uploadState.progress : 0;
   const showDone = uploading && uploadState.showDone;
   const displayError = localError ?? (uploadState.kind === 'regulation' ? uploadError : null);
+  const hasReadySource = data?.items.some((item) => item.status === 'ready') ?? false;
+
+  useEffect(() => {
+    if (searchHits == null) return;
+    saveRegulationsSearchDraft({
+      query: searchQuery,
+      hits: searchHits,
+      collapsed: searchCollapsed,
+    });
+  }, [searchQuery, searchHits, searchCollapsed]);
 
   function handleFile(file: File) {
     const lower = file.name.toLowerCase();
@@ -42,6 +72,29 @@ export function RegulationsPage() {
       void refetch();
     });
     if (inputRef.current) inputRef.current.value = '';
+  }
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (!q || searching) return;
+    setSearchError(null);
+    try {
+      const result = await queryRag({ query: q, limit: 8 }).unwrap();
+      setSearchHits(result.chunks);
+      setSearchCollapsed(false);
+    } catch (err) {
+      setSearchHits(null);
+      clearRegulationsSearchDraft();
+      setSearchError(err instanceof Error ? err.message : 'Не удалось выполнить поиск');
+    }
+  }
+
+  function handleDismissSearch() {
+    setSearchHits(null);
+    setSearchCollapsed(false);
+    setSearchError(null);
+    clearRegulationsSearchDraft();
   }
 
   return (
@@ -114,11 +167,99 @@ export function RegulationsPage() {
         {displayError && <p className="mt-3 break-words text-sm text-red-600">{displayError}</p>}
       </div>
 
+      <section className="mt-8 max-w-2xl rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <h2 className="text-sm font-semibold text-slate-900">Поиск по регламентам</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Найдите фрагменты правил по смыслу или ключевым словам. Нужен хотя бы один файл со
+          статусом «готов». Результаты сохраняются до закрытия вкладки браузера.
+        </p>
+        <form
+          onSubmit={(e) => void handleSearch(e)}
+          className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch"
+        >
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Например: срок оплаты, гарантийные обязательства…"
+            disabled={!hasReadySource || searching}
+            className="min-w-0 flex-1 rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300 focus:ring-1 focus:ring-slate-200/70 disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={!hasReadySource || searching || !searchQuery.trim()}
+            className="shrink-0 cursor-pointer rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {searching ? 'Ищем…' : 'Найти'}
+          </button>
+        </form>
+        {!hasReadySource && (
+          <p className="mt-2 text-xs text-slate-400">
+            Загрузите и дождитесь статуса «готов», чтобы искать по текстам.
+          </p>
+        )}
+        {searchError && <p className="mt-2 text-sm text-red-600">{searchError}</p>}
+        {searchHits && (
+          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium text-slate-600">
+                Результаты
+                {searchQuery.trim() ? `: «${searchQuery.trim()}»` : ''}
+                {` · ${searchHits.length}`}
+                {searchCollapsed ? ' · свёрнуто' : ''}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSearchCollapsed((prev) => !prev)}
+                  className="cursor-pointer rounded px-2 py-0.5 text-xs text-slate-600 hover:bg-white"
+                >
+                  {searchCollapsed ? 'Развернуть' : 'Свернуть'}
+                </button>
+                <button
+                  type="button"
+                  title="Удалить результаты поиска"
+                  aria-label="Удалить результаты поиска"
+                  onClick={handleDismissSearch}
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-lg text-slate-400 hover:bg-white hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            {!searchCollapsed && (
+              <ul className="mt-3 space-y-3">
+                {searchHits.length === 0 && (
+                  <li className="text-sm text-slate-400">Ничего не найдено по этому запросу</li>
+                )}
+                {searchHits.map((hit) => (
+                  <li
+                    key={hit.id}
+                    className="rounded-xl border border-slate-100 bg-white px-3 py-2.5"
+                  >
+                    <p className="text-xs font-medium text-slate-600">
+                      {hit.sourceTitle}
+                      <span className="font-normal text-slate-400">
+                        {' '}
+                        · фрагмент {hit.chunkIndex + 1}
+                      </span>
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                      {hit.content.length > 500 ? `${hit.content.slice(0, 500)}…` : hit.content}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
+
       <ul className="mt-8 max-w-2xl space-y-2">
         {data?.items.map((item) => (
           <li
             key={item.id}
-            className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+            className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:gap-3"
           >
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium text-slate-900">{item.title}</p>
@@ -127,18 +268,41 @@ export function RegulationsPage() {
                 {item.chunkCount > 0 ? ` · ${item.chunkCount} фрагм.` : ''}
               </p>
             </div>
-            <button
-              type="button"
-              disabled={uploading}
-              onClick={async () => {
-                if (!window.confirm(`Удалить «${item.title}»?`)) return;
-                await deleteSource(item.id).unwrap();
-                await refetch();
-              }}
-              className="shrink-0 cursor-pointer text-xs text-red-600 hover:underline disabled:opacity-50"
-            >
-              Удалить
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {(item.status === 'ready' || item.status === 'failed') && (
+                <button
+                  type="button"
+                  disabled={uploading || reindexing}
+                  onClick={async () => {
+                    try {
+                      setLocalError(null);
+                      await reindexSource(item.id).unwrap();
+                      await refetch();
+                    } catch (err) {
+                      setLocalError(
+                        err instanceof Error ? err.message : 'Не удалось переиндексировать',
+                      );
+                    }
+                  }}
+                  className="cursor-pointer rounded-lg px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                  title="Пересобрать индекс (нужно после обновления embeddings)"
+                >
+                  Переиндексировать
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={async () => {
+                  if (!window.confirm(`Удалить «${item.title}»?`)) return;
+                  await deleteSource(item.id).unwrap();
+                  await refetch();
+                }}
+                className="cursor-pointer text-xs text-red-600 hover:underline disabled:opacity-50"
+              >
+                Удалить
+              </button>
+            </div>
           </li>
         ))}
         {data?.items.length === 0 && !uploading && (

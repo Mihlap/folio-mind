@@ -10,10 +10,12 @@ import {
 import { DocumentReviewStatusBadge } from '../../components/documents/DocumentReviewStatusControl.js';
 import { DeleteDocumentButton } from '../../components/documents/DeleteDocumentButton.js';
 import { DocumentDragHandle } from '../../components/documents/DocumentDragHandle.js';
+import { DocumentProjectSelect } from '../../components/documents/DocumentProjectSelect.js';
 import { DocumentUploadZone } from '../../components/documents/DocumentUploadZone.js';
 import { ProjectDropTarget } from '../../components/projects/ProjectDropTarget.js';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 import { useAppSelector } from '../../hooks/index.js';
+import { isNativeApp } from '../../lib/capacitor/platform.js';
 
 function getDisplayStatus(status: string): string {
   return getVersionListStatusLabel(status);
@@ -25,6 +27,7 @@ export function DashboardPage() {
   const [listError, setListError] = useState<string | null>(null);
   const uploadState = useAppSelector((s) => s.backgroundUpload);
   const uploadActive = uploadState.active && uploadState.kind === 'dashboard';
+  const nativeApp = isNativeApp();
   const { data: list, refetch } = useListDocumentsQuery({
     limit: 20,
     ...(filterProjectId ? { projectId: filterProjectId } : {}),
@@ -41,7 +44,7 @@ export function DashboardPage() {
             className="flex items-center gap-2 text-sm text-slate-600"
             title="Фильтр списка и проект для новых загрузок"
           >
-            <span className="sr-only sm:not-sr-only">Проект</span>
+            <span className="text-sm">Проект</span>
             <select
               value={filterProjectId}
               onChange={(e) => setFilterProjectId(e.target.value)}
@@ -68,6 +71,18 @@ export function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {filterProjectId ? (
+        <p className="mb-2 text-xs text-folio-700">
+          Новые загрузки попадут в проект «
+          {projects?.items.find((p) => p.id === filterProjectId)?.name ?? '…'}».
+        </p>
+      ) : (
+        <p className="mb-2 text-xs text-slate-500">
+          Чтобы сразу привязать PDF к проекту — выберите проект в фильтре сверху, затем загрузите
+          файл.
+        </p>
+      )}
 
       <DocumentUploadZone
         className="mt-6 sm:mt-8"
@@ -109,72 +124,82 @@ export function DashboardPage() {
 
       <ul className="mt-8 space-y-3 sm:mt-10">
         <p className="text-xs text-slate-500">
-          У документа слева есть ⠿ — перетащите его на проект, не загружая файл повторно.
+          {nativeApp
+            ? 'Привязка к проекту: селект «Проект» у документа или фильтр сверху перед загрузкой.'
+            : 'У документа слева есть ⠿ — перетащите на проект, либо выберите проект в селекте.'}
         </p>
         {list?.items.map((doc) => (
           <li
             key={doc.id}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 hover:border-folio-300 sm:pr-2 sm:pl-0 sm:py-0"
+            className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-2 hover:border-folio-300 sm:flex-row sm:items-center sm:pr-2 sm:pl-0 sm:py-0"
           >
-            <DocumentDragHandle
-              documentId={doc.id}
-              title={doc.title}
-              onDragStateChange={(dragging) => setDraggingDocumentId(dragging ? doc.id : null)}
-            />
-            <Link
-              to={`/app/documents/${doc.id}`}
-              className="min-w-0 flex-1 px-2 py-2 sm:px-4 sm:py-3"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate font-medium text-slate-900">{doc.title}</span>
-                {hasUserSourceDocx(doc.latestVersion?.sourceDocxKey) && (
-                  <span
-                    className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200/80"
-                    title="К документу прикреплён исходный DOCX"
-                  >
-                    + DOCX
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {!nativeApp && (
+                <DocumentDragHandle
+                  documentId={doc.id}
+                  title={doc.title}
+                  onDragStateChange={(dragging) =>
+                    setDraggingDocumentId(dragging ? doc.id : null)
+                  }
+                />
+              )}
+              <Link
+                to={`/app/documents/${doc.id}`}
+                className="min-w-0 flex-1 px-2 py-2 sm:px-4 sm:py-3"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-medium text-slate-900">{doc.title}</span>
+                  {hasUserSourceDocx(doc.latestVersion?.sourceDocxKey) && (
+                    <span
+                      className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200/80"
+                      title="К документу прикреплён исходный DOCX"
+                    >
+                      + DOCX
+                    </span>
+                  )}
+                  {isDocumentReviewStatus(doc.reviewStatus) && doc.reviewStatus !== 'draft' && (
+                    <DocumentReviewStatusBadge status={doc.reviewStatus} />
+                  )}
+                </div>
+                {doc.latestVersion && (
+                  <span className="mt-0.5 block text-xs text-slate-400 sm:mt-1">
+                    {getDisplayStatus(doc.latestVersion.status)}
                   </span>
                 )}
-                {isDocumentReviewStatus(doc.reviewStatus) && doc.reviewStatus !== 'draft' && (
-                  <DocumentReviewStatusBadge status={doc.reviewStatus} />
-                )}
-                {doc.projectName && (
-                  <Link
-                    to={doc.projectId ? `/app/projects/${doc.projectId}` : '/app/projects'}
-                    className="shrink-0 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-800 hover:bg-violet-100/80"
-                    title={`Проект: ${doc.projectName}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {`Проект: ${doc.projectName}`}
-                  </Link>
-                )}
-              </div>
-              {doc.latestVersion && (
-                <span className="mt-0.5 block text-xs text-slate-400 sm:mt-1">
-                  {getDisplayStatus(doc.latestVersion.status)}
-                </span>
-              )}
-            </Link>
-            <DeleteDocumentButton
-              title={`Удалить документ «${doc.title}»`}
-              variant="list"
-              onClick={async () => {
-                if (
-                  !window.confirm(
-                    `Удалить документ «${doc.title}»?\n\nPDF и все версии будут удалены без восстановления.`,
-                  )
-                ) {
-                  return;
-                }
-                try {
-                  await deleteDocument(doc.id).unwrap();
-                  await refetch();
-                } catch (e) {
-                  const msg = e instanceof Error ? e.message : 'Ошибка при удалении';
-                  setListError(msg);
-                }
-              }}
-            />
+              </Link>
+              <DeleteDocumentButton
+                title={`Удалить документ «${doc.title}»`}
+                variant="list"
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      `Удалить документ «${doc.title}»?\n\nPDF и все версии будут удалены без восстановления.`,
+                    )
+                  ) {
+                    return;
+                  }
+                  try {
+                    await deleteDocument(doc.id).unwrap();
+                    await refetch();
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : 'Ошибка при удалении';
+                    setListError(msg);
+                  }
+                }}
+              />
+            </div>
+            <div
+              className="border-t border-slate-100 px-2 pb-1 pt-1 sm:border-0 sm:px-0 sm:pb-0 sm:pt-0"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <DocumentProjectSelect
+                documentId={doc.id}
+                projectId={doc.projectId}
+                projectName={doc.projectName}
+                compact
+              />
+            </div>
           </li>
         ))}
         {list?.items.length === 0 && !uploadActive && (

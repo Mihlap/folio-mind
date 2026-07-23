@@ -23,7 +23,11 @@
     "smoke:phase2": "node tools/smoke-phase2.mjs",
     "smoke:phase3": "node tools/smoke-phase3.mjs",
     "smoke:phase3:docx": "node tools/smoke-phase3-docx.mjs",
-    "smoke:phase3:pdf2docx": "node tools/smoke-phase3-pdf2docx.mjs"
+    "smoke:phase3:pdf2docx": "node tools/smoke-phase3-pdf2docx.mjs",
+    "smoke:rag": "node tools/smoke-rag-chat.mjs",
+    "mobile:sync": "pnpm --filter @folio-mind/mobile sync",
+    "mobile:open:android": "pnpm --filter @folio-mind/mobile open:android",
+    "mobile:apk:debug": "pnpm --filter @folio-mind/mobile assemble:debug"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

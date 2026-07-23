@@ -1,0 +1,29 @@
+{
+  "name": "@folio-mind/mobile",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Capacitor shell for РазУм (Android APK/AAB; optional iOS)",
+  "scripts": {
+    "build:web": "node ./scripts/build-web.mjs",
+    "sync": "pnpm run build:web && npx cap sync android && node ./scripts/ensure-android-cleartext.mjs",
+    "open:android": "npx cap open android",
+    "add:android": "npx cap add android",
+    "add:ios": "npx cap add ios",
+    "copy": "npx cap copy",
+    "doctor": "npx cap doctor",
+    "assemble:debug": "node ./scripts/ensure-android-cleartext.mjs && node ./scripts/assemble-debug.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.2",
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/camera": "^7.0.5",
+    "@capacitor/core": "^7.4.2",
+    "@capacitor/filesystem": "^7.1.1",
+    "@capacitor/status-bar": "^7.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.2",
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}

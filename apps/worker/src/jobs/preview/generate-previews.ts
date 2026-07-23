@@ -1,4 +1,11 @@
-import { extractedTextKey, previewPageThumbKey, previewPageViewKey } from '@folio-mind/pdf-contracts';
+import {
+  buildExtractedTextPayload,
+  extractedTextKey,
+  needsVisionOcr,
+  parseExtractedTextJson,
+  previewPageThumbKey,
+  previewPageViewKey,
+} from '@folio-mind/pdf-contracts';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { extractTextFromPdf } from '../../lib/pdf/pdf-text.js';
@@ -9,16 +16,19 @@ import {
   renderPdfPreviews,
 } from '../../lib/pdf/pdf-previews.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
+import { enqueueVisionOcrJob } from '../../lib/queue/enqueue-vision-ocr.js';
 import {
   getObjectBuffer,
   isWorkerS3Configured,
   objectExists,
   putObjectBuffer,
 } from '../../lib/storage/s3.js';
+import { indexDocumentVersionChunks } from '../rag/document-index.js';
 type PreviewJobPayload = WorkerJobPayload & {
   jobId?: string;
   documentId?: string;
   versionId?: string;
+  tenantId?: string;
   s3Key?: string;
 };
 type PreviewPagesJobPayload = PreviewJobPayload & {
@@ -48,7 +58,7 @@ export async function processGeneratePreviewsJob(
 ): Promise<void> {
   const run = async () => {
     const prisma = getPrisma();
-    const { jobId, documentId, versionId, s3Key } = data;
+    const { jobId, documentId, versionId, tenantId, s3Key } = data;
     if (!jobId || !documentId || !versionId || !s3Key) {
       throw new Error('Preview job: missing jobId, documentId, versionId or s3Key');
     }
@@ -139,18 +149,77 @@ export async function processGeneratePreviewsJob(
     void (async () => {
       try {
         const extracted = await withTimeout(extractTextFromPdf(pdfBuffer), 20000, 'Extract text');
+        const textPayload = buildExtractedTextPayload({
+          text: extracted.text,
+          pages: extracted.pages,
+          source: 'pdfjs',
+        });
         await putObjectBuffer({
           key: textKey,
-          body: Buffer.from(
-            JSON.stringify({
-              text: extracted.text,
-              pages: extracted.pages,
-              extractedAt: new Date().toISOString(),
-            }),
-            'utf8',
-          ),
+          body: Buffer.from(JSON.stringify(textPayload), 'utf8'),
           contentType: 'application/json',
         });
+
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId) {
+          const doc = await prisma.document.findUnique({
+            where: { id: documentId },
+            select: { tenantId: true },
+          });
+          resolvedTenantId = doc?.tenantId;
+        }
+
+        const pages =
+          extracted.pages?.length > 0
+            ? extracted.pages
+            : parseExtractedTextJson(JSON.stringify(textPayload)).pages;
+        const scanLikely = needsVisionOcr({
+          text: extracted.text,
+          pages,
+          pageCount,
+        });
+
+        let visionOcrStatus: string = 'not_needed';
+        let visionOcrJobId: string | null = null;
+        if (scanLikely && resolvedTenantId) {
+          if (env.AI_PROVIDER === 'gigachat') {
+            visionOcrStatus = 'queued';
+            await prisma.documentVersion.update({
+              where: { id: versionId },
+              data: { textSource: 'pdfjs', visionOcrStatus: 'queued' },
+            });
+            try {
+              visionOcrJobId = await enqueueVisionOcrJob({
+                env,
+                documentId,
+                versionId,
+                tenantId: resolvedTenantId,
+                s3Key,
+                pageCount,
+                provider: env.AI_PROVIDER,
+              });
+            } catch (ocrEnqueueErr) {
+              console.warn('[preview] vision-ocr enqueue failed', ocrEnqueueErr);
+              visionOcrStatus = 'failed';
+              await prisma.documentVersion.update({
+                where: { id: versionId },
+                data: { visionOcrStatus: 'failed' },
+              });
+            }
+          } else {
+            visionOcrStatus = 'skipped';
+            await prisma.documentVersion.update({
+              where: { id: versionId },
+              data: { textSource: 'pdfjs', visionOcrStatus: 'skipped' },
+            });
+          }
+        } else {
+          await prisma.documentVersion.update({
+            where: { id: versionId },
+            data: { textSource: 'pdfjs', visionOcrStatus: 'not_needed' },
+          });
+        }
+
         await prisma.job.update({
           where: { id: jobId },
           data: {
@@ -164,11 +233,80 @@ export async function processGeneratePreviewsJob(
               textKey,
               textExtracted: true,
               textError: null,
+              textSource: 'pdfjs',
+              visionOcrStatus,
+              visionOcrJobId,
             },
           },
         });
+        
+        if (resolvedTenantId) {
+          try {     
+            const indexResult = await indexDocumentVersionChunks({
+              env,
+              documentId,
+              versionId,
+              tenantId: resolvedTenantId,
+            });
+            await prisma.job.update({
+              where: { id: jobId },
+              data: {
+                payload: {
+                  documentId,
+                  versionId,
+                  s3Key,
+                  pageCount,
+                  previewPages: previews.length,
+                  initialPages,
+                  textKey,
+                  textExtracted: true,
+                  textError: null,
+                  textSource: 'pdfjs',
+                  visionOcrStatus,
+                  visionOcrJobId,
+                  documentIndexed: true,
+                  documentChunkCount: indexResult.chunkCount,
+                },
+              },
+            });
+          } catch (indexErr) {
+            console.warn('[preview] document-index after extract failed', indexErr);
+          }
+        }
       } catch (err) {
         const textError = err instanceof Error ? err.message : 'Text extraction failed';
+        // Empty extract often means a scan — try vision OCR when GigaChat is configured.
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId) {
+          const doc = await prisma.document.findUnique({
+            where: { id: documentId },
+            select: { tenantId: true },
+          });
+          resolvedTenantId = doc?.tenantId;
+        }
+        let visionOcrStatus: string | null = null;
+        let visionOcrJobId: string | null = null;
+        if (resolvedTenantId && env.AI_PROVIDER === 'gigachat' && pageCount > 0) {
+          try {
+            visionOcrStatus = 'queued';
+            await prisma.documentVersion.update({
+              where: { id: versionId },
+              data: { visionOcrStatus: 'queued' },
+            });
+            visionOcrJobId = await enqueueVisionOcrJob({
+              env,
+              documentId,
+              versionId,
+              tenantId: resolvedTenantId,
+              s3Key,
+              pageCount,
+              provider: env.AI_PROVIDER,
+            });
+          } catch (ocrEnqueueErr) {
+            console.warn('[preview] vision-ocr enqueue after extract failure', ocrEnqueueErr);
+            visionOcrStatus = 'failed';
+          }
+        }
         await prisma.job.update({
           where: { id: jobId },
           data: {
@@ -182,6 +320,8 @@ export async function processGeneratePreviewsJob(
               textKey: null,
               textExtracted: false,
               textError,
+              visionOcrStatus,
+              visionOcrJobId,
             },
           },
         });

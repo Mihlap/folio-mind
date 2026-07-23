@@ -9,6 +9,7 @@ import { PhoneAuthForm } from '../../components/auth/PhoneAuthForm.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage, validatePasswordClient } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
+import { setPendingVerifyEmail } from '../../lib/auth/pending-verify-email.js';
 
 type AuthTab = 'email' | 'phone';
 
@@ -84,6 +85,7 @@ export function RegisterPage() {
         captchaToken: captchaToken ?? undefined,
         inviteToken: inviteToken ?? undefined,
       }).unwrap();
+      setPendingVerifyEmail(res.email);
       navigate('/check-email', { state: { email: res.email } });
     } catch {
       // The mutation error state renders the message below.

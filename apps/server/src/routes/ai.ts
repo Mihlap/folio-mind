@@ -7,7 +7,9 @@ import {
   exportReportKey,
   exportReportPdfKey,
   exportReportWordKey,
+  listExtractionTemplates,
   resolveS3Key,
+  validateExtractionSchema,
 } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../lib/documents/document-access.js';
 import { getCachedSummary } from '../lib/ai/ai-cache.js';
@@ -236,6 +238,55 @@ export const aiRoutes: FastifyPluginAsync<{
         dailyLimit: env.AI_TENANT_DAILY_REQUESTS,
       };
     },
+  );
+  const extractionFieldResponseSchema: z.ZodType<{
+    name: string;
+    label: string;
+    type: string;
+    description: string;
+    children?: Array<{
+      name: string;
+      label: string;
+      type: string;
+      description: string;
+      children?: unknown[];
+    }>;
+  }> = z.lazy(() =>
+    z.object({
+      name: z.string(),
+      label: z.string(),
+      type: z.string(),
+      description: z.string(),
+      children: z.array(extractionFieldResponseSchema).optional(),
+    }),
+  );
+  r.get(
+    '/ai/extraction-templates',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        response: {
+          200: z.object({
+            templates: z.array(
+              z.object({
+                id: z.enum(['contract', 'contract_sections', 'act', 'tz']),
+                title: z.string(),
+                description: z.string(),
+                schema: z.array(extractionFieldResponseSchema),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async () => ({
+      templates: listExtractionTemplates().map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        schema: t.schema,
+      })),
+    }),
   );
   r.post(
     '/ai/complete',
@@ -851,6 +902,93 @@ export const aiRoutes: FastifyPluginAsync<{
           tenantId: user.tenantId,
           type: 'rag-compare',
           prompt: request.body.query,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        await markAiEnqueueFailed(job.id, user.tenantId, err);
+        throw err;
+      }
+      return reply.status(202).send({ jobId: job.id, status: 'queued' });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/ai/extract',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({ documentId: z.string(), versionId: z.string() }),
+        body: z.object({
+          templateId: z.enum(['contract', 'contract_sections', 'act', 'tz']).optional(),
+          schema: z.array(z.record(z.unknown())).max(40).optional(),
+          provider: z.enum(['gigachat', 'yandex']).optional(),
+        }),
+        response: {
+          202: z.object({ jobId: z.string(), status: z.string() }),
+          400: errorBody,
+          404: errorBody,
+          429: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const provider = request.body.provider ?? getConfiguredProviderName(env);
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version || version.status !== 'ready') {
+        return reply.code(400).send({ error: 'Version not ready' });
+      }
+
+      let customSchema: ReturnType<typeof validateExtractionSchema> | undefined;
+      if (request.body.schema) {
+        try {
+          customSchema = validateExtractionSchema(request.body.schema);
+        } catch (err) {
+          return reply.code(400).send({
+            error: err instanceof Error ? err.message : 'Некорректная схема извлечения',
+          });
+        }
+      }
+      if (!request.body.templateId && !customSchema) {
+        return reply.code(400).send({
+          error: 'Укажите templateId (contract|act|tz) или schema',
+        });
+      }
+
+      try {
+        await checkAndIncrementAiUsage(env, user.tenantId);
+      } catch (err) {
+        if (err instanceof AiLimitError) {
+          return reply.code(429).send({ error: err.message });
+        }
+        throw err;
+      }
+
+      const job = await app.prisma.job.create({
+        data: {
+          type: 'document-extract',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: {
+            documentId,
+            versionId,
+            provider,
+            templateId: request.body.templateId ?? null,
+            schema: customSchema ?? null,
+          },
+        },
+      });
+      try {
+        await enqueueAiJob(env, {
+          jobId: job.id,
+          documentId,
+          versionId,
+          tenantId: user.tenantId,
+          type: 'document-extract',
           requestId: request.requestId,
         });
       } catch (err) {

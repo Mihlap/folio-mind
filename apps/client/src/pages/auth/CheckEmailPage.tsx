@@ -10,6 +10,11 @@ import { Button } from '../../components/ui/Button.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { getStoredAuthToken, subscribeToAuthFromOtherTabs } from '../../lib/auth/authCrossTab.js';
+import {
+  clearPendingVerifyEmail,
+  getPendingVerifyEmail,
+  setPendingVerifyEmail,
+} from '../../lib/auth/pending-verify-email.js';
 type LocationState = {
   email?: string;
 };
@@ -18,10 +23,15 @@ export function CheckEmailPage() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const state = (location.state as LocationState | null) ?? {};
-  const [email, setEmail] = useState(state.email ?? '');
+  const [email, setEmail] = useState(state.email ?? getPendingVerifyEmail() ?? '');
   const [verifiedInOtherTab, setVerifiedInOtherTab] = useState(false);
   const [resend, { isLoading, isSuccess, error }] = useResendVerificationMutation();
   const [checkVerificationStatus] = useEmailVerificationStatusMutation();
+
+  useEffect(() => {
+    if (email.trim()) setPendingVerifyEmail(email);
+  }, [email]);
+
   useEffect(() => {
     function enterApp() {
       const token = getStoredAuthToken();
@@ -29,11 +39,13 @@ export function CheckEmailPage() {
         setVerifiedInOtherTab(true);
         return;
       }
+      clearPendingVerifyEmail();
       dispatch(setToken(token));
       navigate('/app', { replace: true });
     }
     const existing = getStoredAuthToken();
     if (existing) {
+      clearPendingVerifyEmail();
       dispatch(setToken(existing));
       navigate('/app', { replace: true });
       return;
@@ -59,16 +71,24 @@ export function CheckEmailPage() {
   async function onResend(e: FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
+    setPendingVerifyEmail(email);
     await resend({ email: email.trim() });
   }
   if (verifiedInOtherTab) {
     return (
       <AuthLayout title="Email подтверждён" subtitle="Регистрация завершена">
         <p className="text-sm text-slate-600">
-          Адрес <strong>{email || 'ваш email'}</strong> подтверждён. Войдите в аккаунт с вашим
-          паролем.
+          Адрес <strong>{email || 'ваш email'}</strong> подтверждён. Войдите в аккаунт с тем же
+          паролем — повторная регистрация не нужна.
         </p>
-        <Button type="button" className="mt-6 w-full" onClick={() => navigate('/login')}>
+        <Button
+          type="button"
+          className="mt-6 w-full"
+          onClick={() => {
+            clearPendingVerifyEmail();
+            navigate('/login');
+          }}
+        >
           Войти
         </Button>
       </AuthLayout>
@@ -78,8 +98,8 @@ export function CheckEmailPage() {
     <AuthLayout title="Проверьте почту" subtitle="Подтвердите регистрацию">
       <p className="text-sm text-slate-600">
         Мы отправили ссылку на <strong>{email || 'ваш email'}</strong>. Откройте письмо и нажмите
-        «Подтвердить email» — откроется страница с подтверждением. Эта вкладка обновится
-        автоматически.
+        «Подтвердить email». Не закрывайте РазУм — эта страница обновится сама, когда почта будет
+        подтверждена. Затем нажмите «Войти».
       </p>
       <form onSubmit={onResend} className="mt-6 space-y-3">
         <label className="block">
@@ -110,6 +130,17 @@ export function CheckEmailPage() {
         <Link to="/login" className="font-medium text-folio-600 hover:underline">
           Вернуться ко входу
         </Link>
+        {' · '}
+        <button
+          type="button"
+          className="font-medium text-folio-600 hover:underline"
+          onClick={() => {
+            clearPendingVerifyEmail();
+            navigate('/register');
+          }}
+        >
+          Другой email
+        </button>
       </p>
     </AuthLayout>
   );

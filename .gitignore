@@ -11,6 +11,8 @@ coverage
 .env.*
 !.env.example
 !**/.env.example
+!.env.capacitor.example
+!**/.env.capacitor.example
 
 # Credentials & keys
 *.pem

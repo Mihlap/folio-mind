@@ -108,6 +108,20 @@ export const ragApi = baseApi.injectEndpoints({
       query: (sourceId) => ({ url: `/rag/sources/${sourceId}`, method: 'DELETE' }),
       invalidatesTags: [{ type: 'RagSources', id: 'LIST' }],
     }),
+    reindexRagSource: build.mutation<
+      {
+        sourceId: string;
+        status: string;
+        jobId: string;
+      },
+      string
+    >({
+      query: (sourceId) => ({
+        url: `/rag/sources/${sourceId}/reindex`,
+        method: 'POST',
+      }),
+      invalidatesTags: [{ type: 'RagSources', id: 'LIST' }],
+    }),
     queryRag: build.mutation<
       {
         chunks: Array<{
@@ -133,5 +147,6 @@ export const {
   useCompleteRagSourceMutation,
   useUploadRagSourceFileMutation,
   useDeleteRagSourceMutation,
+  useReindexRagSourceMutation,
   useQueryRagMutation,
 } = ragApi;

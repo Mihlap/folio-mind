@@ -13,7 +13,7 @@
 | **2** Правки и RAG | 3–6 мес.        | Операции PDF, правки ИИ, регламенты | ✅ **100%**                                                 |
 | **2b** Буклеты     | 3–6 мес.        | Макет, медиатека, согласование      | **~100%**                                                   |
 | **3** Конвертация  | 4–8 мес.        | Office ↔ PDF, формы, подпись        | ✅ **100%** _(MVP: DOCX-пайплайн, AcroForm export, визуальная подпись, API)_ |
-| **4** Mobile       | 2–5 мес.        | PWA, APK, офлайн буклет             | **0%**                                                      |
+| **4** Mobile       | 2–5 мес.        | PWA, APK, офлайн буклет             | **~60%** (debug APK на эмуляторе проверен)                  |
 
 _Вне плана v1–v4 (бэклог): Enterprise SSO, on-prem, real-time co-editing._
 
@@ -226,6 +226,78 @@ _Параллельно с фазой 2 после стабильного viewer
 
 ---
 
+### Спринт 11 — RAG по документу, embeddings и извлечение (2026-07) — **100%**
+
+**Контекст:** анализ [pdf-rag-app](https://github.com/FloatinggOnion/pdf-rag-app) и [Documind](https://github.com/DocumindHQ/documind). Переносим **паттерны**, не стек (Chroma/LangChain/OpenAI). Цель — быстрее и точнее ИИ-чат, качественнее RAG по регламентам, поддержка сканов, структурированное извлечение из договоров.
+
+**Критерий готовности:** чат по договору 100+ стр. отвечает за секунды с цитатами из релевантных фрагментов; семантический поиск по регламентам работает на embeddings провайдера; скан без текстового слоя индексируется; в UI есть поиск по регламентам; опционально — извлечение реквизитов договора по шаблону.
+
+#### Этап A — Индекс документа и качественные embeddings (приоритет 1)
+
+| # | Задача | Файлы / заметки | Статус |
+|---|--------|-----------------|--------|
+| 1 | Prisma: `DocumentChunk` (`documentId`, `versionId`, `page`, `content`, `embedding vector(384)`) | `apps/server/prisma/schema.prisma`, миграция | ✅ |
+| 2 | Улучшить chunking: **1000 символов, overlap 100**, разбиение по абзацам | `packages/ai-contracts` (`splitTextIntoChunks`) | ✅ |
+| 3 | Job `document-index`: после `generate-previews` / extract-text → чанки + embeddings → `DocumentChunk` | inline после extract + job `document-index` | ✅ |
+| 4 | Подключить **GigaChat/Yandex embeddings** в индексации (сейчас фактически локальный FNV) | `rag-index.ts` + `save-chunk-embeddings.ts`; fallback local | ✅ |
+| 5 | Унифицировать `rag-search.ts` (server + worker — один модуль) | гибридный keyword+vector в обоих копиях | ✅ MVP |
+| 6 | Переиндексация при новой версии; удаление чанков при удалении документа/версии | cascade FK + reindex API | ✅ |
+
+#### Этап B — RAG-чат по документу (приоритет 1, идея из pdf-rag-app)
+
+| # | Задача | Файлы / заметки | Статус |
+|---|--------|-----------------|--------|
+| 7 | `ai-chat`: вместо всего текста (до 120k) — **top-k чанков** (k=5..8) по embedding запроса | `ai-chat.ts` + `AI_CHAT_MODE` | ✅ |
+| 8 | Prompt-шаблон: «Отвечай только по контексту» + блоки чанков с номерами страниц | `ai-chat.ts` | ✅ |
+| 9 | В ответе чата — **источники** (страница, фрагмент); UI в `DocumentAiPanel` | `DocumentAiPanel.tsx` | ✅ |
+| 10 | Fallback: если индекс пуст — текущее поведение (полный текст / GigaChat PDF) | `AI_CHAT_MODE=auto|rag|full` | ✅ |
+| 11 | Smoke: длинный PDF, вопрос по конкретному пункту → ответ с цитатой | `pnpm smoke:rag` | ✅ |
+
+#### Этап C — RAG по регламентам: довести до конца (quick win)
+
+| # | Задача | Файлы / заметки | Статус |
+|---|--------|-----------------|--------|
+| 12 | UI поиска по регламентам (`POST /rag/query` уже есть, UI нет) | `RegulationsPage.tsx` | ✅ |
+| 13 | Показать score / фрагмент / источник в результатах поиска | источник + фрагмент | ✅ MVP |
+| 14 | Переиндексация регламентов после фикса embeddings (задача 4) | `POST /rag/sources/:id/reindex` + кнопка | ✅ |
+
+#### Этап D — Vision OCR для сканов (приоритет 2, идея из Documind/Zerox)
+
+| # | Задача | Файлы / заметки | Статус |
+|---|--------|-----------------|--------|
+| 15 | Детект «мало текста»: если extract < N символов/стр. → флаг `needsVisionOcr` | `packages/pdf-contracts` + hook в `generate-previews` | ✅ |
+| 16 | Job `vision-ocr`: PDF (до 20 стр.) → **GigaChat** `completeWithPdf` → JSON страниц | `apps/worker/src/jobs/preview/vision-ocr.ts` | ✅ |
+| 17 | Сохранить результат в `text.json` (S3) — дальше тот же pipeline (index, chat, suggestions) | `extracted-text.ts` + re-index | ✅ |
+| 18 | UI: статус «распознавание скана» на DocumentPage; не блокировать просмотр превью | `DocumentVisionOcrBanner` | ✅ |
+
+**Не брать из Documind:** npm-пакет целиком (AGPL v3, OpenAI lock-in). Только паттерн page→vision→text на вашем GigaChat.
+
+#### Этап E — Структурированное извлечение (приоритет 3, идея из Documind)
+
+| # | Задача | Файлы / заметки | Статус |
+|---|--------|-----------------|--------|
+| 19 | Контракт schema: `name`, `type`, `description`, `children` + runtime validate | `packages/pdf-contracts/src/extraction-schema.ts` | ✅ |
+| 20 | Шаблоны: ключевые данные / важные условия / акт / ТЗ | `extraction-templates/` | ✅ |
+| 21 | `POST .../ai/extract` → job `document-extract` → JSON | `ai.ts` + `document-extract.ts` | ✅ |
+| 22 | UI: панель «Данные документа» в «Отчёт»; копирование / экспорт JSON | `DocumentExtractPanel.tsx` | ✅ |
+| 23 | (Опционально) auto-schema: LLM генерирует schema по первым страницам | отложено | ⬜ |
+
+#### Этап F — Документация и тесты
+
+| # | Задача | Статус |
+|---|--------|--------|
+| 24 | `USER_GUIDE.md` — RAG-чат, поиск по регламентам, сканы, извлечение реквизитов | ✅ |
+| 25 | `docs/AI_SETUP.md` — embeddings, лимиты индексации, переиндексация | ✅ |
+| 26 | Unit: chunking overlap, document-index, rag-search top-k, OCR detect, extract schema | ✅ |
+| 27 | `PROJECT_PLAN.md` §5 — этот спринт | ✅ |
+
+**Оценка:** этапы A+B+C ≈ 2 нед.; D ≈ 1–2 нед.; E ≈ 2 нед.; F параллельно.
+
+**Явно вне спринта:** ChromaDB, LangChain, Gemini/OpenAI как основной провайдер, копирование кода pdf-rag-app (Python), auto-schema.
+
+**Безопасность:** `AI_CHAT_MODE=full` возвращает прежнее поведение чата; удаление документа/версии чистит `DocumentChunk` через cascade; индексация после extract — best-effort и не ломает preview; OCR не блокирует `status=ready`.
+---
+
 ### Спринт 5 — порядок страниц и подписи версий (2026-07)
 
 | # | Задача | Статус |
@@ -339,11 +411,14 @@ PDF + принятые правки
 
 ---
 
-## Фаза 4 — PWA и Android (2–5 месяцев) — **0%**
+## Фаза 4 — PWA и Android (2–5 месяцев) — **~60%**
 
-- [ ] PWA manifest, safe-area, touch — **0%**
-- [ ] Capacitor APK/AAB — **0%**
-- [ ] Фото с объекта → медиатека; офлайн-просмотр буклета — **0%**
+- [x] PWA manifest + `vite-plugin-pwa` + иконки / viewport / safe-area touch-targets — **MVP**
+- [x] `apps/mobile`: Capacitor config + `cap add android` (локально, `android/` в `.gitignore`) — **scaffold**
+- [x] Native bridge: StatusBar, App URL listener; Camera → медиатека (кнопки только в APK) — **MVP**
+- [x] Офлайн-кэш превью буклета (IndexedDB, до 30 стр.) — **MVP**
+- [x] Debug APK на эмуляторе (`Razum_API34`, `pnpm mobile:apk:debug`) — **проверено**
+- [ ] Release/AAB + keystore; intent «открыть PDF»; штамп «согласовано» — **0%**
 
 ---
 
@@ -374,8 +449,10 @@ preview > text-extraction > conversion (PDF↔DOCX) > ai-jobs > apply-edits-fina
 15. ✅ **Спринт 8 (2026-07):** редактируемый титульник буклета, навигация по клику на метки/заметки в PDF, обновление `USER_GUIDE`.
 16. ✅ **Спринт 9 (2026-07):** ACL-роли, приглашения в рабочее пространство, разделение команды и гостевой ссылки, колонтитулы, яркость/контраст, внутренние пометки, поиск в медиатеке — **2b = 100%**.
 17. ✅ **Спринт 10 (2026-07):** enforcement ACL в UI, live-смена роли по SSE, плашка проекта в списке, UX мини-чеклиста сценария.
+18. ✅ **Спринт 11 (2026-07):** RAG-чат, embeddings, поиск регламентов, vision OCR сканов, «Данные документа», `pnpm smoke:rag` — **100%**.
+19. 🔄 **Фаза 4 (2026-07):** PWA; Capacitor scaffold; Camera → медиатека; офлайн-кэш превью; далее debug APK (Android Studio) и intent/штамп.
 
-**Следующий фокус:** фаза **4** (PWA). Бэклог post-v3: PAdES/PKCS#7, Office XLSX/PPTX, гранулярность правок F, клиентский pdf-lib wizard.
+**Следующий фокус:** debug APK в Android Studio (`pnpm mobile:sync` → `pnpm mobile:open:android`); intent открытия PDF; штамп «согласовано». Бэклог: PAdES/PKCS#7, Office XLSX/PPTX, гранулярность правок F, клиентский pdf-lib wizard, auto-schema извлечения.
 
 **Dev-зависимости для «Применить правки»:** `docker compose up` → Redis, Postgres, **Gotenberg** (`:3003`), **pdf2docx** (`:8080`); S3 — Timeweb (dev = prod-паритет).  
 Env: `GOTENBERG_URL`, `PDF_TO_DOCX_URL` в `apps/server/.env` и `apps/worker/.env`.  

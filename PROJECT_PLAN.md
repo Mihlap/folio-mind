@@ -878,6 +878,42 @@ _Можно вести параллельно с Фазой 2 после ста�
 
 ---
 
+### Спринт 11 — RAG по документу, embeddings и извлечение (2026-07) — **~98%**
+
+**Контекст:** паттерны из [pdf-rag-app](https://github.com/FloatinggOnion/pdf-rag-app) (RAG-чат, chunking) и [Documind](https://github.com/DocumindHQ/documind) (vision OCR, schema extraction). Стек Folio Mind не меняем: pgvector, GigaChat/Yandex, worker.
+
+| # | Задача | Статус |
+|---|--------|--------|
+| **A. Индекс и embeddings** | | |
+| 1 | `DocumentChunk` в Prisma + миграция | ✅ |
+| 2 | Chunking 1000 / overlap 100 | ✅ |
+| 3 | Job `document-index` после extract-text | ✅ |
+| 4 | Embeddings GigaChat/Yandex в `rag-index` и `document-index` (fallback local) | ✅ |
+| 5 | Общий модуль `rag-search` (server + worker, hybrid keyword+vector) | ✅ MVP |
+| 6 | Очистка чанков при delete document/version (cascade) | ✅ |
+| **B. RAG-чат** | | |
+| 7 | `ai-chat`: retrieval top-k + `AI_CHAT_MODE=auto\|rag\|full` | ✅ |
+| 8 | Источники (страница, фрагмент) в ответе + UI | ✅ |
+| 9 | Fallback на полный текст | ✅ |
+| 10 | Smoke длинного PDF с цитатой | ⬜ |
+| **C. Регламенты** | | |
+| 11 | UI `POST /rag/query` на странице регламентов | ✅ |
+| 12 | Переиндексация регламентов (`/reindex` + кнопка) | ✅ |
+| **D. Сканы (vision)** | | |
+| 13 | Детект «мало текста» → job `vision-ocr` через GigaChat | ✅ |
+| 14 | Результат в `text.json`; статус на DocumentPage | ✅ |
+| **E. Извлечение JSON** | | |
+| 15 | Schema + шаблоны договоров (`extraction-templates/`) | ✅ |
+| 16 | `POST .../ai/extract` + UI «Данные документа» | ✅ |
+| **F. Docs & tests** | | |
+| 17 | `docs/AI_SETUP.md`, USER_GUIDE (сканы/реквизиты), unit OCR/schema | ✅ |
+
+**Критерий готовности:** чат по длинному договору с цитатами; семантический поиск регламентов в UI; скан индексируется; опционально — JSON реквизитов по шаблону.
+
+**Оценка:** A+B+C ~2 нед., D ~1–2 нед., E ~2 нед. **A–E выполнены; вне скоупа: auto-schema и smoke длинного PDF.**
+
+---
+
 ### Фаза 3 — Конвертация, формы, подпись, публичный API (4–8 месяцев)
 
 #### 3.1 Конвертация
@@ -919,16 +955,17 @@ _Можно вести параллельно с Фазой 2 после ста�
 
 #### 4.1 Адаптивный web / PWA
 
-- [ ] Breakpoints mobile/tablet/desktop; viewer fullscreen на телефоне.
-- [ ] `viewport`, safe-area, крупные touch-targets.
-- [ ] `vite-plugin-pwa`: manifest, иконки, кэш статики.
+- [x] Breakpoints mobile/tablet/desktop; viewer fullscreen на телефоне _(частично: mobile sheet + bottom nav)_.
+- [x] `viewport` + `viewport-fit=cover`, safe-area на chrome, touch-targets (`.touch-target`).
+- [x] `vite-plugin-pwa`: manifest «РазУм», иконки, кэш статики.
 
 #### 4.2 Capacitor Android
 
-- [ ] `apps/mobile`: инициализация Capacitor, sync `apps/client/dist`.
-- [ ] Debug/release **APK**, keystore; **AAB** для Google Play.
+- [x] `apps/mobile`: инициализация Capacitor, sync `apps/client/dist` _(scaffold + README)_.
+- [x] Debug **APK** (`assembleDebug` / `pnpm mobile:apk:debug`) — **проверено**.
+- [ ] Release keystore; **AAB** для Google Play.
 - [ ] Filesystem, intent открытия PDF из других приложений.
-- [ ] Тот же Redux store и RTK Query base URL (env per build).
+- [x] Тот же Redux store и RTK Query base URL (env per build) — `VITE_API_URL` / `.env.capacitor.example`.
 
 #### 4.3 iOS (опционально)
 
@@ -940,8 +977,8 @@ _Можно вести параллельно с Фазой 2 после ста�
 
 #### 4.5 Буклеты на объекте (§2.3)
 
-- [ ] Камера / галерея → загрузка в `media/` проекта (Capacitor).
-- [ ] Офлайн-кэш превью последней версии буклета для просмотра без сети.
+- [x] Камера / галерея → загрузка в `media/` проекта (Capacitor) — **MVP** _(кнопки в медиатеке на native)_.
+- [x] Офлайн-кэш превью последней версии буклета для просмотра без сети — **MVP** _(IndexedDB, до 30 стр.)_.
 - [ ] Визуальный штамп «согласовано» на планшете (трек визуальной подписи §3.3).
 
 **Критерий готовности:** подписанный APK проходит основной сценарий; веб на iPhone/Android без регрессий; с площадки можно сфотографировать и открыть актуальный буклет офлайн.

@@ -12,6 +12,7 @@ import {
 } from '@folio-mind/store';
 import { filterImageFiles } from '../../lib/layout/isImageFile.js';
 import { prepareMediaAssetFile } from '../../lib/media/prepareMediaAssetFile.js';
+import { canUseNativeCamera, pickNativeImageFile } from '../../lib/capacitor/pick-native-image.js';
 import { useAppSelector } from '../../hooks/index.js';
 import { MediaAssetThumbnail } from './MediaAssetThumbnail.js';
 
@@ -78,6 +79,7 @@ export function MediaLibraryPanel() {
   const { data: quota } = useGetMediaQuotaQuery();
   const [uploadMediaAsset] = useUploadMediaAssetMutation();
   const [deleteMediaAsset, { isLoading: deleting }] = useDeleteMediaAssetMutation();
+  const nativeCamera = canUseNativeCamera();
 
   const maxFileLabel = quota
     ? formatBytesShort(Number(quota.maxFileBytes))
@@ -150,6 +152,20 @@ export function MediaLibraryPanel() {
     }
   }
 
+  async function handleNativeCapture(source: 'camera' | 'photos') {
+    setError(null);
+    setSuccess(null);
+    try {
+      const file = await pickNativeImageFile(source);
+      await uploadFiles([file]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Не удалось получить фото';
+      if (!/cancel|User cancelled|No image/i.test(message)) {
+        setError(message);
+      }
+    }
+  }
+
   async function openPreview(asset: MediaAssetItem) {
     setPreviewAsset(asset);
     setPreviewDataUrl(null);
@@ -200,12 +216,34 @@ export function MediaLibraryPanel() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-slate-800">Всего файлов: {items.length}</p>
-        <label
-          htmlFor={uploadInputId}
-          className={`cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 ${uploading ? 'pointer-events-none opacity-50' : ''}`}
-        >
-          {uploading ? 'Загрузка…' : 'Добавить в медиатеку'}
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          {nativeCamera && (
+            <>
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => void handleNativeCapture('camera')}
+                className="touch-target cursor-pointer rounded-md border border-folio-200 bg-folio-50 px-2 py-1 text-xs font-medium text-folio-800 hover:bg-folio-100 disabled:opacity-50"
+              >
+                Снять фото
+              </button>
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => void handleNativeCapture('photos')}
+                className="touch-target cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Из галереи
+              </button>
+            </>
+          )}
+          <label
+            htmlFor={uploadInputId}
+            className={`cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 ${uploading ? 'pointer-events-none opacity-50' : ''}`}
+          >
+            {uploading ? 'Загрузка…' : 'Добавить в медиатеку'}
+          </label>
+        </div>
       </div>
 
       <input

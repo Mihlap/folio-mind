@@ -9,7 +9,7 @@ export function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-folio-50 via-white to-slate-100 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-folio-50 via-white to-slate-100 px-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xl shadow-slate-200/50">
         <div className="text-center">
           <Link

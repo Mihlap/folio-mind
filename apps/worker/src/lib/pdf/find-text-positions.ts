@@ -104,7 +104,8 @@ function searchListLinesInItems(
     }
 
     if (nearX != null) {
-      const inColumn = candidates.filter((box) => Math.abs(box.x - nearX) < 100);
+      const columnX = nearX;
+      const inColumn = candidates.filter((box) => Math.abs(box.x - columnX) < 100);
       if (inColumn.length > 0) candidates = inColumn;
     }
     if (belowY != null) {
