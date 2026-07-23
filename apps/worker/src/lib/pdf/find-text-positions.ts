@@ -315,7 +315,7 @@ function toMatchFromLineBoxes(
   items: TextItem[],
   boxes: TextBoxPosition[],
   searchText: string,
-  suggestion: string,
+  _suggestion: string,
 ): TextMatch {
   const quoteLines = searchText
     .split(/\n+/)
