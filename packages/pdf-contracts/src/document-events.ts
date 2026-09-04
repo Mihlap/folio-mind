@@ -38,8 +38,21 @@ export type MemberAccessDocumentEvent = {
   role?: string;
 };
 
+export type VersionCreatedDocumentEvent = {
+  type: 'version_created';
+  documentId: string;
+  versionId: string;
+  version: number;
+};
+
+export type VersionDeletedDocumentEvent = {
+  type: 'version_deleted';
+  documentId: string;
+  versionId: string;
+};
+
 export type DocumentVersionScopeEvent = GuestCommentDocumentEvent | PageReviewDocumentEvent;
-export type DocumentMetaScopeEvent = ReviewStatusDocumentEvent | MemberAccessDocumentEvent;
+export type DocumentMetaScopeEvent = ReviewStatusDocumentEvent | MemberAccessDocumentEvent | VersionCreatedDocumentEvent | VersionDeletedDocumentEvent;
 export type DocumentScopeEvent = DocumentVersionScopeEvent | DocumentMetaScopeEvent;
 
 /** @deprecated Use DocumentVersionScopeEvent */
@@ -86,6 +99,17 @@ function isMemberAccessEvent(parsed: DocumentScopeEvent): parsed is MemberAccess
   );
 }
 
+function isVersionCreatedEvent(parsed: DocumentScopeEvent): parsed is VersionCreatedDocumentEvent {
+  if (parsed.type !== 'version_created') return false;
+  if (typeof parsed.documentId !== 'string' || typeof parsed.versionId !== 'string') return false;
+  return typeof parsed.version === 'number';
+}
+
+function isVersionDeletedEvent(parsed: DocumentScopeEvent): parsed is VersionDeletedDocumentEvent {
+  if (parsed.type !== 'version_deleted') return false;
+  return typeof parsed.documentId === 'string' && typeof parsed.versionId === 'string';
+}
+
 export function parseDocumentVersionScopeEvent(raw: string): DocumentVersionScopeEvent | null {
   try {
     const parsed = JSON.parse(raw) as DocumentScopeEvent;
@@ -99,7 +123,7 @@ export function parseDocumentVersionScopeEvent(raw: string): DocumentVersionScop
 export function parseDocumentMetaScopeEvent(raw: string): DocumentMetaScopeEvent | null {
   try {
     const parsed = JSON.parse(raw) as DocumentScopeEvent;
-    if (isReviewStatusEvent(parsed) || isMemberAccessEvent(parsed)) return parsed;
+    if (isReviewStatusEvent(parsed) || isMemberAccessEvent(parsed) || isVersionCreatedEvent(parsed) || isVersionDeletedEvent(parsed)) return parsed;
     return null;
   } catch {
     return null;

@@ -171,6 +171,10 @@ function GuestPageComments({
       setError('Введите текст замечания');
       return;
     }
+    if (authorEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorEmail.trim())) {
+      setError('Введите почту правильно');
+      return;
+    }
     setError(null);
     try {
       await onSubmit(text);

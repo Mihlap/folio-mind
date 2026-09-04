@@ -294,6 +294,8 @@ export {
   type ReviewStatusDocumentEvent,
   type MemberAccessDocumentEvent,
   type MemberAccessEventAction,
+  type VersionCreatedDocumentEvent,
+  type VersionDeletedDocumentEvent,
   type GuestCommentEventAction,
   type PageReviewEventAction,
 } from './document-events.js';

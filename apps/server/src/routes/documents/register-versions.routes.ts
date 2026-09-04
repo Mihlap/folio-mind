@@ -17,6 +17,7 @@ import {
 } from '../../lib/storage/s3.js';
 import { buildOriginalKey, finalizeDocumentUpload, hashBuffer } from './helpers.js';
 import { enqueueImportFromDocxJob } from '../../lib/queue/queue.js';
+import { publishVersionCreatedDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody, MAX_UPLOAD_BYTES, uploadRateLimit } from './schemas.js';
 export const registerVersionsRoutes: FastifyPluginAsync<{
   env: Env;
@@ -117,6 +118,9 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
             hasDocx: Boolean(docxFileName),
           },
         },
+      });
+      void publishVersionCreatedDocumentEvent(env, document.id, version.id, nextVersionNumber).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
       });
       return reply.status(201).send({
         versionId: version.id,
@@ -263,6 +267,9 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
           documentId: document.id,
           meta: { versionId: version.id, version: nextVersionNumber, fileName, size },
         },
+      });
+      void publishVersionCreatedDocumentEvent(env, document.id, version.id, nextVersionNumber).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
       });
       return reply.status(201).send({
         versionId: version.id,
