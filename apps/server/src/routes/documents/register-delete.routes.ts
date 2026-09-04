@@ -11,6 +11,7 @@ import {
   type S3DeleteResult,
 } from '../../lib/storage/s3.js';
 import { clearVersionLineageRefs } from './helpers.js';
+import { publishVersionDeletedDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody } from './schemas.js';
 
 function logS3CleanupIssues(
@@ -84,6 +85,9 @@ export const registerDeleteRoutes: FastifyPluginAsync<{
       await app.prisma.documentAnnotation.deleteMany({ where: { versionId } });
       await app.prisma.aiSuggestion.deleteMany({ where: { versionId } });
       await app.prisma.documentVersion.delete({ where: { id: versionId } });
+      void publishVersionDeletedDocumentEvent(env, document.id, versionId).catch((err) => {
+        request.log.warn({ err }, 'version_deleted event publish failed');
+      });
       await app.prisma.auditLog.create({
         data: {
           action: 'document.version_delete',

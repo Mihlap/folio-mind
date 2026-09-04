@@ -29,6 +29,7 @@ import {
 } from '../../lib/queue/queue.js';
 import { isUserUploadedSourceDocxKey } from '@folio-mind/pdf-contracts';
 import { isS3Configured } from '../../lib/storage/s3.js';
+import { publishVersionCreatedDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { buildOriginalKey } from './helpers.js';
 import {
   errorBody,
@@ -197,6 +198,9 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           },
         },
       });
+      void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
+      });
       return reply.status(202).send({
         operationJobId: operationJob.id,
         versionId: targetVersion.id,
@@ -358,6 +362,11 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           },
         },
       });
+      if (!replaceInPlace) {
+        void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+          request.log.warn({ err }, 'version_created event publish failed');
+        });
+      }
       return reply.status(202).send({
         operationJobId: operationJob.id,
         versionId: targetVersion.id,
@@ -480,6 +489,9 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
             pageCount: totalPages,
           },
         },
+      });
+      void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
       });
       return reply.status(202).send({
         operationJobId: operationJob.id,
@@ -747,6 +759,9 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           },
         },
       });
+      void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
+      });
       return reply.status(202).send({
         operationJobId: operationJob.id,
         versionId: targetVersion.id,
@@ -867,6 +882,9 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
             operationJobId: operationJob.id,
           },
         },
+      });
+      void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
       });
       return reply.status(202).send({
         operationJobId: operationJob.id,
@@ -1033,6 +1051,11 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
           },
         },
       });
+      if (!replaceInPlace) {
+        void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+          request.log.warn({ err }, 'version_created event publish failed');
+        });
+      }
       return reply.status(202).send({
         operationJobId: operationJob.id,
         versionId: targetVersion.id,
@@ -1289,6 +1312,9 @@ export const registerOperationsRoutes: FastifyPluginAsync<{
         });
         throw err;
       }
+      void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
+      });
       return reply.status(202).send({
         operationJobId: operationJob.id,
         versionId: targetVersion.id,

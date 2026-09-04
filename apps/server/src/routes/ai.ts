@@ -26,10 +26,16 @@ import {
   getConfiguredProviderName,
 } from '../lib/ai/llm.js';
 import { enqueueAiJob, enqueueApplyAcceptedSuggestionsJob } from '../lib/queue/queue.js';
+import { publishVersionCreatedDocumentEvent } from '../lib/events/document-events-bus.js';
 import { getPresignedGetUrl, isS3Configured, putObjectByKey } from '../lib/storage/s3.js';
 import { resolveDefaultProvider, type AIProviderName } from '@folio-mind/ai-providers';
 const errorBody = z.object({ error: z.string() });
 const require = createRequire(import.meta.url);
+function linkedSuggestionIdFromMeta(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const id = (meta as { suggestionId?: unknown }).suggestionId;
+  return typeof id === 'string' ? id : null;
+}
 function buildOriginalKey(documentId: string, version: number, fileName: string) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   return resolveS3Key('originals', `${documentId}/v${version}-${safeName}`);
@@ -64,7 +70,7 @@ function buildReportMarkdown(params: {
       lines.push(`### ${label}`, '', msg.content, '');
     }
   }
-  lines.push('', '---', '_Сгенерировано Folio Mind / РазУм_');
+  lines.push('', '---', '_Сгенерировано РазУм_');
   return lines.join('\n');
 }
 function buildWordHtml(params: {
@@ -112,7 +118,7 @@ function buildWordHtml(params: {
   <p>${escapeHtml(params.summary).replaceAll('\n', '<br/>')}</p>
   ${chatHtml}
   <hr />
-  <p style="color:#6b7280;">Сгенерировано Folio Mind / РазУм</p>
+  <p style="color:#6b7280;">Сгенерировано РазУм</p>
 </body>
 </html>`;
 }
@@ -166,7 +172,7 @@ async function buildPdfReport(params: {
         }
       }
       doc.moveDown(1.2);
-      doc.fillColor('#6B7280').fontSize(9).text('Сгенерировано Folio Mind / РазУм');
+      doc.fillColor('#6B7280').fontSize(9).text('Сгенерировано РазУм');
       doc.end();
     } catch (error) {
       clearTimeout(timeout);
@@ -500,6 +506,7 @@ export const aiRoutes: FastifyPluginAsync<{
     reason: z.string(),
     page: z.number().nullable(),
     status: z.string(),
+    annotationId: z.string().nullable(),
     createdAt: z.string(),
   });
   r.get(
@@ -528,6 +535,17 @@ export const aiRoutes: FastifyPluginAsync<{
         where: { documentId, versionId, tenantId: user.tenantId },
         orderBy: { createdAt: 'asc' },
       });
+      const annotations = await app.prisma.documentAnnotation.findMany({
+        where: { documentId, versionId, kind: 'accepted_edit' },
+        select: { id: true, meta: true },
+      });
+      const annotationBySuggestionId = new Map<string, string>();
+      for (const ann of annotations) {
+        const suggestionId = linkedSuggestionIdFromMeta(ann.meta);
+        if (suggestionId && !annotationBySuggestionId.has(suggestionId)) {
+          annotationBySuggestionId.set(suggestionId, ann.id);
+        }
+      }
       return {
         items: items.map((item) => ({
           id: item.id,
@@ -537,6 +555,7 @@ export const aiRoutes: FastifyPluginAsync<{
           reason: item.reason,
           page: item.page,
           status: item.status,
+          annotationId: annotationBySuggestionId.get(item.id) ?? null,
           createdAt: item.createdAt.toISOString(),
         })),
       };
@@ -667,6 +686,7 @@ export const aiRoutes: FastifyPluginAsync<{
           reason: suggestion.reason,
           page: suggestion.page,
           status: suggestion.status,
+          annotationId: null,
           createdAt: suggestion.createdAt.toISOString(),
         };
       }
@@ -674,6 +694,7 @@ export const aiRoutes: FastifyPluginAsync<{
         where: { id: suggestionId },
         data: { status: request.body.status },
       });
+      let linkedAnnotationId: string | null = null;
       if (request.body.status === 'accepted') {
         const page = suggestion.page ?? 1;
         const existingAnnotation = await app.prisma.documentAnnotation.findFirst({
@@ -687,8 +708,10 @@ export const aiRoutes: FastifyPluginAsync<{
           },
           select: { id: true },
         });
-        if (!existingAnnotation) {
-          await app.prisma.documentAnnotation.create({
+        if (existingAnnotation) {
+          linkedAnnotationId = existingAnnotation.id;
+        } else {
+          const created = await app.prisma.documentAnnotation.create({
             data: {
               documentId,
               versionId,
@@ -700,6 +723,7 @@ export const aiRoutes: FastifyPluginAsync<{
               meta: { suggestionId: suggestion.id, reason: suggestion.reason },
             },
           });
+          linkedAnnotationId = created.id;
         }
       }
       await app.prisma.auditLog.create({
@@ -722,6 +746,7 @@ export const aiRoutes: FastifyPluginAsync<{
         reason: updated.reason,
         page: updated.page,
         status: updated.status,
+        annotationId: linkedAnnotationId,
         createdAt: updated.createdAt.toISOString(),
       };
     },
@@ -834,6 +859,9 @@ export const aiRoutes: FastifyPluginAsync<{
             operationJobId: operationJob.id,
           },
         },
+      });
+      void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+        request.log.warn({ err }, 'version_created event publish failed');
       });
       return reply.status(202).send({
         operationJobId: operationJob.id,

@@ -108,6 +108,32 @@ export async function publishMemberAccessDocumentEvent(
   });
 }
 
+export async function publishVersionCreatedDocumentEvent(
+  env: Env,
+  documentId: string,
+  versionId: string,
+  version: number,
+): Promise<void> {
+  await publishDocumentMetaScopeEvent(env, {
+    type: 'version_created',
+    documentId,
+    versionId,
+    version,
+  });
+}
+
+export async function publishVersionDeletedDocumentEvent(
+  env: Env,
+  documentId: string,
+  versionId: string,
+): Promise<void> {
+  await publishDocumentMetaScopeEvent(env, {
+    type: 'version_deleted',
+    documentId,
+    versionId,
+  });
+}
+
 export type DocumentEventSubscription = {
   close: () => Promise<void>;
 };

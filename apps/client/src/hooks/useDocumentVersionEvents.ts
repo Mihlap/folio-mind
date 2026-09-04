@@ -103,6 +103,17 @@ export function useDocumentVersionEvents({
 
         if (message.event === 'review_status') {
           invalidateDocumentMeta();
+          return;
+        }
+
+        if (message.event === 'version_created') {
+          invalidateDocumentMeta();
+          return;
+        }
+
+        if (message.event === 'version_deleted') {
+          invalidateDocumentMeta();
+          return;
         }
       },
     }).catch((error: unknown) => {

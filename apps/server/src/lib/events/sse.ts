@@ -4,6 +4,7 @@ import type {
   DocumentVersionScopeEvent,
 } from '@folio-mind/pdf-contracts';
 import type { Env } from '../config/env.js';
+import { parseCorsOrigins } from '../config/cors-origins.js';
 import {
   subscribeDocumentMetaEvents,
   subscribeDocumentVersionEvents,
@@ -12,14 +13,41 @@ import {
 
 const SSE_HEARTBEAT_MS = 30_000;
 
-export function initSseStream(reply: FastifyReply): void {
-  reply.hijack();
-  reply.raw.writeHead(200, {
+/**
+ * `@fastify/cors` добавляет CORS-заголовки в хуке `onSend`, который
+ * обходится при `reply.hijack()`. Поэтому для SSE-стрима, пишущего в raw-ответ
+ * напрямую, CORS-заголовки нужно проставлять вручную — иначе браузер блокирует
+ * cross-origin ответ, и клиент бесконечно переподключается с растущим backoff.
+ */
+function resolveCorsOrigin(
+  requestOrigin: string | undefined,
+  allowed: string | string[],
+): string | null {
+  if (!requestOrigin) return null;
+  const allowList = Array.isArray(allowed) ? allowed : [allowed];
+  if (allowList.includes('*')) return '*';
+  return allowList.includes(requestOrigin) ? requestOrigin : null;
+}
+
+export function initSseStream(
+  reply: FastifyReply,
+  request: FastifyRequest,
+  allowedCorsOrigins: string | string[],
+): void {
+  const origin = resolveCorsOrigin(request.headers.origin, allowedCorsOrigins);
+  const headers: Record<string, string> = {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
-  });
+  };
+  if (origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers['Access-Control-Allow-Credentials'] = 'true';
+    headers['Vary'] = 'Origin';
+  }
+  reply.hijack();
+  reply.raw.writeHead(200, headers);
   reply.raw.flushHeaders?.();
 }
 
@@ -77,6 +105,19 @@ export function writeMetaScopeSseEvent(reply: FastifyReply, event: DocumentMetaS
         role: event.role ?? null,
       });
       break;
+    case 'version_created':
+      writeSseEvent(reply, 'version_created', {
+        documentId: event.documentId,
+        versionId: event.versionId,
+        version: event.version,
+      });
+      break;
+    case 'version_deleted':
+      writeSseEvent(reply, 'version_deleted', {
+        documentId: event.documentId,
+        versionId: event.versionId,
+      });
+      break;
     default:
       break;
   }
@@ -99,7 +140,7 @@ export async function streamDocumentScopeEvents({
   versionId,
   includeDocumentMeta = false,
 }: StreamOptions): Promise<void> {
-  initSseStream(reply);
+  initSseStream(reply, request, parseCorsOrigins(env.CORS_ORIGIN));
   writeSseEvent(reply, 'connected', { documentId, versionId });
 
   const subscriptions: DocumentEventSubscription[] = [];

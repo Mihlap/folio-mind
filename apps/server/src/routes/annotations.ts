@@ -97,6 +97,12 @@ function requiredCapabilityForAnnotationKind(
   return kind === 'accepted_edit' ? 'edit' : 'comment';
 }
 
+function linkedSuggestionIdFromMeta(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const id = (meta as { suggestionId?: unknown }).suggestionId;
+  return typeof id === 'string' ? id : null;
+}
+
 export const annotationRoutes: FastifyPluginAsync = async (app) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   r.get(
@@ -243,16 +249,13 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!annotation) {
         return reply.code(404).send({ error: 'Annotation not found' });
       }
-      if (annotation.kind === 'accepted_edit') {
+      if (annotation.userId !== user.sub) {
         const editable = await findDocumentForUser(app.prisma, documentId, user, {
           capability: 'edit',
         });
         if (!editable) {
-          return reply.code(403).send({ error: 'Недостаточно прав для изменения правки' });
+          return reply.code(403).send({ error: 'Недостаточно прав для изменения чужой заметки' });
         }
-      }
-      if (annotation.userId !== user.sub) {
-        return reply.code(403).send({ error: 'Можно изменить только свою заметку' });
       }
       const nextQuote = request.body.quote !== undefined ? request.body.quote : annotation.quote;
       const nextContent =
@@ -267,6 +270,8 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
         request.body.contentFormat !== undefined
           ? annotationMetaWithContentFormat(annotation.meta, request.body.contentFormat)
           : undefined;
+      const linkedSuggestionId =
+        annotation.kind === 'accepted_edit' ? linkedSuggestionIdFromMeta(annotation.meta) : null;
       const updated = await app.prisma.documentAnnotation.update({
         where: { id: annotationId },
         data: {
@@ -277,6 +282,12 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           ...(nextMeta !== undefined ? { meta: nextMeta ?? undefined } : {}),
         },
       });
+      if (linkedSuggestionId) {
+        await app.prisma.aiSuggestion.updateMany({
+          where: { id: linkedSuggestionId, documentId, versionId, status: 'accepted' },
+          data: { originalText: String(nextQuote ?? ''), suggestion: nextContent },
+        });
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.annotation_updated',
@@ -319,18 +330,22 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
       if (!annotation) {
         return reply.code(404).send({ error: 'Annotation not found' });
       }
-      if (annotation.kind === 'accepted_edit') {
+      if (annotation.userId !== user.sub) {
         const editable = await findDocumentForUser(app.prisma, documentId, user, {
           capability: 'edit',
         });
         if (!editable) {
-          return reply.code(403).send({ error: 'Недостаточно прав для удаления правки' });
+          return reply.code(403).send({ error: 'Можно удалить только свою заметку' });
         }
       }
-      if (annotation.userId !== user.sub) {
-        return reply.code(403).send({ error: 'Можно удалить только свою заметку' });
-      }
+      const linkedSuggestionId =
+        annotation.kind === 'accepted_edit' ? linkedSuggestionIdFromMeta(annotation.meta) : null;
       await app.prisma.documentAnnotation.delete({ where: { id: annotationId } });
+      if (linkedSuggestionId) {
+        await app.prisma.aiSuggestion.deleteMany({
+          where: { id: linkedSuggestionId, documentId, versionId },
+        });
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.annotation_deleted',
