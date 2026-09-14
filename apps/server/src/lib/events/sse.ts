@@ -84,6 +84,20 @@ export function writeVersionScopeSseEvent(
         versionId: event.versionId,
       });
       break;
+    case 'annotation':
+      writeSseEvent(reply, 'annotation', {
+        action: event.action,
+        annotationId: event.annotationId ?? null,
+        versionId: event.versionId,
+      });
+      break;
+    case 'suggestion':
+      writeSseEvent(reply, 'suggestion', {
+        action: event.action,
+        suggestionId: event.suggestionId,
+        versionId: event.versionId,
+      });
+      break;
     default:
       break;
   }
@@ -118,6 +132,14 @@ export function writeMetaScopeSseEvent(reply: FastifyReply, event: DocumentMetaS
         versionId: event.versionId,
       });
       break;
+    case 'share_link':
+      writeSseEvent(reply, 'share_link', {
+        documentId: event.documentId,
+        action: event.action,
+        linkId: event.linkId,
+        versionId: event.versionId ?? null,
+      });
+      break;
     default:
       break;
   }
@@ -130,6 +152,7 @@ type StreamOptions = {
   documentId: string;
   versionId: string;
   includeDocumentMeta?: boolean;
+  allowedVersionScopeTypes?: ReadonlySet<DocumentVersionScopeEvent['type']>;
 };
 
 export async function streamDocumentScopeEvents({
@@ -139,6 +162,7 @@ export async function streamDocumentScopeEvents({
   documentId,
   versionId,
   includeDocumentMeta = false,
+  allowedVersionScopeTypes,
 }: StreamOptions): Promise<void> {
   initSseStream(reply, request, parseCorsOrigins(env.CORS_ORIGIN));
   writeSseEvent(reply, 'connected', { documentId, versionId });
@@ -164,6 +188,7 @@ export async function streamDocumentScopeEvents({
   try {
     subscriptions.push(
       await subscribeDocumentVersionEvents(env, documentId, versionId, (event) => {
+        if (allowedVersionScopeTypes && !allowedVersionScopeTypes.has(event.type)) return;
         writeVersionScopeSseEvent(reply, event);
       }),
     );

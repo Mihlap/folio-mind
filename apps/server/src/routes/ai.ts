@@ -26,7 +26,11 @@ import {
   getConfiguredProviderName,
 } from '../lib/ai/llm.js';
 import { enqueueAiJob, enqueueApplyAcceptedSuggestionsJob } from '../lib/queue/queue.js';
-import { publishVersionCreatedDocumentEvent } from '../lib/events/document-events-bus.js';
+import {
+  publishVersionCreatedDocumentEvent,
+  publishAnnotationDocumentEvent,
+  publishSuggestionStatusDocumentEvent,
+} from '../lib/events/document-events-bus.js';
 import { getPresignedGetUrl, isS3Configured, putObjectByKey } from '../lib/storage/s3.js';
 import { resolveDefaultProvider, type AIProviderName } from '@folio-mind/ai-providers';
 const errorBody = z.object({ error: z.string() });
@@ -694,6 +698,15 @@ export const aiRoutes: FastifyPluginAsync<{
         where: { id: suggestionId },
         data: { status: request.body.status },
       });
+      void publishSuggestionStatusDocumentEvent(
+        env,
+        documentId,
+        versionId,
+        request.body.status,
+        suggestionId,
+      ).catch((err) => {
+        request.log.warn({ err }, 'suggestion status event publish failed');
+      });
       let linkedAnnotationId: string | null = null;
       if (request.body.status === 'accepted') {
         const page = suggestion.page ?? 1;
@@ -724,6 +737,15 @@ export const aiRoutes: FastifyPluginAsync<{
             },
           });
           linkedAnnotationId = created.id;
+          void publishAnnotationDocumentEvent(
+            env,
+            documentId,
+            versionId,
+            'created',
+            created.id,
+          ).catch((err) => {
+            request.log.warn({ err }, 'annotation created event publish failed');
+          });
         }
       }
       await app.prisma.auditLog.create({

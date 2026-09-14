@@ -205,7 +205,6 @@ export {
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useCompareVersionIntegrityQuery,
-  useUpdateVersionLabelMutation,
 } from './api/documentsApi.js';
 export {
   aiApi,

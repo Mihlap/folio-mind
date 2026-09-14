@@ -17,8 +17,8 @@ Server-Sent Events (SSE) для мгновенной доставки измен
 
 | Канал | События |
 |-------|---------|
-| `folio:doc-events:{documentId}:{versionId}` | `guest_comment`, `page_review` |
-| `folio:doc-events:{documentId}:_meta` | `review_status`, `member_access` |
+| `folio:doc-events:{documentId}:{versionId}` | `guest_comment`, `page_review`, `annotation`, `suggestion` |
+| `folio:doc-events:{documentId}:_meta` | `review_status`, `member_access`, `version_created`, `version_deleted`, `share_link` |
 
 ## Endpoints
 
@@ -51,15 +51,20 @@ Accept: text/event-stream
 | `connected` | `{ documentId, versionId }` | после открытия стрима |
 | `guest_comment` | `{ action, commentId, versionId }` | create / update / delete / clear |
 | `page_review` | `{ action, page, versionId }` | метка страницы изменена / снята |
+| `annotation` | `{ action, annotationId, versionId }` | заметка команды создана / изменена / удалена (комментарии, правки, стрелки, рамки, подсветки) |
+| `suggestion` | `{ action, suggestionId, versionId }` | AI-правка принята / отклонена |
 | `review_status` | `{ reviewStatus, documentId }` | статус согласования документа (только владелец) |
 | `member_access` | `{ userId, action, role?, documentId }` | роль участника изменена (`added` / `role_changed` / `removed`) |
+| `version_created` | `{ versionId, version, documentId }` | создана новая версия документа |
+| `version_deleted` | `{ versionId, documentId }` | версия удалена |
+| `share_link` | `{ action, linkId, versionId?, documentId }` | ссылка для заказчика создана / отозвана (только владелец) |
 | `: ping` | — | heartbeat каждые 30 с |
 
 ## Клиент
 
 | Экран | Хук |
 |-------|-----|
-| `DocumentPage` | `useDocumentVersionEvents` — при открытом документе (гостевые комментарии, метки, смена роли участника) |
+| `DocumentPage` | `useDocumentVersionEvents` — при открытом документе (гостевые комментарии, метки, заметки команды, ссылки, версии, статус, смена роли участника) |
 | `GuestSharePage` | `useGuestShareEvents` — при открытой гостевой ссылке |
 
 - `@microsoft/fetch-event-source` — кастомные заголовки (Bearer / пароль ссылки).

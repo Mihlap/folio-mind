@@ -4,7 +4,6 @@ import {
   useDeleteDocumentVersionMutation,
   useLazyGetSourceDocxUrlQuery,
   getVersionStatusLabel,
-  useUpdateVersionLabelMutation,
 } from '@folio-mind/store';
 import { isDocumentVersionSelectable, TITLE_VERSION_PREPARING } from '../../lib/documents/versionSelection.js';
 import { useDocumentWorkspaceOptional } from '../../context/useDocumentWorkspace.js';
@@ -29,18 +28,6 @@ const versionActionBtn =
   'inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm transition hover:border-folio-300 hover:bg-folio-50';
 const versionActionBtnEmerald =
   'inline-flex cursor-pointer items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50/60 px-2 py-1 text-[10px] font-medium text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50';
-const versionLabelBtn =
-  'rounded border px-1.5 py-0.5 text-[10px] font-medium transition';
-const VERSION_LABELS: Array<{ id: 'draft' | 'in_review' | 'final'; title: string }> = [
-  { id: 'draft', title: 'Черновик' },
-  { id: 'in_review', title: 'Соглас.' },
-  { id: 'final', title: 'Финал' },
-];
-const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
-  draft: 'Черновик',
-  in_review: 'На согласовании',
-  final: 'Финал',
-};
 type Props = {
   variant?: 'sidebar' | 'drawer';
   onVersionAction?: () => void;
@@ -55,7 +42,6 @@ export function DocumentVersionsSidebar({
   const workspace = ctx?.workspace;
   const token = useAppSelector((s) => s.auth.token);
   const [deleteVersion, { isLoading: deletingVersion }] = useDeleteDocumentVersionMutation();
-  const [updateVersionLabel, { isLoading: updatingVersionLabel }] = useUpdateVersionLabelMutation();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [localError, setLocalError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{
@@ -96,22 +82,6 @@ export function DocumentVersionsSidebar({
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch {
       setLocalError('Не удалось скачать DOCX');
-    }
-  }
-  async function handleVersionLabel(
-    versionId: string,
-    currentLabel: 'draft' | 'in_review' | 'final' | null,
-    nextLabel: 'draft' | 'in_review' | 'final',
-  ) {
-    try {
-      setLocalError(null);
-      await updateVersionLabel({
-        documentId,
-        versionId,
-        versionLabel: currentLabel === nextLabel ? null : nextLabel,
-      }).unwrap();
-    } catch {
-      setLocalError('Не удалось сохранить подпись версии');
     }
   }
   async function confirmDeleteVersion() {
@@ -227,11 +197,6 @@ export function DocumentVersionsSidebar({
                     {isSelected && (
                       <span className="text-[10px] font-normal text-folio-600">· в просмотре</span>
                     )}
-                    {v.versionLabel && (
-                      <span className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-700">
-                        {VERSION_LABEL_TITLE[v.versionLabel]}
-                      </span>
-                    )}
                   </span>
                   <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
                     {getVersionStatusLabel(v.status)}
@@ -274,33 +239,6 @@ export function DocumentVersionsSidebar({
                     role="toolbar"
                     aria-label={`Скачать v${v.version}`}
                   >
-                    {canEdit && <div className="mr-1 inline-flex items-center gap-1">
-                      {VERSION_LABELS.map((item) => {
-                        const selected = v.versionLabel === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            disabled={updatingVersionLabel}
-                            onClick={() =>
-                              void handleVersionLabel(
-                                v.id,
-                                v.versionLabel as 'draft' | 'in_review' | 'final' | null,
-                                item.id,
-                              )
-                            }
-                            className={`${versionLabelBtn} ${
-                              selected
-                                ? 'border-folio-300 bg-folio-50 text-folio-700'
-                                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                            } disabled:opacity-50`}
-                            title={`Отметить как «${VERSION_LABEL_TITLE[item.id]}»`}
-                          >
-                            {item.title}
-                          </button>
-                        );
-                      })}
-                    </div>}
                     {canDownload && v.status === 'ready' && (
                       <button
                         type="button"

@@ -34,7 +34,6 @@ const versionActionBtnEmerald =
 export type DocumentVersionItem = {
   id: string;
   version: number;
-  versionLabel: 'draft' | 'in_review' | 'final' | null;
   status: string;
   size: string;
   mimeType: string;

@@ -7,7 +7,6 @@ function version(id: string, n: number): DocumentVersionItem {
   return {
     id,
     version: n,
-    versionLabel: null,
     status: 'ready',
     size: '1000',
     mimeType: 'application/pdf',

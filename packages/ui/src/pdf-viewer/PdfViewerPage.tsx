@@ -288,6 +288,10 @@ export function PdfViewerPage({
   const layoutShapes = layoutObjects.filter(isLayoutShapeObject);
 
   const quoteSelectMode = Boolean(enableTextSelection && showTextLayer && !searchQuery.trim());
+  const reservedPageHeightPx =
+    !isVirtualBlankPage && !layoutMetricsReady
+      ? Math.max(1, Math.round(computeScale(referencePageSizePt.width) * referencePageSizePt.height))
+      : undefined;
   const pageBody = (
     <div
       ref={wrapperRef}
@@ -296,6 +300,7 @@ export function PdfViewerPage({
         'pdf-page-root relative inline-block rounded bg-white shadow-sm',
         dropActive ? 'ring-2 ring-folio-400 ring-offset-2' : '',
       ].join(' ')}
+      style={reservedPageHeightPx ? { minHeight: reservedPageHeightPx } : undefined}
       onDragOver={handleLayoutDragOver}
       onDragLeave={handleLayoutDragLeave}
       onDrop={handleLayoutDrop}

@@ -234,7 +234,6 @@ CREATE TABLE "DocumentVersion" (
     "id" TEXT NOT NULL,
     "documentId" TEXT NOT NULL,
     "version" INTEGER NOT NULL,
-    "versionLabel" TEXT,
     "s3Key" TEXT NOT NULL,
     "size" BIGINT NOT NULL DEFAULT 0,
     "sha256" TEXT,

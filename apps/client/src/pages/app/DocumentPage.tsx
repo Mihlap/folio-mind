@@ -11,6 +11,7 @@ import {
   useListPageReviewMarksQuery,
   useListShareLinksQuery,
   fetchMediaAssetDataUrl,
+  useUploadMediaAssetMutation,
   clearSearch,
   nextSearchMatch,
   prevSearchMatch,
@@ -69,6 +70,7 @@ import { DocumentPresentationOverlay } from '../../components/documents/Document
 import type { EditTextInjection } from '../../components/documents/useDocumentAnnotationsPanel.js';
 import { useLayoutEditor } from '../../hooks/useLayoutEditor.js';
 import { formatLayoutAddSummary } from '../../lib/layout/layoutAddSummary.js';
+import { prepareMediaAssetFile } from '../../lib/media/prepareMediaAssetFile.js';
 import type { ToolSectionId } from '../../components/ui/ToolAccordionSection.js';
 import { resolveEffectiveDocumentRole, readUserIdFromAuthToken } from '../../lib/documents/document-ui-permissions.js';
 const INITIAL_THUMB_PAGES = 15;
@@ -111,6 +113,7 @@ export function DocumentPage() {
   const [pageNavTick, setPageNavTick] = useState(0);
   const [deleteAnnotation] = useDeleteAnnotationMutation();
   const [updateAnnotation, { isLoading: updatingAnnotation }] = useUpdateAnnotationMutation();
+  const [uploadMediaAsset] = useUploadMediaAssetMutation();
   const [rightTab, setRightTab] = useState<DocumentRightTab>('report');
   const [toolsFocusSection, setToolsFocusSection] = useState<ToolSectionId | null>(null);
   const [dismissedConfidenceVersions, setDismissedConfidenceVersions] = useState<Set<string>>(
@@ -425,6 +428,35 @@ export function DocumentPage() {
     addImagesFromFiles: layout.addImagesFromFiles,
   };
 
+  const uploadLayoutFilesToMediaLibrary = useCallback(
+    async (files: File[]): Promise<string> => {
+      const results = await Promise.allSettled(
+        files.map(async (file) => {
+          const prepared = await prepareMediaAssetFile(file);
+          return uploadMediaAsset({
+            file: prepared.file,
+            documentId: doc?.id,
+            title: prepared.file.name.replace(/\.[^.]+$/, ''),
+            width: prepared.width,
+            height: prepared.height,
+          }).unwrap();
+        }),
+      );
+      const uploaded = results.filter((r) => r.status === 'fulfilled').length;
+      if (uploaded === files.length) {
+        return ` Добавлено в медиатеку: ${uploaded}.`;
+      }
+      if (uploaded > 0) {
+        return ` В медиатеку добавлено ${uploaded} из ${files.length}.`;
+      }
+      const reason = results.find((r) => r.status === 'rejected') as
+        | PromiseRejectedResult
+        | undefined;
+      return ` Не удалось добавить в медиатеку (${reason?.reason instanceof Error ? reason.reason.message : 'ошибка'}).`;
+    },
+    [doc?.id, uploadMediaAsset],
+  );
+
   const handleLayoutAddImages = useCallback(
     async (files: File[], options?: { distributeAcrossPages?: boolean; startPage?: number }) => {
       if (!versionReady) {
@@ -455,13 +487,23 @@ export function DocumentPage() {
             : [await actions.addImageFromFile(files[0]!, targetPage)];
         const focusPage = created[0]!.page;
         handleGoToPage(focusPage);
-        setLayoutAddNotice(formatLayoutAddSummary(created));
+        const baseNotice = formatLayoutAddSummary(created);
+        setLayoutAddNotice(baseNotice);
+        void uploadLayoutFilesToMediaLibrary(files).then((mediaNote) => {
+          setLayoutAddNotice(`${baseNotice}${mediaNote}`);
+        });
       } catch (err) {
         setLayoutAddNotice(null);
         throw err;
       }
     },
-    [handleGoToPage, layoutPageCount, versionReady, viewerPage],
+    [
+      handleGoToPage,
+      layoutPageCount,
+      uploadLayoutFilesToMediaLibrary,
+      versionReady,
+      viewerPage,
+    ],
   );
   const handleLayoutFilesDrop = useCallback(
     async (files: File[], targetPage: number) => {

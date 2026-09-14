@@ -141,6 +141,10 @@ export function PdfViewer({
     },
     [containerWidth, zoomMode, customScale],
   );
+  const referencePageHeightPx = useMemo(() => {
+    if (referencePageSizePt.width <= 0 || referencePageSizePt.height <= 0) return 0;
+    return Math.round(computeScale(referencePageSizePt.width) * referencePageSizePt.height);
+  }, [computeScale, referencePageSizePt.height, referencePageSizePt.width]);
   const handlePromptChange = useCallback((prompt: PdfSelectionPrompt | null) => {
     setSelectionPrompt(prompt);
   }, []);
@@ -431,7 +435,11 @@ export function PdfViewer({
                   selectionHighlightRects={selectionForPage(pageNumber)}
                 />
               ) : (
-                <PagePlaceholder pageNumber={pageNumber} containerWidth={containerWidth} />
+                <PagePlaceholder
+                  pageNumber={pageNumber}
+                  heightPx={referencePageHeightPx}
+                  containerWidth={containerWidth}
+                />
               )}
             </div>
           ))}

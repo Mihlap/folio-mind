@@ -1,5 +1,14 @@
 import { useEffect, useRef } from 'react';
-import { apiBaseUrl, documentMembersApi, documentsApi, guestCommentsApi, pageReviewApi } from '@folio-mind/store';
+import {
+  apiBaseUrl,
+  annotationsApi,
+  aiApi,
+  documentMembersApi,
+  documentsApi,
+  guestCommentsApi,
+  pageReviewApi,
+  shareApi,
+} from '@folio-mind/store';
 import { readUserIdFromAuthToken } from '../lib/documents/document-ui-permissions.js';
 import { connectEventSource, SseConnectionError } from './connectEventSource.js';
 import { useAppDispatch } from './index.js';
@@ -46,6 +55,27 @@ export function useDocumentVersionEvents({
       );
       dispatchRef.current(
         pageReviewApi.util.invalidateTags([{ type: 'Documents', id: `page-marks-${versionId}` }]),
+      );
+    };
+
+    const invalidateAnnotationsData = () => {
+      dispatchRef.current(
+        annotationsApi.util.invalidateTags([{ type: 'Annotations', id: versionId }]),
+      );
+      dispatchRef.current(
+        aiApi.util.invalidateTags([{ type: 'AiSuggestions', id: versionId }]),
+      );
+    };
+
+    const invalidateAiSuggestions = () => {
+      dispatchRef.current(
+        aiApi.util.invalidateTags([{ type: 'AiSuggestions', id: versionId }]),
+      );
+    };
+
+    const invalidateShareLinks = () => {
+      dispatchRef.current(
+        shareApi.util.invalidateTags([{ type: 'ShareLinks', id: documentId }]),
       );
     };
 
@@ -101,6 +131,16 @@ export function useDocumentVersionEvents({
           return;
         }
 
+        if (message.event === 'annotation') {
+          invalidateAnnotationsData();
+          return;
+        }
+
+        if (message.event === 'suggestion') {
+          invalidateAiSuggestions();
+          return;
+        }
+
         if (message.event === 'review_status') {
           invalidateDocumentMeta();
           return;
@@ -113,6 +153,11 @@ export function useDocumentVersionEvents({
 
         if (message.event === 'version_deleted') {
           invalidateDocumentMeta();
+          return;
+        }
+
+        if (message.event === 'share_link') {
+          invalidateShareLinks();
           return;
         }
       },

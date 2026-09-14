@@ -1,5 +1,4 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { mediaAssetThumbKey } from '@folio-mind/pdf-contracts';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import {
@@ -9,7 +8,6 @@ import {
   deleteObjectByKey,
 } from '../../lib/storage/s3.js';
 
-const THUMB_MAX_SIDE = 320;
 const STORE_MAX_SIDE = 4096;
 const WEBP_QUALITY = 82;
 
@@ -58,24 +56,6 @@ export async function processMediaOptimizeJob(_env: unknown, data: MediaOptimize
 
   const sourceBuffer = await getObjectBuffer(s3Key);
   const originalKey = s3Key;
-  const thumbKey = mediaAssetThumbKey(tenantId, mediaAssetId);
-
-  let thumbBuffer: Buffer;
-  let thumbContentType = 'image/webp';
-  let resolvedThumbKey = thumbKey;
-  try {
-    thumbBuffer = (await resizeToBuffer(sourceBuffer, THUMB_MAX_SIDE, 'image/webp')).buffer;
-  } catch {
-    resolvedThumbKey = thumbKey.replace(/\.webp$/, '.jpg');
-    thumbBuffer = (await resizeToBuffer(sourceBuffer, THUMB_MAX_SIDE, 'image/jpeg')).buffer;
-    thumbContentType = 'image/jpeg';
-  }
-
-  await putObjectBuffer({
-    key: resolvedThumbKey,
-    body: thumbBuffer,
-    contentType: thumbContentType,
-  });
 
   const needsStoreOptimize =
     sourceBuffer.length > 2 * 1024 * 1024 ||
@@ -83,14 +63,13 @@ export async function processMediaOptimizeJob(_env: unknown, data: MediaOptimize
     (asset.height != null && asset.height > STORE_MAX_SIDE);
 
   const update: {
-    thumbS3Key: string;
     size?: bigint;
     width?: number;
     height?: number;
     mimeType?: string;
     fileName?: string;
     s3Key?: string;
-  } = { thumbS3Key: resolvedThumbKey };
+  } = {};
 
   if (needsStoreOptimize) {
     const optimized = await resizeToBuffer(sourceBuffer, STORE_MAX_SIDE, 'image/webp');

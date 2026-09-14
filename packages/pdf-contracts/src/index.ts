@@ -206,12 +206,6 @@ export {
   isDocumentReviewStatus,
   type DocumentReviewStatus,
 } from './document-review-status.js';
-export {
-  DOCUMENT_VERSION_LABELS,
-  DOCUMENT_VERSION_LABEL_TITLES,
-  isDocumentVersionLabel,
-  type DocumentVersionLabel,
-} from './version-label.js';
 export { UPLOAD_NETWORK_ERROR_MESSAGE } from './user-messages.js';
 export type JobStatus = 'queued' | 'active' | 'completed' | 'failed';
 export type DocumentVersionStatus = 'pending' | 'ready' | 'failed';
@@ -298,6 +292,12 @@ export {
   type VersionDeletedDocumentEvent,
   type GuestCommentEventAction,
   type PageReviewEventAction,
+  type AnnotationEventAction,
+  type AnnotationDocumentEvent,
+  type SuggestionEventAction,
+  type SuggestionDocumentEvent,
+  type ShareLinkEventAction,
+  type ShareLinkDocumentEvent,
 } from './document-events.js';
 export {
   DOCUMENT_MEMBER_ROLES,

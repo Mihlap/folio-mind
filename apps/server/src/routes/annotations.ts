@@ -8,6 +8,8 @@ import {
   resolveUserDocumentRole,
 } from '../lib/documents/document-permissions.js';
 import { serializeDocumentAnnotation } from '../lib/documents/serialize-annotation.js';
+import { publishAnnotationDocumentEvent } from '../lib/events/document-events-bus.js';
+import type { Env } from '../lib/config/env.js';
 
 const errorBody = z.object({ error: z.string() });
 const contentFormatSchema = z.enum(['plain', 'markdown']);
@@ -103,7 +105,7 @@ function linkedSuggestionIdFromMeta(meta: unknown): string | null {
   return typeof id === 'string' ? id : null;
 }
 
-export const annotationRoutes: FastifyPluginAsync = async (app) => {
+export const annotationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, { env }) => {
   const r = app.withTypeProvider<ZodTypeProvider>();
   r.get(
     '/documents/:documentId/versions/:versionId/annotations',
@@ -210,6 +212,15 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId: created.id, versionId, page: created.page },
         },
       });
+      void publishAnnotationDocumentEvent(
+        env,
+        documentId,
+        versionId,
+        'created',
+        created.id,
+      ).catch((err) => {
+        request.log.warn({ err }, 'annotation created event publish failed');
+      });
       return reply.status(201).send(serializeDocumentAnnotation(created));
     },
   );
@@ -297,6 +308,11 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId, versionId },
         },
       });
+      void publishAnnotationDocumentEvent(env, documentId, versionId, 'updated', annotationId).catch(
+        (err) => {
+          request.log.warn({ err }, 'annotation updated event publish failed');
+        },
+      );
       return serializeDocumentAnnotation(updated);
     },
   );
@@ -355,6 +371,11 @@ export const annotationRoutes: FastifyPluginAsync = async (app) => {
           meta: { annotationId, versionId },
         },
       });
+      void publishAnnotationDocumentEvent(env, documentId, versionId, 'deleted', annotationId).catch(
+        (err) => {
+          request.log.warn({ err }, 'annotation deleted event publish failed');
+        },
+      );
       return reply.status(204).send(null);
     },
   );

@@ -20,12 +20,6 @@ export type ToolSectionId =
 
 export const TOOL_SCENARIO_STORAGE_KEY = 'folio-tool-scenario';
 
-const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
-  draft: 'Черновик',
-  in_review: 'На согласовании',
-  final: 'Финал',
-};
-
 const REVIEW_STATUS_TITLE: Record<DocumentReviewStatus, string> = {
   draft: 'Черновик',
   in_review: 'На согласовании',
@@ -39,7 +33,6 @@ export type ShareLinkMismatch = {
 
 export type VersionWorkflowContext = {
   versionNumber: number;
-  versionLabel: string | null;
   versionStatusLabel: string;
   versionReady: boolean;
   pageCount: number | null;
@@ -120,9 +113,6 @@ export function buildVersionWorkflowContext(input: {
 
   return {
     versionNumber: activeVersion.version,
-    versionLabel: activeVersion.versionLabel
-      ? VERSION_LABEL_TITLE[activeVersion.versionLabel]
-      : null,
     versionStatusLabel: getVersionStatusUserLabel(activeVersion.status),
     versionReady: input.versionReady,
     pageCount: activeVersion.pageCount ?? null,

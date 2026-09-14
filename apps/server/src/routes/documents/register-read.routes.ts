@@ -169,7 +169,6 @@ export const registerReadRoutes: FastifyPluginAsync<{
           (v: {
             id: string;
             version: number;
-            versionLabel: string | null;
             status: string;
             size: bigint;
             mimeType: string;
@@ -188,7 +187,6 @@ export const registerReadRoutes: FastifyPluginAsync<{
           }) => ({
             id: v.id,
             version: v.version,
-            versionLabel: v.versionLabel ?? null,
             status: v.status,
             size: v.size.toString(),
             mimeType: v.mimeType,

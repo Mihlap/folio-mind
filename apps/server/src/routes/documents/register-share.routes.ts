@@ -17,6 +17,7 @@ import { encryptShareToken } from '../../lib/share/share-token-cipher.js';
 import type { Env } from '../../lib/config/env.js';
 import { isS3Configured } from '../../lib/storage/s3.js';
 import { hashSharePassword } from '../../lib/share/share-password.js';
+import { publishShareLinkDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody } from './schemas.js';
 
 const shareLinkItemSchema = z.object({
@@ -123,6 +124,15 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
           },
         },
       });
+      void publishShareLinkDocumentEvent(
+        env,
+        document.id,
+        'created',
+        link.id,
+        version.id,
+      ).catch((err) => {
+        request.log.warn({ err }, 'share link created event publish failed');
+      });
 
       return reply.code(201).send({
         id: link.id,
@@ -225,6 +235,11 @@ export const registerShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app,
           where: { id: link.id },
           data: { revokedAt: new Date() },
         });
+        void publishShareLinkDocumentEvent(env, document.id, 'revoked', link.id).catch(
+          (err) => {
+            request.log.warn({ err }, 'share link revoked event publish failed');
+          },
+        );
         void app.prisma.auditLog.create({
           data: {
             action: 'document.share_revoke',

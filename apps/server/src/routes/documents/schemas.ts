@@ -198,7 +198,6 @@ export const versionIntegrityResponseSchema = z.object({
 export const versionListItemSchema = z.object({
   id: z.string(),
   version: z.number(),
-  versionLabel: z.string().nullable(),
   status: z.string(),
   size: z.string(),
   mimeType: z.string(),
