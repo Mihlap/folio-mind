@@ -38,7 +38,7 @@ function cacheKey(documentId: string, versionId: string): string {
   return `${documentId}:${versionId}`;
 }
 
-function previewProxyUrl(documentId: string, versionId: string, page: number, token?: string | null): string {
+function previewProxyUrl(documentId: string, versionId: string, page: number): string {
   const base = apiBaseUrl.replace(/\/+$/, '');
   const url = `${base}/documents/${documentId}/versions/${versionId}/preview-page/${page}`;
   return url;
@@ -77,7 +77,7 @@ export async function saveBookletPreviewCache(input: {
   const authHeaders = input.token ? { Authorization: `Bearer ${input.token}` } : undefined;
   const offlinePages: OfflinePreviewPage[] = [];
   for (const page of slice) {
-    const proxyUrl = previewProxyUrl(input.documentId, input.versionId, page.page, input.token);
+    const proxyUrl = previewProxyUrl(input.documentId, input.versionId, page.page);
     const dataUrl = await blobUrlToDataUrl(proxyUrl, authHeaders);
     if (dataUrl) offlinePages.push({ page: page.page, dataUrl });
   }
