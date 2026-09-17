@@ -26,7 +26,6 @@
 API_HOST=0.0.0.0
 CORS_ORIGIN=http://localhost:5173,http://localhost:5174,https://localhost
 # API_PUBLIC_URL — НЕ задавайте (останется localhost для desktop)
-# API_EMULATOR_URL — опционально; в dev вторая ссылка verify уже http://10.0.2.2:3001
 ```
 
 ### Терминал 1 — всегда (desktop + API для AVD)
@@ -64,10 +63,7 @@ adb shell am start -n ru.razum.app/.MainActivity
 
 ### Письмо подтверждения email
 
-В development в письме две ссылки:
-
-1. `http://localhost:3001/...` — открыть на ПК  
-2. `http://10.0.2.2:3001/...` — если подтверждаете с эмулятора  
+В письме одна ссылка — `http://localhost:3001/...` (origin из `API_PUBLIC_URL`/дефолта). Для подтверждения с эмулятора/телефона откройте её на ПК или в другом браузере.
 
 После подтверждения в приложении: **Войти** (не регистрация заново).
 

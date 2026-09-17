@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Env } from '../config/env.js';
-import { getApiEmulatorOrigin, getApiPublicOrigin } from '../config/api-public-origin.js';
+import { getApiPublicOrigin } from '../config/api-public-origin.js';
 import { sha256Hex } from './password-reset.js';
 
 export type EmailVerificationToken = {
@@ -18,11 +18,5 @@ export function createEmailVerificationToken(env: Env): EmailVerificationToken {
 
 export function buildVerifyEmailUrl(env: Env, token: string): string {
   const base = getApiPublicOrigin(env);
-  return `${base}/auth/verify-email?token=${encodeURIComponent(token)}`;
-}
-
-export function buildVerifyEmailEmulatorUrl(env: Env, token: string): string | null {
-  const base = getApiEmulatorOrigin(env);
-  if (!base) return null;
   return `${base}/auth/verify-email?token=${encodeURIComponent(token)}`;
 }

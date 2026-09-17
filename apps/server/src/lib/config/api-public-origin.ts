@@ -13,16 +13,3 @@ export function getApiPublicOrigin(env: Env): string {
   }
   return `http://localhost:${port}`;
 }
-
-export function getApiEmulatorOrigin(env: Env): string | null {
-  const configured = env.API_EMULATOR_URL?.trim();
-  if (configured) {
-    const origin = stripTrailingSlash(configured);
-    return origin === getApiPublicOrigin(env) ? null : origin;
-  }
-  if (env.NODE_ENV === 'development') {
-    const fallback = `http://10.0.2.2:${env.PORT}`;
-    return fallback === getApiPublicOrigin(env) ? null : fallback;
-  }
-  return null;
-}

@@ -6,7 +6,6 @@ export type Mailer = {
   sendEmailVerification(params: {
     to: string;
     verifyUrl: string;
-    verifyUrlEmulator?: string | null;
   }): Promise<void>;
   sendMagicLinkEmail(params: { to: string; magicUrl: string }): Promise<void>;
   sendGuestCommentNotification(params: {
@@ -68,9 +67,9 @@ export function createMailer(
           'SMTP is not configured; printing password reset link instead of sending email',
         );
       },
-      async sendEmailVerification({ to, verifyUrl, verifyUrlEmulator }) {
+      async sendEmailVerification({ to, verifyUrl }) {
         logger.warn(
-          { to, verifyUrl, verifyUrlEmulator: verifyUrlEmulator ?? undefined },
+          { to, verifyUrl },
           'SMTP is not configured; printing email verification link instead of sending email',
         );
       },
@@ -148,16 +147,9 @@ export function createMailer(
       });
       logger.info({ to }, 'password reset email sent');
     },
-    async sendEmailVerification({ to, verifyUrl, verifyUrlEmulator }) {
+    async sendEmailVerification({ to, verifyUrl }) {
       const subject = 'Подтвердите email — РазУм';
-      const emulatorBlock = verifyUrlEmulator
-        ? `\n\nAndroid-эмулятор (если ПК-ссылка не открывается с AVD):\n${verifyUrlEmulator}`
-        : '';
-      const text = `Подтвердите адрес почты, чтобы войти в РазУм:\n${verifyUrl}${emulatorBlock}\n\nЕсли вы не регистрировались, проигнорируйте письмо.`;
-      const emulatorHtml = verifyUrlEmulator
-        ? `<p style="margin-top:12px;"><a href="${verifyUrlEmulator}">Подтвердить email (Android-эмулятор)</a></p>
-<p style="color:#64748b;font-size:12px;">Вторая ссылка — через 10.0.2.2, если тестируете APK на эмуляторе.</p>`
-        : '';
+      const text = `Подтвердите адрес почты, чтобы войти в РазУм:\n${verifyUrl}\n\nЕсли вы не регистрировались, проигнорируйте письмо.`;
       await transporter.sendMail({
         from,
         to,
@@ -166,7 +158,6 @@ export function createMailer(
         html: `
 <p>Подтвердите адрес почты, чтобы завершить регистрацию в РазУм.</p>
 <p><a href="${verifyUrl}">Подтвердить email</a></p>
-${emulatorHtml}
 <p style="color:#64748b;font-size:12px;">Если вы не регистрировались, проигнорируйте это письмо.</p>
 `.trim(),
       });
