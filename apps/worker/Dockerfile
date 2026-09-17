@@ -5,6 +5,7 @@ FROM base AS deps
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/worker/package.json ./apps/worker/
+COPY apps/server/prisma ./apps/server/prisma
 COPY packages/*/package.json ./packages/
 RUN pnpm install --frozen-lockfile
 
