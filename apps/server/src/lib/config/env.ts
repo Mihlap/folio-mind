@@ -39,7 +39,6 @@ const envSchema = z.object({
 
   API_PUBLIC_URL: z.string().url().optional(),
 
-  API_EMULATOR_URL: z.string().url().optional(),
   PASSWORD_RESET_TOKEN_TTL_MINUTES: z.coerce
     .number()
     .int()
