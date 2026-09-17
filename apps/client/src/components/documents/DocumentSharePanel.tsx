@@ -28,12 +28,6 @@ type Props = {
   needsFixMarksCount?: number;
 };
 
-const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
-  draft: 'Черновик',
-  in_review: 'На согласовании',
-  final: 'Финал',
-};
-
 function formatExpires(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', {
     day: 'numeric',
@@ -177,9 +171,6 @@ export function DocumentSharePanel({
           >
             <p className="font-medium">
               Привязка к версии v{activeVersion.version}
-              {activeVersion.versionLabel
-                ? ` (${VERSION_LABEL_TITLE[activeVersion.versionLabel]})`
-                : ''}
             </p>
             {!versionReady && (
               <p className="mt-1 text-[11px] leading-snug">

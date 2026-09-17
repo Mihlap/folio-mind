@@ -1,0 +1,12 @@
+node_modules
+.git
+.cache
+.turbo
+*.log
+.env
+.env.local
+apps/*/dist
+apps/*/node_modules
+packages/*/dist
+packages/*/node_modules
+tmp

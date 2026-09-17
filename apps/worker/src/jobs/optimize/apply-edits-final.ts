@@ -21,6 +21,31 @@ import {
 } from '../../lib/docx/page-disambiguation.js';
 import { resolveEditsForDocx, resolveEditsForPdfOverlay } from '../../lib/edits/resolve-edits.js';
 
+class TargetVersionDeletedError extends Error {}
+
+async function targetVersionExists(
+  prisma: ReturnType<typeof getPrisma>,
+  documentId: string,
+  versionId: string,
+): Promise<boolean> {
+  const row = await prisma.documentVersion.findFirst({
+    where: { id: versionId, documentId },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
+async function markJobVersionDeleted(operationJobId: string): Promise<void> {
+  const prisma = getPrisma();
+  await prisma.job.update({
+    where: { id: operationJobId },
+    data: {
+      status: 'failed',
+      payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+    },
+  });
+}
+
 type ApplyEditsFinalPayload = WorkerJobPayload & {
   operationJobId?: string;
   documentId?: string;
@@ -119,6 +144,12 @@ async function completeWithPdf(params: {
   } = params;
   const prisma = getPrisma();
   const partial = failed > 0 || ambiguous > 0;
+  if (!(await targetVersionExists(prisma, documentId, targetVersionId))) {
+    if (docxS3Key) {
+      await deleteObjectByKey(docxS3Key).catch(() => {});
+    }
+    throw new TargetVersionDeletedError('Target version was deleted');
+  }
   await putObjectBuffer({
     key: targetS3Key,
     body: pdfBuffer,
@@ -258,6 +289,10 @@ async function runDocxPipeline(params: {
       'processing',
       `${params.documentId}/${params.targetVersionId}/applied.docx`,
     );
+    const prisma = getPrisma();
+    if (!(await targetVersionExists(prisma, params.documentId, params.targetVersionId))) {
+      return null;
+    }
     await putObjectBuffer({
       key: docxS3Key,
       body: modifiedDocx,
@@ -502,6 +537,14 @@ export async function processApplyEditsFinalJob(
       requestId,
     });
   } catch (err) {
+    if (err instanceof TargetVersionDeletedError) {
+      try {
+        await markJobVersionDeleted(operationJobId);
+      } catch {
+        // Keep the original error visible if the marker cannot be written.
+      }
+      return;
+    }
     const message = err instanceof Error ? err.message : 'Apply edits final failed';
     console.error('[apply-edits-final] failed:', message);
     try {

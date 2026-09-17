@@ -58,6 +58,16 @@ export function canUseDocumentToolSection(
   return roleHasCapability(role, 'edit');
 }
 
+export function canInteractWithAnnotationContent(
+  role: DocumentAccessRole,
+  annotationAuthorId: string | null | undefined,
+  currentUserId: string | null | undefined,
+): boolean {
+  if (!currentUserId) return false;
+  if (annotationAuthorId && annotationAuthorId === currentUserId) return true;
+  return roleHasCapability(role, 'edit');
+}
+
 export function canDownloadDocument(role: DocumentAccessRole): boolean {
   return roleHasCapability(role, 'download');
 }

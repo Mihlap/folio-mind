@@ -108,6 +108,20 @@ export async function processApplyAcceptedSuggestionsJob(
     );
     const outputBytes = await pdfDoc.save();
     const outputBuffer = Buffer.from(outputBytes);
+    const stillExists = await prisma.documentVersion.findFirst({
+      where: { id: targetVersionId, documentId },
+      select: { id: true },
+    });
+    if (!stillExists) {
+      await prisma.job.update({
+        where: { id: operationJobId },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
+      });
+      return;
+    }
     await putObjectBuffer({
       key: targetS3Key,
       body: outputBuffer,
@@ -125,20 +139,6 @@ export async function processApplyAcceptedSuggestionsJob(
       operationMeta: { sourceVersionId, acceptedCount: edits.length },
       requestId,
     });
-    if (sourceAnnotations.length > 0) {
-      await prisma.documentAnnotation.createMany({
-        data: sourceAnnotations.map((row) => ({
-          documentId,
-          versionId: targetVersionId,
-          userId: row.userId,
-          page: row.page,
-          kind: row.kind,
-          content: row.content,
-          quote: row.quote,
-          meta: row.meta ?? undefined,
-        })),
-      });
-    }
     await prisma.job.update({
       where: { id: operationJobId },
       data: {

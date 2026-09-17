@@ -205,7 +205,6 @@ export {
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useCompareVersionIntegrityQuery,
-  useUpdateVersionLabelMutation,
 } from './api/documentsApi.js';
 export {
   aiApi,
@@ -320,7 +319,12 @@ export {
   useUpdateProjectMutation,
   useDeleteProjectMutation,
   useUpdateDocumentProjectMutation,
+  useListProjectMembersQuery,
+  useAddProjectMemberMutation,
+  useUpdateProjectMemberMutation,
+  useRemoveProjectMemberMutation,
   type ProjectItem,
+  type ProjectAccessItem,
 } from './api/projectsApi.js';
 export {
   layoutTemplatesApi,

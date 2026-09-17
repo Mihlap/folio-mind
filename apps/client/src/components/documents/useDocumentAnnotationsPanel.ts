@@ -14,6 +14,7 @@ import {
 } from '@folio-mind/store';
 import { normalizeMarkdownInput } from '@folio-mind/edit-markdown';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
+import { isDocumentVersionSelectable } from '../../lib/documents/versionSelection.js';
 import type { ConfidenceLevel } from './DocumentVersionConfidenceBadge.js';
 
 export type EditTextInjection = {
@@ -38,6 +39,8 @@ export type DocumentAnnotationsRootProps = {
   onSelectVersion: (versionId: string) => void;
   focusedAnnotationId?: string | null;
   editTextInjection?: EditTextInjection | null;
+  documentRole?: string | null;
+  currentUserId?: string | null;
 };
 
 export function useDocumentAnnotationsPanel({
@@ -51,6 +54,8 @@ export function useDocumentAnnotationsPanel({
   onSelectVersion,
   focusedAnnotationId = null,
   editTextInjection = null,
+  documentRole = 'viewer',
+  currentUserId = null,
 }: DocumentAnnotationsRootProps) {
   const { data, refetch } = useListAnnotationsQuery(
     { documentId, versionId },
@@ -81,6 +86,14 @@ export function useDocumentAnnotationsPanel({
   const [applyEditResults, setApplyEditResults] = useState<
     Array<{ page: number; originalText: string; suggestion: string; status: string }>
   >([]);
+  const [pendingApplyVersionId, setPendingApplyVersionId] = useState<string | null>(null);
+  const [conflictEdit, setConflictEdit] = useState<{
+    after: string;
+    before: string;
+    coords?: { x?: number; y?: number; pageWidthPx?: number; pageHeightPx?: number };
+    conflictingIds: string[];
+  } | null>(null);
+  const [resolvingConflict, setResolvingConflict] = useState(false);
   const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
   const pendingCoordsRef = useRef<{
     x?: number;
@@ -108,7 +121,17 @@ export function useDocumentAnnotationsPanel({
     setPollExportHighlight(false);
     setApplyHint(null);
     setApplyEditResults([]);
+    setConflictEdit(null);
   }, [versionId]);
+
+  // После сборки/применения правок переключаемся на новую версию, как только она станет доступна.
+  useEffect(() => {
+    if (!pendingApplyVersionId) return;
+    const target = docData?.versions.find((v) => v.id === pendingApplyVersionId);
+    if (!target || !isDocumentVersionSelectable(target)) return;
+    onSelectVersion(pendingApplyVersionId);
+    setPendingApplyVersionId(null);
+  }, [pendingApplyVersionId, docData?.versions, onSelectVersion]);
 
   useEffect(() => {
     if (!applyJob) return;
@@ -160,6 +183,8 @@ export function useDocumentAnnotationsPanel({
       } else {
         setApplyHint('Новая версия с правками готова — откройте её в списке версий слева.');
       }
+      const targetVersionId = typeof p?.targetVersionId === 'string' ? p.targetVersionId : null;
+      if (targetVersionId) setPendingApplyVersionId(targetVersionId);
       void refetchDocument();
     }
     if (applyJob.status === 'failed') {
@@ -272,28 +297,76 @@ export function useDocumentAnnotationsPanel({
     }
   }
 
+  async function createManualEdit(
+    before: string,
+    after: string,
+    coords?: { x?: number; y?: number; pageWidthPx?: number; pageHeightPx?: number },
+  ) {
+    await createAnnotation({
+      documentId,
+      versionId,
+      page: viewerPage,
+      content: after,
+      quote: before,
+      kind: 'accepted_edit',
+      contentFormat: 'markdown',
+      ...(coords ?? {}),
+    }).unwrap();
+    setEditBefore('');
+    setEditAfter('');
+    void refetch();
+  }
+
+  function quotesOverlap(a: string, b: string): boolean {
+    const na = a.replace(/\s+/g, ' ').trim().toLowerCase();
+    const nb = b.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!na || !nb) return false;
+    return na === nb || na.includes(nb) || nb.includes(na);
+  }
+
   async function handleAddManualEdit() {
     const before = editBefore.trim();
     const after = normalizeMarkdownInput(editAfter).trim();
     if (!before || !after) return;
     setError(null);
+    const conflicting = acceptedEdits.filter(
+      (item) => item.page === viewerPage && item.quote && quotesOverlap(item.quote, before),
+    );
+    if (conflicting.length > 0) {
+      setConflictEdit({
+        before,
+        after,
+        coords: consumeCoords(),
+        conflictingIds: conflicting.map((item) => item.id),
+      });
+      return;
+    }
     try {
-      const coords = consumeCoords();
-      await createAnnotation({
-        documentId,
-        versionId,
-        page: viewerPage,
-        content: after,
-        quote: before,
-        kind: 'accepted_edit',
-        contentFormat: 'markdown',
-        ...coords,
-      }).unwrap();
-      setEditBefore('');
-      setEditAfter('');
-      void refetch();
+      await createManualEdit(before, after, consumeCoords());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось сохранить правку');
+    }
+  }
+
+  function cancelEditConflict() {
+    if (resolvingConflict) return;
+    setConflictEdit(null);
+  }
+
+  async function confirmEditConflict() {
+    if (!conflictEdit) return;
+    setResolvingConflict(true);
+    setError(null);
+    try {
+      for (const annotationId of conflictEdit.conflictingIds) {
+        await deleteAnnotation({ documentId, versionId, annotationId }).unwrap();
+      }
+      await createManualEdit(conflictEdit.before, conflictEdit.after, conflictEdit.coords);
+      setConflictEdit(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось сохранить правку');
+    } finally {
+      setResolvingConflict(false);
     }
   }
 
@@ -328,13 +401,26 @@ export function useDocumentAnnotationsPanel({
     }
   }
 
+  function saveDraftBlockedMessage(): string | null {
+    const saveable = versionReady && !creating && Boolean(editBefore.trim()) && Boolean(editAfter.trim());
+    return saveable
+      ? 'Есть несохранённая правка — нажмите «Сохранить правку», иначе она не применится.'
+      : 'Есть незавершённая правка: заполните оба поля и нажмите «Сохранить правку», либо очистите поля, чтобы применить правки.';
+  }
+
   async function handleApplyFinal() {
     setError(null);
     setApplyHint(null);
+    const draftBlocker = saveDraftBlockedMessage();
+    if (draftBlocker) {
+      setError(draftBlocker);
+      return;
+    }
     try {
       const result = await applyEditsFinal({ documentId, versionId }).unwrap();
       setApplyJobId(result.operationJobId);
       setPollApply(true);
+      setPendingApplyVersionId(result.versionId);
       onSelectVersion(result.versionId);
       setApplyHint(`Версия ${result.version} создаётся — PDF появится через несколько секунд.`);
     } catch (err) {
@@ -378,10 +464,16 @@ export function useDocumentAnnotationsPanel({
   async function handleApplyPdf() {
     setError(null);
     setApplyHint(null);
+    const draftBlocker = saveDraftBlockedMessage();
+    if (draftBlocker) {
+      setError(draftBlocker);
+      return;
+    }
     try {
       const result = await applyAccepted({ documentId, versionId }).unwrap();
       setApplyJobId(result.operationJobId);
       setPollApply(true);
+      setPendingApplyVersionId(result.versionId);
       onSelectVersion(result.versionId);
       setApplyHint(`Создана версия ${result.version}. Собираем PDF…`);
     } catch (err) {
@@ -400,6 +492,8 @@ export function useDocumentAnnotationsPanel({
     versionId,
     viewerPage,
     versionReady,
+    documentRole,
+    currentUserId,
     focusedAnnotationId,
     onGoToPage,
     onOpenAcceptedEdit,
@@ -431,6 +525,10 @@ export function useDocumentAnnotationsPanel({
     refetch,
     handleAddComment,
     handleAddManualEdit,
+    conflictEdit,
+    resolvingConflict,
+    confirmEditConflict,
+    cancelEditConflict,
     handleExportHighlightDocx,
     handleApplyFinal,
     handleDownloadPdf,

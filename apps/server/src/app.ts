@@ -77,7 +77,7 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(meRoutes);
     await app.register(documentRoutes, { env: options.env });
     await app.register(publicShareRoutes, { env: options.env });
-    await app.register(annotationRoutes);
+    await app.register(annotationRoutes, { env: options.env });
     await app.register(aiRoutes, { env: options.env });
     await app.register(ragRoutes, { env: options.env });
     await app.register(mediaRoutes, { env: options.env });

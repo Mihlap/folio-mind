@@ -11,7 +11,6 @@ import {
 const baseVersion = {
   id: 'v3',
   version: 3,
-  versionLabel: 'draft' as const,
   status: 'ready',
   size: String(4.2 * 1024 * 1024),
   mimeType: 'application/pdf',
@@ -76,7 +75,6 @@ describe('buildVersionWorkflowContext', () => {
     });
     expect(ctx).toMatchObject({
       versionNumber: 3,
-      versionLabel: 'Черновик',
       openGuestCommentsCount: 2,
       needsFixMarksCount: 1,
       documentReviewStatusLabel: 'На согласовании',

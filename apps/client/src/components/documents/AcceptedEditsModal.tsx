@@ -89,7 +89,7 @@ export function AcceptedEditsModal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[130] flex items-end justify-center p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="accepted-edits-modal-title"

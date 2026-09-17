@@ -8,17 +8,10 @@ import { isDocumentVersionSelectable } from '../../lib/documents/versionSelectio
 type VersionOption = {
   id: string;
   version: number;
-  versionLabel: 'draft' | 'in_review' | 'final' | null;
   status: string;
   pageCount: number | null;
   size?: string | null;
 };
-const VERSION_LABEL_TITLE: Record<'draft' | 'in_review' | 'final', string> = {
-  draft: 'Черновик',
-  in_review: 'На согласовании',
-  final: 'Финал',
-};
-
 type DocumentPageHeaderProps = {
   documentId: string;
   title: string;
@@ -82,7 +75,6 @@ export function DocumentPageHeader({
                 {versions.map((v) => (
                   <option key={v.id} value={v.id} disabled={!isDocumentVersionSelectable(v)}>
                     v{v.version}
-                    {v.versionLabel ? ` · ${VERSION_LABEL_TITLE[v.versionLabel]}` : ''}
                     {v.pageCount ? ` · ${v.pageCount} стр.` : ''}
                     {v.id === latestVersionId ? ' (нов.)' : ''}
                   </option>
@@ -99,9 +91,6 @@ export function DocumentPageHeader({
               {activeVersion ? (
                 <>
                   <span className="hidden md:inline">Просмотр: </span>v{activeVersion.version} ·{' '}
-                  {activeVersion.versionLabel
-                    ? `${VERSION_LABEL_TITLE[activeVersion.versionLabel]} · `
-                    : ''}
                   {statusLabel}
                   {sizeLabel ? ` · ${sizeLabel}` : ''}
                   {activeVersion.pageCount ? ` · ${activeVersion.pageCount} стр.` : ''}

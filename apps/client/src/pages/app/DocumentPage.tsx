@@ -11,6 +11,7 @@ import {
   useListPageReviewMarksQuery,
   useListShareLinksQuery,
   fetchMediaAssetDataUrl,
+  useUploadMediaAssetMutation,
   clearSearch,
   nextSearchMatch,
   prevSearchMatch,
@@ -66,9 +67,14 @@ import {
 } from '../../lib/documents/acceptedEditOverlays.js';
 import { AcceptedEditsModal } from '../../components/documents/AcceptedEditsModal.js';
 import { DocumentPresentationOverlay } from '../../components/documents/DocumentPresentationOverlay.js';
+import {
+  PdfActionHintBanner,
+  type PdfActionHintKind,
+} from '../../components/documents/PdfActionHintBanner.js';
 import type { EditTextInjection } from '../../components/documents/useDocumentAnnotationsPanel.js';
 import { useLayoutEditor } from '../../hooks/useLayoutEditor.js';
 import { formatLayoutAddSummary } from '../../lib/layout/layoutAddSummary.js';
+import { prepareMediaAssetFile } from '../../lib/media/prepareMediaAssetFile.js';
 import type { ToolSectionId } from '../../components/ui/ToolAccordionSection.js';
 import { resolveEffectiveDocumentRole, readUserIdFromAuthToken } from '../../lib/documents/document-ui-permissions.js';
 const INITIAL_THUMB_PAGES = 15;
@@ -111,6 +117,7 @@ export function DocumentPage() {
   const [pageNavTick, setPageNavTick] = useState(0);
   const [deleteAnnotation] = useDeleteAnnotationMutation();
   const [updateAnnotation, { isLoading: updatingAnnotation }] = useUpdateAnnotationMutation();
+  const [uploadMediaAsset] = useUploadMediaAssetMutation();
   const [rightTab, setRightTab] = useState<DocumentRightTab>('report');
   const [toolsFocusSection, setToolsFocusSection] = useState<ToolSectionId | null>(null);
   const [dismissedConfidenceVersions, setDismissedConfidenceVersions] = useState<Set<string>>(
@@ -125,10 +132,12 @@ export function DocumentPage() {
   const [layoutAddNotice, setLayoutAddNotice] = useState<string | null>(null);
   const [presentationOpen, setPresentationOpen] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
+  const [pdfActionHint, setPdfActionHint] = useState<PdfActionHintKind | null>(null);
   const [showDockedRightPanel, setShowDockedRightPanel] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia(DESKTOP_PANEL_QUERY).matches,
   );
   const appliedUrlVersionIdRef = useRef<string | null>(null);
+  const appliedUrlGuestCommentRef = useRef<string | null>(null);
   const workspaceRowRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLElement>(null);
   const rightPanel = useHorizontalPanelResize({
@@ -180,6 +189,14 @@ export function DocumentPage() {
     );
     return Math.max(layoutPageCount, maxObjectPage);
   }, [layout.objects, layoutPageCount]);
+  useEffect(() => {
+    if (mobileSheet) setPdfActionHint(null);
+  }, [mobileSheet]);
+  useEffect(() => {
+    if (layout.enabled === false) {
+      setPdfActionHint((prev) => (prev === 'layout' ? null : prev));
+    }
+  }, [layout.enabled]);
   const {
     pdfViewMode,
     pdfUrl,
@@ -394,6 +411,8 @@ export function DocumentPage() {
   useEffect(() => {
     const commentId = searchParams.get('guestComment');
     if (!commentId) return;
+    if (appliedUrlGuestCommentRef.current === commentId) return;
+    appliedUrlGuestCommentRef.current = commentId;
     const comment = guestCommentsData?.items?.find((item) => item.id === commentId);
     if (!comment) return;
     setRightTab('tools');
@@ -425,6 +444,35 @@ export function DocumentPage() {
     addImagesFromFiles: layout.addImagesFromFiles,
   };
 
+  const uploadLayoutFilesToMediaLibrary = useCallback(
+    async (files: File[]): Promise<string> => {
+      const results = await Promise.allSettled(
+        files.map(async (file) => {
+          const prepared = await prepareMediaAssetFile(file);
+          return uploadMediaAsset({
+            file: prepared.file,
+            documentId: doc?.id,
+            title: prepared.file.name.replace(/\.[^.]+$/, ''),
+            width: prepared.width,
+            height: prepared.height,
+          }).unwrap();
+        }),
+      );
+      const uploaded = results.filter((r) => r.status === 'fulfilled').length;
+      if (uploaded === files.length) {
+        return ` Добавлено в медиатеку: ${uploaded}.`;
+      }
+      if (uploaded > 0) {
+        return ` В медиатеку добавлено ${uploaded} из ${files.length}.`;
+      }
+      const reason = results.find((r) => r.status === 'rejected') as
+        | PromiseRejectedResult
+        | undefined;
+      return ` Не удалось добавить в медиатеку (${reason?.reason instanceof Error ? reason.reason.message : 'ошибка'}).`;
+    },
+    [doc?.id, uploadMediaAsset],
+  );
+
   const handleLayoutAddImages = useCallback(
     async (files: File[], options?: { distributeAcrossPages?: boolean; startPage?: number }) => {
       if (!versionReady) {
@@ -455,13 +503,23 @@ export function DocumentPage() {
             : [await actions.addImageFromFile(files[0]!, targetPage)];
         const focusPage = created[0]!.page;
         handleGoToPage(focusPage);
-        setLayoutAddNotice(formatLayoutAddSummary(created));
+        const baseNotice = formatLayoutAddSummary(created);
+        setLayoutAddNotice(baseNotice);
+        void uploadLayoutFilesToMediaLibrary(files).then((mediaNote) => {
+          setLayoutAddNotice(`${baseNotice}${mediaNote}`);
+        });
       } catch (err) {
         setLayoutAddNotice(null);
         throw err;
       }
     },
-    [handleGoToPage, layoutPageCount, versionReady, viewerPage],
+    [
+      handleGoToPage,
+      layoutPageCount,
+      uploadLayoutFilesToMediaLibrary,
+      versionReady,
+      viewerPage,
+    ],
   );
   const handleLayoutFilesDrop = useCallback(
     async (files: File[], targetPage: number) => {
@@ -559,10 +617,15 @@ export function DocumentPage() {
         text,
         coords: x != null || y != null ? { x, y, pageWidthPx, pageHeightPx } : undefined,
       });
+      setPdfActionHint((prev) => (prev === 'text-selection' ? null : prev));
       setRightTab('tools');
+      rightPanel.expand();
+      if (window.matchMedia('(max-width: 767px)').matches) {
+        setMobileSheet('panel');
+      }
       handleGoToPage(page);
     },
-    [canEditDocument, handleGoToPage],
+    [canEditDocument, handleGoToPage, rightPanel],
   );
   const handlePageAcceptedEditsOpen = useCallback(
     (page: number) => {
@@ -637,6 +700,7 @@ export function DocumentPage() {
       title,
       pageCount: versionPageCount || previews.pageCount || previews.pages.length,
       pages: previews.pages,
+      token,
     }).catch(() => {
       /* best-effort offline cache */
     });
@@ -671,6 +735,19 @@ export function DocumentPage() {
     setRightTab(tab);
     setMobileSheet('panel');
   }
+  const requestPdfInteraction = useCallback(
+    (kind: PdfActionHintKind) => {
+      if (typeof window !== 'undefined' && !window.matchMedia('(max-width: 767px)').matches) return;
+      setMobileSheet(null);
+      setPdfActionHint(kind);
+    },
+    [],
+  );
+  const reopenToolsFromHint = useCallback(() => {
+    setPdfActionHint(null);
+    setRightTab('tools');
+    setMobileSheet('panel');
+  }, []);
   const dismissConfidenceNotice = useCallback((versionId: string) => {
     setDismissedConfidenceVersions((prev) => {
       const next = new Set(prev);
@@ -947,6 +1024,13 @@ export function DocumentPage() {
                   )}
                   {pdfReadyForUi && !pdfError && (
                     <div className="relative flex min-h-0 flex-1 flex-col">
+                      {pdfActionHint && (
+                        <PdfActionHintBanner
+                          kind={pdfActionHint}
+                          onDismiss={() => setPdfActionHint(null)}
+                          onOpenTools={reopenToolsFromHint}
+                        />
+                      )}
                       <PdfViewer
                         key={pdfViewerKey}
                         className="min-h-0 flex-1"
@@ -977,6 +1061,7 @@ export function DocumentPage() {
                         enableTextSelection={
                           canEditDocument && versionReady && pdfReadyForUi && !layout.enabled
                         }
+                        textSelectionActive={pdfActionHint === 'text-selection'}
                         onTextQuoteForEdit={canEditDocument ? handleTextQuoteForEdit : undefined}
                         enabled={canEditDocument && layout.enabled}
                         objects={layout.objects}
@@ -1049,6 +1134,7 @@ export function DocumentPage() {
             versionCreatedNotice={versionCreatedNotice}
             onDismissVersionCreatedNotice={dismissVersionCreatedNotice}
             documentRole={documentRole}
+            currentUserId={currentUserId}
             collapsed={rightPanel.collapsed}
             onToggleCollapsed={rightPanel.toggleCollapsed}
             onExpand={rightPanel.expand}
@@ -1127,7 +1213,9 @@ export function DocumentPage() {
                   documentId: doc.id,
                   versionId: activeVersion.id,
                   annotationId,
-                });
+                })
+                  .unwrap()
+                  .catch(() => {});
               }
             : undefined
         }
@@ -1204,6 +1292,7 @@ export function DocumentPage() {
           versionCreatedNotice={versionCreatedNotice}
           onDismissVersionCreatedNotice={dismissVersionCreatedNotice}
           documentRole={documentRole}
+          currentUserId={currentUserId}
           collapsed={false}
           onToggleCollapsed={() => {}}
           onExpand={() => {}}
@@ -1212,6 +1301,7 @@ export function DocumentPage() {
           onResizeStart={() => {}}
           activeTab={rightTab}
           onTabChange={setRightTab}
+          onRequestPdfInteraction={requestPdfInteraction}
         />
       </DocumentMobileSheet>
     </div>

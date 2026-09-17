@@ -11,12 +11,26 @@ export type PdfTextSelectionDrag = {
   startY: number;
   lastX: number;
   lastY: number;
+  pointerType?: string;
 };
 const TINY_DRAG_PX = 5;
 const MIN_EXTRACTED_LEN = 1;
 const MAX_QUOTE_LEN = 4000;
 export function normalizePdfSelectionText(raw: string): string {
   return raw.replace(/\s+/g, ' ').trim();
+}
+function normalizePdfLineText(raw: string): string {
+  const leading = /^\s*/.exec(raw)?.[0] ?? '';
+  const trailing = /\s*$/.exec(raw)?.[0] ?? '';
+  const body = raw.slice(leading.length, raw.length - trailing.length);
+  if (!body) return raw;
+  return leading + body.replace(/\s{2,}/g, ' ') + trailing;
+}
+function normalizePdfTextKeepingLineLayout(raw: string): string {
+  return raw
+    .split(/\r?\n/)
+    .map((line) => normalizePdfLineText(line))
+    .join('\n');
 }
 export function isTextLayerSelectable(layer: HTMLElement | null): boolean {
   if (!layer?.classList.contains('textLayer')) return false;
@@ -246,7 +260,7 @@ export function getTextFromRange(range: Range, textLayer: HTMLElement): string {
     const top = parent?.getBoundingClientRect().top ?? null;
     if (top != null && lastTop != null && Math.abs(top - lastTop) > 2) {
       if (lineChunks.length > 0) {
-        lineTexts.push(normalizePdfSelectionText(lineChunks.join('')));
+        lineTexts.push(normalizePdfTextKeepingLineLayout(lineChunks.join('')));
         lineChunks = [];
       }
     }
@@ -254,7 +268,7 @@ export function getTextFromRange(range: Range, textLayer: HTMLElement): string {
     if (top != null) lastTop = top;
   }
   if (lineChunks.length > 0) {
-    lineTexts.push(normalizePdfSelectionText(lineChunks.join('')));
+    lineTexts.push(normalizePdfTextKeepingLineLayout(lineChunks.join('')));
   }
   if (lineTexts.length <= 1) return lineTexts[0] ?? '';
   return lineTexts.filter(Boolean).join('\n');
@@ -326,6 +340,30 @@ export function getTextFromDragRect(
         )
       : dragRect;
   return { text, highlightRects, rect };
+}
+function spansIntersectingRect(textLayer: HTMLElement, rect: DOMRect): HTMLElement[] {
+  const hits: HTMLElement[] = [];
+  for (const span of textLayer.querySelectorAll('span')) {
+    if (!(span instanceof HTMLElement)) continue;
+    const r = span.getBoundingClientRect();
+    if (r.width <= 0 && r.height <= 0) continue;
+    if (!rectsIntersect(r, rect)) continue;
+    hits.push(span);
+  }
+  return hits;
+}
+function rangeFromSpans(spans: HTMLElement[]): Range | null {
+  const nodes: Text[] = [];
+  for (const span of spans) {
+    const tn = span.firstChild;
+    if (tn instanceof Text) nodes.push(tn);
+  }
+  if (nodes.length === 0) return null;
+  const range = document.createRange();
+  range.setStart(nodes[0], 0);
+  const last = nodes[nodes.length - 1];
+  range.setEnd(last, last.textContent?.length ?? 0);
+  return range.collapsed ? null : range;
 }
 function unionClientRect(rects: DOMRect[]): DOMRect {
   if (rects.length === 0) return new DOMRect(0, 0, 0, 0);
@@ -408,6 +446,24 @@ export function captureTextSelectionFromDrag(
     if (rect.width === 0 && rect.height === 0) continue;
     return { text, rect, highlightRects: captured.highlightRects };
   }
+  if (!isTiny) {
+    const spanHits = spansIntersectingRect(textLayer, dragRect);
+    if (spanHits.length > 0) {
+      const range = rangeFromSpans(spanHits);
+      if (range) {
+        const captured = snapshotFromRange(range, textLayer, pageRoot);
+        if (captured && captured.text.length >= MIN_EXTRACTED_LEN) {
+          const text = captured.text.slice(0, MAX_QUOTE_LEN);
+          if (text) {
+            const rect = captured.rect;
+            if (rect.width > 0 || rect.height > 0) {
+              return { text, rect, highlightRects: captured.highlightRects };
+            }
+          }
+        }
+      }
+    }
+  }
   return null;
 }
 export function pdfPageRootFromSelection(root: HTMLElement | null): HTMLElement | null {
@@ -447,7 +503,7 @@ export function readPdfTextSelection(root: HTMLElement | null): PdfTextSelection
   const pageRoot = textLayer ? pdfPageRootFromTextLayer(textLayer) : pdfPageRootFromSelection(root);
   const text = textLayer
     ? getTextFromRange(range, textLayer)
-    : normalizePdfSelectionText(sel.toString());
+    : normalizePdfTextKeepingLineLayout(sel.toString());
   if (!text) return null;
   const clientRects = Array.from(range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
   const rect =

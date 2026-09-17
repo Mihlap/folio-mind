@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
-import { Fragment, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { logout, useMeQuery } from '@folio-mind/store';
 import { DocumentVersionsSidebar } from '../documents/DocumentVersionsSidebar.js';
 import { useDocumentWorkspaceOptional } from '../../context/useDocumentWorkspace.js';
@@ -78,8 +78,21 @@ export function AppShell() {
   )?.version;
   const sidebarRef = useRef<HTMLElement>(null);
   usePanelToggleLeftEdge(sidebarRef, isDocumentPage);
+
+  useEffect(() => {
+    const htmlEl = document.documentElement;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = htmlEl.style.overflow;
+    document.body.style.overflow = 'hidden';
+    htmlEl.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      htmlEl.style.overflow = prevHtmlOverflow;
+    };
+  }, []);
+
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-50 md:flex-row">
+    <div data-app-root style={{ height: '100vh', maxHeight: '100vh', overflow: 'hidden' }} className="flex flex-col bg-slate-50 md:flex-row">
       <aside
         ref={sidebarRef}
         style={{ width: sidebar.collapsed ? undefined : sidebar.panelWidth }}

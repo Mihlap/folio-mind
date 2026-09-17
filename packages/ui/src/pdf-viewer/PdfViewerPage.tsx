@@ -48,6 +48,7 @@ export type PdfViewerPageProps = {
   showLabel?: boolean;
   showTextLayer?: boolean;
   enableTextSelection?: boolean;
+  textSelectionActive?: boolean;
   pageMarkers?: PdfPageMarker[];
   activeMarkerId?: string | null;
   onMarkerClick?: (marker: PdfPageMarker) => void;
@@ -74,6 +75,7 @@ export function PdfViewerPage({
   showLabel,
   showTextLayer,
   enableTextSelection = false,
+  textSelectionActive = false,
   pageMarkers = [],
   activeMarkerId,
   onMarkerClick,
@@ -168,6 +170,7 @@ export function PdfViewerPage({
         canvas.style.height = `${heightPx}px`;
         textLayer.style.width = canvas.style.width;
         textLayer.style.height = canvas.style.height;
+        textLayer.style.setProperty('--scale-factor', String(cssScale));
         if (generation !== renderGenRef.current) return;
         setPageMetrics({
           widthPx,
@@ -288,6 +291,10 @@ export function PdfViewerPage({
   const layoutShapes = layoutObjects.filter(isLayoutShapeObject);
 
   const quoteSelectMode = Boolean(enableTextSelection && showTextLayer && !searchQuery.trim());
+  const reservedPageHeightPx =
+    !isVirtualBlankPage && !layoutMetricsReady
+      ? Math.max(1, Math.round(computeScale(referencePageSizePt.width) * referencePageSizePt.height))
+      : undefined;
   const pageBody = (
     <div
       ref={wrapperRef}
@@ -296,6 +303,7 @@ export function PdfViewerPage({
         'pdf-page-root relative inline-block rounded bg-white shadow-sm',
         dropActive ? 'ring-2 ring-folio-400 ring-offset-2' : '',
       ].join(' ')}
+      style={reservedPageHeightPx ? { minHeight: reservedPageHeightPx } : undefined}
       onDragOver={handleLayoutDragOver}
       onDragLeave={handleLayoutDragLeave}
       onDrop={handleLayoutDrop}
@@ -335,7 +343,9 @@ export function PdfViewerPage({
                 : 'opacity-0'
             : 'opacity-0',
           enableTextSelection && showTextLayer
-            ? 'pointer-events-auto select-text'
+            ? `pointer-events-auto select-text ${
+                textSelectionActive ? 'touch-none' : ''
+              }`
             : 'pointer-events-none',
         ].join(' ')}
         aria-hidden={!enableTextSelection}

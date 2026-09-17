@@ -14,6 +14,7 @@ import {
   type AiSuggestionsScope,
 } from '../../lib/pdf/document-text.js';
 import { createLLMFromWorkerEnv } from '../../lib/ai/llm.js';
+import { findBestVerbatimQuote } from '../../lib/pdf/quote-verify.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import { getObjectBuffer, isWorkerS3Configured } from '../../lib/storage/s3.js';
@@ -79,6 +80,19 @@ function dedupeSuggestions(items: AiSuggestionItem[]): AiSuggestionItem[] {
   return out;
 }
 
+/** Подтверждает «было» дословным совпадением с текстом PDF, заменяя цитату на фактический текст. */
+function verifyQuotes(items: AiSuggestionItem[], pages: PageText[]): AiSuggestionItem[] {
+  return items.map((item) => {
+    const result = findBestVerbatimQuote(pages, item.originalText);
+    return {
+      ...item,
+      originalText: result.verbatim,
+      quoteMatched: result.matched,
+      page: result.matched && result.page ? result.page : item.page,
+    };
+  });
+}
+
 async function completeAndParseSuggestions(
   llm: LLMProvider,
   system: string,
@@ -124,10 +138,13 @@ async function collectSuggestionsForPages(
       scope === 'page' ? buildPageScopeSystemPrompt(12) : buildSystemPrompt(12),
       `${scopeLabel}\n\nТекст:\n\n${documentText}`,
     );
-    const items = result.items.map((item) => ({
-      ...item,
-      page: scope === 'page' && targetPage ? targetPage : (item.page ?? pages[0]?.page ?? undefined),
-    }));
+    const items = verifyQuotes(
+      result.items.map((item) => ({
+        ...item,
+        page: scope === 'page' && targetPage ? targetPage : (item.page ?? pages[0]?.page ?? undefined),
+      })),
+      pages,
+    );
     return { items, model: result.model, rawText: result.text };
   }
 
@@ -170,7 +187,7 @@ async function collectSuggestionsForPages(
     }
   }
 
-  const items = dedupeSuggestions(merged).slice(0, 30);
+  const items = verifyQuotes(dedupeSuggestions(merged).slice(0, 30), pages);
   if (items.length === 0 && pagesFailed > 0 && pagesFailed === pagesAttempted && lastError) {
     throw lastError;
   }
@@ -256,6 +273,7 @@ export async function processAiSuggestionsJob(
                   suggestion: item.suggestion,
                   reason: item.reason,
                   page: item.page ?? null,
+                  quoteMatched: item.quoteMatched ?? true,
                   status: 'pending',
                 },
               }),

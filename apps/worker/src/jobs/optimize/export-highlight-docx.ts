@@ -81,6 +81,20 @@ export async function processExportHighlightDocxJob(
       );
     }
     const exportKey = highlightEditsDocxKey(documentId, versionId);
+    const versionStillThere = await prisma.documentVersion.findFirst({
+      where: { id: versionId, documentId },
+      select: { id: true },
+    });
+    if (!versionStillThere) {
+      await prisma.job.update({
+        where: { id: operationJobId },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
+      });
+      return;
+    }
     await putObjectBuffer({
       key: exportKey,
       body: highlightedDocx,

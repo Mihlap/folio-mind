@@ -57,6 +57,8 @@ model User {
   annotations       DocumentAnnotation[]
   shareLinks        DocumentShareLink[]
   createdTenantInvites TenantInvite[] @relation("CreatedTenantInvites")
+  ownedProjects     Project[]
+  projectMembers    ProjectMember[]
 }
 
 model SmsCode {
@@ -124,15 +126,33 @@ model PasswordResetToken {
 }
 
 model Project {
-  id        String     @id @default(cuid())
+  id        String           @id @default(cuid())
   tenantId  String
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     User             @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   name      String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   documents Document[]
+  members   ProjectMember[]
 
+  @@index([tenantId, ownerId])
   @@index([tenantId, updatedAt])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, userId])
+  @@index([userId])
 }
 
 model Document {
@@ -279,7 +299,6 @@ model DocumentVersion {
   documentId String
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   version    Int
-  versionLabel String?
   s3Key      String
   size       BigInt   @default(0)
   sha256     String?
@@ -363,6 +382,7 @@ model AiSuggestion {
   suggestion   String
   reason       String
   page         Int?
+  quoteMatched Boolean  @default(true)
   status       String   @default("pending")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

@@ -72,7 +72,6 @@ export const documentsApi = baseApi.injectEndpoints({
         versions: Array<{
           id: string;
           version: number;
-          versionLabel: 'draft' | 'in_review' | 'final' | null;
           status: string;
           size: string;
           mimeType: string;
@@ -631,9 +630,13 @@ export const documentsApi = baseApi.injectEndpoints({
         url: `/documents/${documentId}/versions/${versionId}/operations/apply-edits-final`,
         method: 'POST',
       }),
-      invalidatesTags: (_r, _e, { documentId }) => [
+      invalidatesTags: (result, _e, { documentId, versionId }) => [
         { type: 'Documents', id: 'LIST' },
         { type: 'Documents', id: documentId },
+        { type: 'Annotations', id: versionId },
+        ...(result?.versionId
+          ? [{ type: 'Annotations' as const, id: result.versionId }]
+          : []),
       ],
     }),
     exportHighlightDocx: build.mutation<
@@ -794,23 +797,6 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: 'LIST' },
       ],
     }),
-    updateVersionLabel: build.mutation<
-      { versionId: string; versionLabel: 'draft' | 'in_review' | 'final' | null },
-      {
-        documentId: string;
-        versionId: string;
-        versionLabel: 'draft' | 'in_review' | 'final' | null;
-      }
-    >({
-      query: ({ documentId, versionId, versionLabel }) => ({
-        url: `/documents/${documentId}/versions/${versionId}/label`,
-        method: 'PATCH',
-        body: { versionLabel },
-      }),
-      invalidatesTags: (_result, _error, { documentId }) => [
-        { type: 'Documents', id: documentId },
-      ],
-    }),
   }),
 });
 export const {
@@ -849,5 +835,4 @@ export const {
   useLazyGetHighlightDocxUrlQuery,
   useLazyCompareVersionsQuery,
   useUpdateDocumentReviewStatusMutation,
-  useUpdateVersionLabelMutation,
 } = documentsApi;

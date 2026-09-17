@@ -4,6 +4,7 @@ import {
   documentVersionEventsChannel,
   parseDocumentMetaScopeEvent,
   parseDocumentVersionScopeEvent,
+  type AnnotationEventAction,
   type DocumentMemberRole,
   type DocumentMetaScopeEvent,
   type DocumentReviewStatus,
@@ -11,6 +12,8 @@ import {
   type GuestCommentEventAction,
   type MemberAccessEventAction,
   type PageReviewEventAction,
+  type ShareLinkEventAction,
+  type SuggestionEventAction,
 } from '@folio-mind/pdf-contracts';
 import type { Env } from '../config/env.js';
 
@@ -80,6 +83,38 @@ export async function publishPageReviewDocumentEvent(
   });
 }
 
+export async function publishAnnotationDocumentEvent(
+  env: Env,
+  documentId: string,
+  versionId: string,
+  action: AnnotationEventAction,
+  annotationId?: string,
+): Promise<void> {
+  await publishDocumentVersionScopeEvent(env, {
+    type: 'annotation',
+    documentId,
+    versionId,
+    action,
+    ...(annotationId ? { annotationId } : {}),
+  });
+}
+
+export async function publishSuggestionStatusDocumentEvent(
+  env: Env,
+  documentId: string,
+  versionId: string,
+  action: SuggestionEventAction,
+  suggestionId: string,
+): Promise<void> {
+  await publishDocumentVersionScopeEvent(env, {
+    type: 'suggestion',
+    documentId,
+    versionId,
+    action,
+    suggestionId,
+  });
+}
+
 export async function publishReviewStatusDocumentEvent(
   env: Env,
   documentId: string,
@@ -131,6 +166,22 @@ export async function publishVersionDeletedDocumentEvent(
     type: 'version_deleted',
     documentId,
     versionId,
+  });
+}
+
+export async function publishShareLinkDocumentEvent(
+  env: Env,
+  documentId: string,
+  action: ShareLinkEventAction,
+  linkId: string,
+  versionId?: string,
+): Promise<void> {
+  await publishDocumentMetaScopeEvent(env, {
+    type: 'share_link',
+    documentId,
+    action,
+    linkId,
+    ...(versionId ? { versionId } : {}),
   });
 }
 

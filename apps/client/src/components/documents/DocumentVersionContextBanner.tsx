@@ -15,7 +15,6 @@ export function DocumentVersionContextBanner({
 }: Props) {
   const metaParts = [
     `v${context.versionNumber}`,
-    context.versionLabel,
     context.pageCount != null ? `${context.pageCount} стр.` : null,
     context.sizeMb,
     context.versionStatusLabel,

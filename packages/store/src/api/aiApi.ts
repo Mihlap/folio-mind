@@ -124,6 +124,7 @@ export const aiApi = baseApi.injectEndpoints({
           suggestion: string;
           reason: string;
           page: number | null;
+          quoteMatched: boolean;
           status: string;
           createdAt: string;
         }>;
@@ -174,11 +175,14 @@ export const aiApi = baseApi.injectEndpoints({
         url: `/documents/${documentId}/versions/${versionId}/ai/apply-accepted`,
         method: 'POST',
       }),
-      invalidatesTags: (_r, _e, { documentId, versionId }) => [
+      invalidatesTags: (result, _e, { documentId, versionId }) => [
         { type: 'AiSuggestions', id: versionId },
         { type: 'Documents', id: 'LIST' },
         { type: 'Documents', id: documentId },
         { type: 'Annotations', id: versionId },
+        ...(result?.versionId
+          ? [{ type: 'Annotations' as const, id: result.versionId }]
+          : []),
       ],
     }),
     updateAiSuggestion: build.mutation<
@@ -190,6 +194,7 @@ export const aiApi = baseApi.injectEndpoints({
         suggestion: string;
         reason: string;
         page: number | null;
+        quoteMatched: boolean;
         createdAt: string;
       },
       {
@@ -197,12 +202,16 @@ export const aiApi = baseApi.injectEndpoints({
         versionId: string;
         suggestionId: string;
         status: 'accepted' | 'rejected';
+        originalText?: string;
       }
     >({
-      query: ({ documentId, versionId, suggestionId, status }) => ({
+      query: ({ documentId, versionId, suggestionId, status, originalText }) => ({
         url: `/documents/${documentId}/versions/${versionId}/ai/suggestions/${suggestionId}`,
         method: 'PATCH',
-        body: { status },
+        body: {
+          status,
+          ...(originalText !== undefined ? { originalText } : {}),
+        },
       }),
       invalidatesTags: (_r, _e, { versionId }) => [
         { type: 'AiSuggestions', id: versionId },

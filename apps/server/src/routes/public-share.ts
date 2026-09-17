@@ -365,6 +365,7 @@ export const publicShareRoutes: FastifyPluginAsync<{ env: Env }> = async (app, {
         reply,
         documentId: resolved.document.id,
         versionId: resolved.version.id,
+        allowedVersionScopeTypes: new Set(['guest_comment', 'page_review']),
       });
     },
   );

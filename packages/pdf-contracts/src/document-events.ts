@@ -5,6 +5,7 @@ export const DOCUMENT_META_CHANNEL_SUFFIX = '_meta';
 
 export type GuestCommentEventAction = 'created' | 'updated' | 'deleted' | 'cleared';
 export type PageReviewEventAction = 'updated' | 'cleared';
+export type AnnotationEventAction = 'created' | 'updated' | 'deleted';
 
 export type GuestCommentDocumentEvent = {
   type: 'guest_comment';
@@ -20,6 +21,24 @@ export type PageReviewDocumentEvent = {
   versionId: string;
   action: PageReviewEventAction;
   page?: number;
+};
+
+export type AnnotationDocumentEvent = {
+  type: 'annotation';
+  documentId: string;
+  versionId: string;
+  action: AnnotationEventAction;
+  annotationId?: string;
+};
+
+export type SuggestionEventAction = 'accepted' | 'rejected';
+
+export type SuggestionDocumentEvent = {
+  type: 'suggestion';
+  documentId: string;
+  versionId: string;
+  action: SuggestionEventAction;
+  suggestionId: string;
 };
 
 export type ReviewStatusDocumentEvent = {
@@ -51,8 +70,27 @@ export type VersionDeletedDocumentEvent = {
   versionId: string;
 };
 
-export type DocumentVersionScopeEvent = GuestCommentDocumentEvent | PageReviewDocumentEvent;
-export type DocumentMetaScopeEvent = ReviewStatusDocumentEvent | MemberAccessDocumentEvent | VersionCreatedDocumentEvent | VersionDeletedDocumentEvent;
+export type ShareLinkEventAction = 'created' | 'revoked';
+
+export type ShareLinkDocumentEvent = {
+  type: 'share_link';
+  documentId: string;
+  action: ShareLinkEventAction;
+  linkId: string;
+  versionId?: string;
+};
+
+export type DocumentVersionScopeEvent =
+  | GuestCommentDocumentEvent
+  | PageReviewDocumentEvent
+  | AnnotationDocumentEvent
+  | SuggestionDocumentEvent;
+export type DocumentMetaScopeEvent =
+  | ReviewStatusDocumentEvent
+  | MemberAccessDocumentEvent
+  | VersionCreatedDocumentEvent
+  | VersionDeletedDocumentEvent
+  | ShareLinkDocumentEvent;
 export type DocumentScopeEvent = DocumentVersionScopeEvent | DocumentMetaScopeEvent;
 
 /** @deprecated Use DocumentVersionScopeEvent */
@@ -85,6 +123,28 @@ function isPageReviewEvent(parsed: DocumentScopeEvent): parsed is PageReviewDocu
   return parsed.action === 'updated' || parsed.action === 'cleared';
 }
 
+function isAnnotationEvent(parsed: DocumentScopeEvent): parsed is AnnotationDocumentEvent {
+  if (parsed.type !== 'annotation') return false;
+  if (typeof parsed.documentId !== 'string' || typeof parsed.versionId !== 'string') return false;
+  return (
+    parsed.action === 'created' ||
+    parsed.action === 'updated' ||
+    parsed.action === 'deleted'
+  );
+}
+
+function isSuggestionEvent(parsed: DocumentScopeEvent): parsed is SuggestionDocumentEvent {
+  if (parsed.type !== 'suggestion') return false;
+  if (
+    typeof parsed.documentId !== 'string' ||
+    typeof parsed.versionId !== 'string' ||
+    typeof parsed.suggestionId !== 'string'
+  ) {
+    return false;
+  }
+  return parsed.action === 'accepted' || parsed.action === 'rejected';
+}
+
 function isReviewStatusEvent(parsed: DocumentScopeEvent): parsed is ReviewStatusDocumentEvent {
   return parsed.type === 'review_status' && typeof parsed.documentId === 'string';
 }
@@ -110,10 +170,23 @@ function isVersionDeletedEvent(parsed: DocumentScopeEvent): parsed is VersionDel
   return typeof parsed.documentId === 'string' && typeof parsed.versionId === 'string';
 }
 
+function isShareLinkEvent(parsed: DocumentScopeEvent): parsed is ShareLinkDocumentEvent {
+  if (parsed.type !== 'share_link') return false;
+  if (typeof parsed.documentId !== 'string' || typeof parsed.linkId !== 'string') return false;
+  return parsed.action === 'created' || parsed.action === 'revoked';
+}
+
 export function parseDocumentVersionScopeEvent(raw: string): DocumentVersionScopeEvent | null {
   try {
     const parsed = JSON.parse(raw) as DocumentScopeEvent;
-    if (isGuestCommentEvent(parsed) || isPageReviewEvent(parsed)) return parsed;
+    if (
+      isGuestCommentEvent(parsed) ||
+      isPageReviewEvent(parsed) ||
+      isAnnotationEvent(parsed) ||
+      isSuggestionEvent(parsed)
+    ) {
+      return parsed;
+    }
     return null;
   } catch {
     return null;
@@ -123,7 +196,15 @@ export function parseDocumentVersionScopeEvent(raw: string): DocumentVersionScop
 export function parseDocumentMetaScopeEvent(raw: string): DocumentMetaScopeEvent | null {
   try {
     const parsed = JSON.parse(raw) as DocumentScopeEvent;
-    if (isReviewStatusEvent(parsed) || isMemberAccessEvent(parsed) || isVersionCreatedEvent(parsed) || isVersionDeletedEvent(parsed)) return parsed;
+    if (
+      isReviewStatusEvent(parsed) ||
+      isMemberAccessEvent(parsed) ||
+      isVersionCreatedEvent(parsed) ||
+      isVersionDeletedEvent(parsed) ||
+      isShareLinkEvent(parsed)
+    ) {
+      return parsed;
+    }
     return null;
   } catch {
     return null;

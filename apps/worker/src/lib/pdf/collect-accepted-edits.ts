@@ -42,6 +42,12 @@ function suggestionIdFromMeta(meta: unknown): string | null {
   ).suggestionId;
   return typeof id === 'string' ? id : null;
 }
+function normalizeQuote(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function editDedupeKey(edit: CollectedAcceptedEdit): string {
+  return `${edit.page}::${normalizeQuote(edit.originalText)}`;
+}
 export function collectAcceptedEditsForPdf(
   aiAccepted: AiAcceptedRow[],
   annotations: AnnotationRow[],
@@ -70,6 +76,21 @@ export function collectAcceptedEditsForPdf(
       anchor: pageAnchorFromMeta(row.meta),
     });
   }
-  edits.sort((a, b) => a.page - b.page || a.originalText.localeCompare(b.originalText, 'ru'));
-  return edits;
+  const deduped = dedupeAcceptedEdits(edits);
+  deduped.sort((a, b) => a.page - b.page || a.originalText.localeCompare(b.originalText, 'ru'));
+  return deduped;
+}
+
+/** Конфликтующие правки на одном месте: оставляем последнюю (по порядку создания). */
+export function dedupeAcceptedEdits(edits: CollectedAcceptedEdit[]): CollectedAcceptedEdit[] {
+  const seen = new Set<string>();
+  const deduped: CollectedAcceptedEdit[] = [];
+  for (let index = edits.length - 1; index >= 0; index -= 1) {
+    const key = editDedupeKey(edits[index]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(edits[index]);
+  }
+  deduped.reverse();
+  return deduped;
 }
