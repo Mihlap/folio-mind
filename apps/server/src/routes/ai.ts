@@ -28,18 +28,18 @@ import {
 import { enqueueAiJob, enqueueApplyAcceptedSuggestionsJob } from '../lib/queue/queue.js';
 import {
   publishVersionCreatedDocumentEvent,
-  publishAnnotationDocumentEvent,
-  publishSuggestionStatusDocumentEvent,
+  // publishAnnotationDocumentEvent,
+  // publishSuggestionStatusDocumentEvent,
 } from '../lib/events/document-events-bus.js';
 import { getPresignedGetUrl, isS3Configured, putObjectByKey } from '../lib/storage/s3.js';
 import { resolveDefaultProvider, type AIProviderName } from '@folio-mind/ai-providers';
 const errorBody = z.object({ error: z.string() });
 const require = createRequire(import.meta.url);
-function linkedSuggestionIdFromMeta(meta: unknown): string | null {
-  if (!meta || typeof meta !== 'object') return null;
-  const id = (meta as { suggestionId?: unknown }).suggestionId;
-  return typeof id === 'string' ? id : null;
-}
+// function linkedSuggestionIdFromMeta(meta: unknown): string | null {
+//   if (!meta || typeof meta !== 'object') return null;
+//   const id = (meta as { suggestionId?: unknown }).suggestionId;
+//   return typeof id === 'string' ? id : null;
+// }
 function buildOriginalKey(documentId: string, version: number, fileName: string) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   return resolveS3Key('originals', `${documentId}/v${version}-${safeName}`);
@@ -502,6 +502,7 @@ export const aiRoutes: FastifyPluginAsync<{
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
+  /* ИИ-предложения правок временно отключены — остаются только ручные правки
   const suggestionItemSchema = z.object({
     id: z.string(),
     fragmentId: z.string(),
@@ -509,6 +510,7 @@ export const aiRoutes: FastifyPluginAsync<{
     suggestion: z.string(),
     reason: z.string(),
     page: z.number().nullable(),
+    quoteMatched: z.boolean(),
     status: z.string(),
     annotationId: z.string().nullable(),
     createdAt: z.string(),
@@ -558,6 +560,7 @@ export const aiRoutes: FastifyPluginAsync<{
           suggestion: item.suggestion,
           reason: item.reason,
           page: item.page,
+          quoteMatched: item.quoteMatched,
           status: item.status,
           annotationId: annotationBySuggestionId.get(item.id) ?? null,
           createdAt: item.createdAt.toISOString(),
@@ -660,7 +663,10 @@ export const aiRoutes: FastifyPluginAsync<{
           versionId: z.string(),
           suggestionId: z.string(),
         }),
-        body: z.object({ status: z.enum(['accepted', 'rejected']) }),
+        body: z.object({
+          status: z.enum(['accepted', 'rejected']),
+          originalText: z.string().trim().min(1).max(300).optional(),
+        }),
         response: {
           200: suggestionItemSchema,
           404: errorBody,
@@ -681,7 +687,10 @@ export const aiRoutes: FastifyPluginAsync<{
       if (!suggestion) {
         return reply.code(404).send({ error: 'Suggestion not found' });
       }
-      if (suggestion.status === request.body.status) {
+      const textOverride =
+        request.body.originalText !== undefined ? request.body.originalText.trim() : null;
+      const effectiveOriginalText = textOverride ?? suggestion.originalText;
+      if (suggestion.status === request.body.status && !textOverride) {
         return {
           id: suggestion.id,
           fragmentId: suggestion.fragmentId,
@@ -689,6 +698,7 @@ export const aiRoutes: FastifyPluginAsync<{
           suggestion: suggestion.suggestion,
           reason: suggestion.reason,
           page: suggestion.page,
+          quoteMatched: suggestion.quoteMatched,
           status: suggestion.status,
           annotationId: null,
           createdAt: suggestion.createdAt.toISOString(),
@@ -696,7 +706,12 @@ export const aiRoutes: FastifyPluginAsync<{
       }
       const updated = await app.prisma.aiSuggestion.update({
         where: { id: suggestionId },
-        data: { status: request.body.status },
+        data: {
+          status: request.body.status,
+          ...(textOverride && textOverride !== suggestion.originalText
+            ? { originalText: textOverride, quoteMatched: true }
+            : {}),
+        },
       });
       void publishSuggestionStatusDocumentEvent(
         env,
@@ -716,7 +731,7 @@ export const aiRoutes: FastifyPluginAsync<{
             versionId,
             page,
             kind: 'accepted_edit',
-            quote: suggestion.originalText,
+            quote: effectiveOriginalText,
             content: suggestion.suggestion,
           },
           select: { id: true },
@@ -732,7 +747,7 @@ export const aiRoutes: FastifyPluginAsync<{
               page,
               kind: 'accepted_edit',
               content: suggestion.suggestion,
-              quote: suggestion.originalText,
+              quote: effectiveOriginalText,
               meta: { suggestionId: suggestion.id, reason: suggestion.reason },
             },
           });
@@ -767,12 +782,14 @@ export const aiRoutes: FastifyPluginAsync<{
         suggestion: updated.suggestion,
         reason: updated.reason,
         page: updated.page,
+        quoteMatched: updated.quoteMatched,
         status: updated.status,
         annotationId: linkedAnnotationId,
         createdAt: updated.createdAt.toISOString(),
       };
     },
   );
+  */
   r.post(
     '/documents/:documentId/versions/:versionId/ai/apply-accepted',
     {

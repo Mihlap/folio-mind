@@ -41,6 +41,7 @@ type PdfViewerProps = {
   onMarkersOverflowClick?: (page: number) => void;
   pageNavTick?: number;
   enableTextSelection?: boolean;
+  textSelectionActive?: boolean;
   onTextQuoteForEdit?: (payload: {
     text: string;
     page: number;
@@ -79,6 +80,7 @@ export function PdfViewer({
   onPageLayoutOpen,
   pageNavTick = 0,
   enableTextSelection = false,
+  textSelectionActive = false,
   onTextQuoteForEdit,
   enabled: layoutEnabled = false,
   objects: layoutObjects = [],
@@ -154,6 +156,7 @@ export function PdfViewer({
   usePdfTextSelection({
     containerRef,
     enableTextSelection,
+    textSelectionActive,
     pdfReady,
     displayMode,
     url: sourceKey ?? url ?? '',
@@ -332,6 +335,7 @@ export function PdfViewer({
     searchQuery,
     showTextLayer: showTextLayerOnPages,
     enableTextSelection,
+    textSelectionActive,
     pageMarkers,
     activeMarkerId,
     onMarkerClick,

@@ -6,6 +6,8 @@ export const aiSuggestionItemSchema = z.object({
   suggestion: z.string().min(1),
   reason: z.string().min(1),
   page: z.number().int().min(1).optional(),
+  /** true = цитата «было» подтверждена дословным совпадением с текстом PDF. */
+  quoteMatched: z.boolean().optional(),
 });
 export const aiSuggestionsResponseSchema = z.object({
   suggestions: z.array(aiSuggestionItemSchema).max(30),

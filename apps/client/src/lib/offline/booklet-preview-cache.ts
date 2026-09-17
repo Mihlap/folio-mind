@@ -1,3 +1,5 @@
+import { apiBaseUrl } from '@folio-mind/store';
+
 const DB_NAME = 'razum-offline';
 const STORE = 'booklet-previews';
 const DB_VERSION = 1;
@@ -36,9 +38,15 @@ function cacheKey(documentId: string, versionId: string): string {
   return `${documentId}:${versionId}`;
 }
 
-async function blobUrlToDataUrl(url: string): Promise<string | null> {
+function previewProxyUrl(documentId: string, versionId: string, page: number, token?: string | null): string {
+  const base = apiBaseUrl.replace(/\/+$/, '');
+  const url = `${base}/documents/${documentId}/versions/${versionId}/preview-page/${page}`;
+  return url;
+}
+
+async function blobUrlToDataUrl(url: string, headers?: Record<string, string>): Promise<string | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, headers ? { headers } : undefined);
     if (!res.ok) return null;
     const blob = await res.blob();
     return await new Promise((resolve, reject) => {
@@ -58,6 +66,7 @@ export async function saveBookletPreviewCache(input: {
   title: string;
   pageCount: number;
   pages: Array<{ page: number; url: string }>;
+  token?: string | null;
 }): Promise<number> {
   if (typeof indexedDB === 'undefined') return 0;
   const slice = input.pages
@@ -65,9 +74,11 @@ export async function saveBookletPreviewCache(input: {
     .slice(0, OFFLINE_BOOKLET_MAX_PAGES)
     .sort((a, b) => a.page - b.page);
 
+  const authHeaders = input.token ? { Authorization: `Bearer ${input.token}` } : undefined;
   const offlinePages: OfflinePreviewPage[] = [];
   for (const page of slice) {
-    const dataUrl = await blobUrlToDataUrl(page.url);
+    const proxyUrl = previewProxyUrl(input.documentId, input.versionId, page.page, input.token);
+    const dataUrl = await blobUrlToDataUrl(proxyUrl, authHeaders);
     if (dataUrl) offlinePages.push({ page: page.page, dataUrl });
   }
   if (offlinePages.length === 0) return 0;

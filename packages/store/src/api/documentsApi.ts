@@ -630,9 +630,13 @@ export const documentsApi = baseApi.injectEndpoints({
         url: `/documents/${documentId}/versions/${versionId}/operations/apply-edits-final`,
         method: 'POST',
       }),
-      invalidatesTags: (_r, _e, { documentId }) => [
+      invalidatesTags: (result, _e, { documentId, versionId }) => [
         { type: 'Documents', id: 'LIST' },
         { type: 'Documents', id: documentId },
+        { type: 'Annotations', id: versionId },
+        ...(result?.versionId
+          ? [{ type: 'Annotations' as const, id: result.versionId }]
+          : []),
       ],
     }),
     exportHighlightDocx: build.mutation<

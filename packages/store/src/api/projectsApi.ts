@@ -1,4 +1,6 @@
+import type { DocumentMemberRole } from '@folio-mind/pdf-contracts';
 import { baseApi } from './baseApi.js';
+import type { DocumentMemberItem, DocumentOwnerItem } from './documentMembersApi.js';
 
 export type ProjectItem = {
   id: string;
@@ -6,6 +8,14 @@ export type ProjectItem = {
   documentCount: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProjectAccessItem = {
+  projectId: string;
+  myRole: DocumentMemberRole | null;
+  canManage: boolean;
+  owner: DocumentOwnerItem | null;
+  members: DocumentMemberItem[];
 };
 
 export const projectsApi = baseApi.injectEndpoints({
@@ -56,6 +66,45 @@ export const projectsApi = baseApi.injectEndpoints({
         { type: 'Projects' },
       ],
     }),
+    listProjectMembers: build.query<ProjectAccessItem, string>({
+      query: (projectId) => `/projects/${projectId}/members`,
+      providesTags: (_r, _e, projectId) => [{ type: 'ProjectMembers', id: projectId }],
+    }),
+    addProjectMember: build.mutation<
+      DocumentMemberItem,
+      { projectId: string; email: string; role: DocumentMemberRole }
+    >({
+      query: ({ projectId, ...body }) => ({
+        url: `/projects/${projectId}/members`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_r, _e, { projectId }) => [
+        { type: 'ProjectMembers', id: projectId },
+      ],
+    }),
+    updateProjectMember: build.mutation<
+      DocumentMemberItem,
+      { projectId: string; userId: string; role: DocumentMemberRole }
+    >({
+      query: ({ projectId, userId, role }) => ({
+        url: `/projects/${projectId}/members/${userId}`,
+        method: 'PATCH',
+        body: { role },
+      }),
+      invalidatesTags: (_r, _e, { projectId }) => [
+        { type: 'ProjectMembers', id: projectId },
+      ],
+    }),
+    removeProjectMember: build.mutation<void, { projectId: string; userId: string }>({
+      query: ({ projectId, userId }) => ({
+        url: `/projects/${projectId}/members/${userId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_r, _e, { projectId }) => [
+        { type: 'ProjectMembers', id: projectId },
+      ],
+    }),
   }),
 });
 
@@ -66,4 +115,8 @@ export const {
   useUpdateProjectMutation,
   useDeleteProjectMutation,
   useUpdateDocumentProjectMutation,
+  useListProjectMembersQuery,
+  useAddProjectMemberMutation,
+  useUpdateProjectMemberMutation,
+  useRemoveProjectMemberMutation,
 } = projectsApi;

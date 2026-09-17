@@ -355,6 +355,56 @@ export const registerReadRoutes: FastifyPluginAsync<{
     },
   );
   r.get(
+    '/documents/:documentId/versions/:versionId/preview-page/:page',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+          page: z.coerce.number().int().min(1),
+        }),
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId, page } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user);
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const role = resolveUserDocumentRole(document, user.sub);
+      if (!isDocumentVersionAccessible(role, document.versions, versionId)) {
+        return reply.code(403).send({ error: 'Недостаточно прав для просмотра этой версии' });
+      }
+      const key = previewPageKey(documentId, versionId, page);
+      try {
+        const { buffer, contentType } = await getObjectWithBuffer(key);
+        return reply
+          .header('Content-Type', contentType)
+          .header('Content-Length', buffer.length)
+          .header('Cache-Control', 'public, max-age=86400')
+          .send(buffer);
+      } catch (err) {
+        const notFound =
+          typeof err === 'object' &&
+          err !== null &&
+          'name' in err &&
+          (err as { name: string }).name === 'NoSuchKey';
+        if (notFound) {
+          return reply.code(404).send({ error: 'Preview page not found' });
+        }
+        if (isS3NetworkError(err)) {
+          return reply.code(503).send({ error: 'Временная ошибка хранилища S3' });
+        }
+        throw err;
+      }
+    },
+  );
+  r.get(
     '/documents/:documentId/versions/:versionId/previews',
     {
       preHandler: [app.authenticate],

@@ -3,6 +3,7 @@ import {
   captureTextSelectionFromDrag,
   clearDocumentSelection,
   getTextFromCaretPoints,
+  getWordSelectionAtPoint,
   isTextLayerSelectable,
   pageNumberFromPageRoot,
   pageNumberFromSelection,
@@ -31,6 +32,7 @@ export type PdfLiveSelection = {
 type UsePdfTextSelectionParams = {
   containerRef: React.RefObject<HTMLDivElement | null>;
   enableTextSelection: boolean;
+  textSelectionActive: boolean;
   pdfReady: boolean;
   displayMode: string;
   url: string;
@@ -39,9 +41,12 @@ type UsePdfTextSelectionParams = {
   selectionQuoteRef: React.MutableRefObject<string>;
 };
 
+const TOUCH_TAP_SLOP_PX = 12;
+
 export function usePdfTextSelection({
   containerRef,
   enableTextSelection,
+  textSelectionActive,
   pdfReady,
   displayMode,
   url,
@@ -61,24 +66,72 @@ export function usePdfTextSelection({
     const root = containerRef.current;
     if (!root) return;
 
-    const finishMouseUp = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('[data-pdf-selection-ui]')) return;
+    const releaseDragTouchLock = () => {
+      const drag = selectionDragRef.current;
+      if (drag?.textLayer) {
+        drag.textLayer.style.touchAction = '';
+        drag.textLayer.style.webkitUserSelect = '';
+        drag.textLayer.style.setProperty('-webkit-touch-callout', '');
+      }
+      selectionDragRef.current = null;
+    };
+
+    const onDocPointerMove = (e: PointerEvent) => {
+      const drag = selectionDragRef.current;
+      if (!drag) return;
+      if (drag.pointerType !== undefined && drag.pointerType !== 'mouse' && !e.isPrimary) return;
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
+
+      const preview = getTextFromCaretPoints(
+        drag.startX,
+        drag.startY,
+        e.clientX,
+        e.clientY,
+        drag.textLayer,
+        drag.pageRoot,
+      );
+      const page = pageNumberFromPageRoot(drag.pageRoot);
+      if (preview && page) {
+        onLiveSelectionChange?.({ page, highlightRects: preview.highlightRects });
+      }
+    };
+
+    const finishSelection = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest('[data-pdf-selection-ui]')) {
+        releaseDragTouchLock();
+        return;
+      }
 
       const drag = selectionDragRef.current;
       if (drag) {
         drag.lastX = e.clientX;
         drag.lastY = e.clientY;
       }
-      selectionDragRef.current = null;
-      onLiveSelectionChange?.(null);
-
       const endX = drag?.lastX ?? e.clientX;
       const endY = drag?.lastY ?? e.clientY;
+      const endedDrag = drag;
+      releaseDragTouchLock();
+      onLiveSelectionChange?.(null);
 
       requestAnimationFrame(() => {
         let snap: ReturnType<typeof readPdfTextSelection> = null;
-        if (drag) {
-          snap = captureTextSelectionFromDrag(drag, endX, endY);
+        if (endedDrag) {
+          const isTouch =
+            endedDrag.pointerType !== undefined && endedDrag.pointerType !== 'mouse';
+          if (
+            isTouch &&
+            Math.abs(endedDrag.startX - endX) < TOUCH_TAP_SLOP_PX &&
+            Math.abs(endedDrag.startY - endY) < TOUCH_TAP_SLOP_PX
+          ) {
+            snap = getWordSelectionAtPoint(
+              endX,
+              endY,
+              endedDrag.textLayer,
+              endedDrag.pageRoot,
+            );
+          }
+          if (!snap) snap = captureTextSelectionFromDrag(endedDrag, endX, endY);
         }
         if (!snap) {
           snap = readPdfTextSelection(root);
@@ -90,9 +143,12 @@ export function usePdfTextSelection({
           return;
         }
         const pageNum =
-          (drag ? pageNumberFromPageRoot(drag.pageRoot) : null) ?? pageNumberFromSelection(root);
+          (endedDrag ? pageNumberFromPageRoot(endedDrag.pageRoot) : null) ??
+          pageNumberFromSelection(root);
         if (!pageNum) return;
-        const pageRect = (drag?.pageRoot ?? pdfPageRootFromSelection(root))?.getBoundingClientRect();
+        const pageRect = (
+          endedDrag?.pageRoot ?? pdfPageRootFromSelection(root)
+        )?.getBoundingClientRect();
         const pageWidthPx = pageRect?.width ?? 0;
         const pageHeightPx = pageRect?.height ?? 0;
         const anchorX = snap.rect.width > 0 || snap.rect.left > 0 ? snap.rect.left : endX;
@@ -111,8 +167,27 @@ export function usePdfTextSelection({
       });
     };
 
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return;
+    const onDocPointerUp = (e: PointerEvent) => {
+      document.removeEventListener('pointermove', onDocPointerMove);
+      document.removeEventListener('pointerup', onDocPointerUp);
+      document.removeEventListener('pointercancel', onDocPointerCancel);
+      finishSelection(e);
+    };
+
+    const onDocPointerCancel = () => {
+      document.removeEventListener('pointermove', onDocPointerMove);
+      document.removeEventListener('pointerup', onDocPointerUp);
+      document.removeEventListener('pointercancel', onDocPointerCancel);
+      releaseDragTouchLock();
+      onLiveSelectionChange?.(null);
+    };
+
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') {
+        if (e.button !== 0) return;
+      } else if (!textSelectionActive) {
+        return;
+      }
 
       let layer = (e.target as HTMLElement | null)?.closest('.textLayer');
       if (!(layer instanceof HTMLElement) || !isTextLayerSelectable(layer)) {
@@ -125,21 +200,23 @@ export function usePdfTextSelection({
         }
       }
       if (!(layer instanceof HTMLElement) || !isTextLayerSelectable(layer)) {
-        selectionDragRef.current = null;
-        onLiveSelectionChange?.(null);
         return;
       }
 
       const pageRoot = pdfPageRootFromTextLayer(layer);
       if (!pageRoot) {
-        selectionDragRef.current = null;
-        onLiveSelectionChange?.(null);
         return;
       }
 
       e.preventDefault();
       clearDocumentSelection();
       onLiveSelectionChange?.(null);
+
+      if (e.pointerType !== 'mouse') {
+        layer.style.touchAction = 'none';
+        layer.style.webkitUserSelect = 'none';
+        layer.style.setProperty('-webkit-touch-callout', 'none');
+      }
 
       selectionDragRef.current = {
         textLayer: layer,
@@ -148,47 +225,27 @@ export function usePdfTextSelection({
         startY: e.clientY,
         lastX: e.clientX,
         lastY: e.clientY,
+        pointerType: e.pointerType,
       };
 
-      const onDocMouseMove = (moveEvent: MouseEvent) => {
-        const drag = selectionDragRef.current;
-        if (!drag) return;
-        drag.lastX = moveEvent.clientX;
-        drag.lastY = moveEvent.clientY;
-
-        const preview = getTextFromCaretPoints(
-          drag.startX,
-          drag.startY,
-          moveEvent.clientX,
-          moveEvent.clientY,
-          drag.textLayer,
-          drag.pageRoot,
-        );
-        const page = pageNumberFromPageRoot(drag.pageRoot);
-        if (preview && page) {
-          onLiveSelectionChange?.({ page, highlightRects: preview.highlightRects });
-        }
-      };
-
-      const onDocMouseUp = (upEvent: MouseEvent) => {
-        document.removeEventListener('mousemove', onDocMouseMove);
-        document.removeEventListener('mouseup', onDocMouseUp);
-        finishMouseUp(upEvent);
-      };
-
-      document.addEventListener('mousemove', onDocMouseMove);
-      document.addEventListener('mouseup', onDocMouseUp);
+      document.addEventListener('pointermove', onDocPointerMove);
+      document.addEventListener('pointerup', onDocPointerUp);
+      document.addEventListener('pointercancel', onDocPointerCancel);
     };
 
-    root.addEventListener('mousedown', onMouseDown);
+    root.addEventListener('pointerdown', onDocPointerDown);
     return () => {
-      root.removeEventListener('mousedown', onMouseDown);
-      selectionDragRef.current = null;
+      root.removeEventListener('pointerdown', onDocPointerDown);
+      document.removeEventListener('pointermove', onDocPointerMove);
+      document.removeEventListener('pointerup', onDocPointerUp);
+      document.removeEventListener('pointercancel', onDocPointerCancel);
+      releaseDragTouchLock();
       onLiveSelectionChange?.(null);
     };
   }, [
     containerRef,
     enableTextSelection,
+    textSelectionActive,
     pdfReady,
     displayMode,
     onPromptChange,

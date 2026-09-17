@@ -6,11 +6,14 @@ import {
 } from '../ui/FeatureHelp.styles.js';
 import { ExpandableEditField } from './ExpandableEditField.js';
 import { ExpandableMarkdownEditField } from './ExpandableMarkdownEditField.js';
+import { ConfirmDangerDialog } from '../ui/ConfirmDangerDialog.js';
 import {
   useDocumentAnnotationsPanel,
   type DocumentAnnotationsController,
   type DocumentAnnotationsRootProps,
 } from './useDocumentAnnotationsPanel.js';
+import { canInteractWithAnnotationContent, normalizeDocumentRole } from '../../lib/documents/document-ui-permissions.js';
+import type { PdfActionHintKind } from './PdfActionHintBanner.js';
 
 const PANEL_MARKDOWN_PLACEHOLDER = `- • пункт списка
 - **жирный** текст
@@ -49,9 +52,14 @@ export function DocumentAnnotationsRoot({
 type PanelProps = {
   variant: 'notes' | 'edits';
   hideSectionHeader?: boolean;
+  onRequestPdfInteraction?: (kind: PdfActionHintKind) => void;
 };
 
-export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }: PanelProps) {
+export function DocumentAnnotationsPanel({
+  variant,
+  hideSectionHeader = false,
+  onRequestPdfInteraction,
+}: PanelProps) {
   const c = useContext(DocumentAnnotationsContext);
   if (!c) {
     throw new Error('DocumentAnnotationsPanel must be used inside DocumentAnnotationsRoot');
@@ -78,9 +86,15 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
     acceptedEdits,
     itemRefs,
     deleteAnnotation,
+    documentRole,
+    currentUserId,
     refetch,
     handleAddComment,
     handleAddManualEdit,
+    conflictEdit,
+    resolvingConflict,
+    confirmEditConflict,
+    cancelEditConflict,
   } = c;
 
   return (
@@ -114,6 +128,21 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
         <>
           <div className="space-y-2">
             <p className="text-xs font-medium text-slate-600">Заметка к стр. {viewerPage}</p>
+            {onRequestPdfInteraction && (
+              <div className="rounded-lg border border-folio-100 bg-folio-50/50 px-3 py-2">
+                <p className="text-[11px] leading-snug text-slate-600">
+                  Чтобы привязать заметку к месту в тексте — выделите фрагмент прямо на документе.
+                  Панель закроется, и вы увидите страницу.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onRequestPdfInteraction('text-selection')}
+                  className="mt-1.5 cursor-pointer rounded-md bg-folio-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-folio-700"
+                >
+                  Выделить текст в документе
+                </button>
+              </div>
+            )}
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -162,23 +191,29 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
                       </span>
                       <p className="mt-0.5 text-xs text-slate-700">{item.content}</p>
                     </button>
-                    <button
-                      type="button"
-                      title="Удалить"
-                      onClick={() => {
-                        void (async () => {
-                          await deleteAnnotation({
-                            documentId,
-                            versionId,
-                            annotationId: item.id,
-                          });
-                          void refetch();
-                        })();
-                      }}
-                      className="cursor-pointer shrink-0 text-lg text-slate-400 hover:text-red-600"
-                    >
-                      ✕
-                    </button>
+                    {canInteractWithAnnotationContent(
+                      normalizeDocumentRole(documentRole),
+                      item.userId,
+                      currentUserId,
+                    ) ? (
+                      <button
+                        type="button"
+                        title="Удалить"
+                        onClick={() => {
+                          void (async () => {
+                            await deleteAnnotation({
+                              documentId,
+                              versionId,
+                              annotationId: item.id,
+                            });
+                            void refetch();
+                          })();
+                        }}
+                        className="cursor-pointer shrink-0 text-lg text-slate-400 hover:text-red-600"
+                      >
+                        ✕
+                      </button>
+                    ) : null}
                   </div>
                 </li>
               ))}
@@ -197,6 +232,21 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
               «Было» — plain text из PDF (для поиска в документе). «Стало» — Markdown: списки, символы,
               формулы $…$.
             </p>
+            {onRequestPdfInteraction && (
+              <div className="rounded-lg border border-folio-100 bg-folio-50/50 px-3 py-2">
+                <p className="text-[11px] leading-snug text-slate-600">
+                  Удобный способ: выделите нужный фрагмент прямо на документе — поле «Было»
+                  заполнится автоматически. Панель временно закроется.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onRequestPdfInteraction('text-selection')}
+                  className="mt-1.5 cursor-pointer rounded-md bg-folio-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-folio-700"
+                >
+                  Выделить текст в документе
+                </button>
+              </div>
+            )}
             <ExpandableEditField
               label="Было (исходный текст)"
               value={editBefore}
@@ -232,6 +282,21 @@ export function DocumentAnnotationsPanel({ variant, hideSectionHeader = false }:
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}
+
+          <ConfirmDangerDialog
+            open={Boolean(conflictEdit)}
+            title="Конфликт правок"
+            description={
+              conflictEdit
+                ? `На странице ${viewerPage} уже есть правка на этом же месте. Если продолжить, конфликтующая правка (${conflictEdit.conflictingIds.length} шт.) будет удалена, а новая — сохранена.`
+                : ''
+            }
+            confirmLabel="Заменить"
+            cancelLabel="Отмена"
+            busy={resolvingConflict}
+            onConfirm={() => void confirmEditConflict()}
+            onCancel={cancelEditConflict}
+          />
 
           {acceptedEdits.length > 0 ? (
             <div className="space-y-2 border-t border-slate-100 pt-3">

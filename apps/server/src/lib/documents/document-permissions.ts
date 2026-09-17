@@ -8,7 +8,12 @@ import {
 } from '@folio-mind/pdf-contracts';
 
 export const documentInclude = {
-  project: { select: { name: true } },
+  project: {
+    select: {
+      name: true,
+      members: { select: { userId: true, role: true } },
+    },
+  },
   owner: { select: { id: true, email: true, name: true } },
   versions: { orderBy: { version: 'desc' as const } },
   members: {
@@ -39,7 +44,11 @@ export async function resolveDocumentAccess(
     where: {
       id: documentId,
       tenantId: user.tenantId,
-      OR: [{ ownerId: user.sub }, { members: { some: { userId: user.sub } } }],
+      OR: [
+        { ownerId: user.sub },
+        { members: { some: { userId: user.sub } } },
+        { project: { members: { some: { userId: user.sub } } } },
+      ],
     },
     include: documentInclude,
   });
@@ -57,13 +66,21 @@ export async function resolveDocumentAccess(
 }
 
 export function resolveUserDocumentRole(
-  document: { ownerId: string; members: { userId: string; role: string }[] },
+  document: {
+    ownerId: string;
+    members: { userId: string; role: string }[];
+    project?: { members?: { userId: string; role: string }[] } | null;
+  },
   userId: string,
 ): DocumentAccessRole {
   if (document.ownerId === userId) return 'owner';
   const member = document.members.find((m) => m.userId === userId);
   if (member && isDocumentMemberRole(member.role)) {
     return member.role;
+  }
+  const projectMember = document.project?.members?.find((m) => m.userId === userId);
+  if (projectMember && isDocumentMemberRole(projectMember.role)) {
+    return projectMember.role;
   }
   return 'viewer';
 }

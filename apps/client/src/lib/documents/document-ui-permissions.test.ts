@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canDownloadDocument,
+  canInteractWithAnnotationContent,
   canUseDocumentToolSection,
   canViewDocumentHistory,
   normalizeDocumentRole,
@@ -47,6 +48,23 @@ describe('document UI permissions', () => {
   it('keeps owner role even when cached myRole belongs to another member', () => {
     expect(resolveEffectiveDocumentRole('commenter', 'owner-1', 'owner-1')).toBe('owner');
     expect(resolveEffectiveDocumentRole('editor', 'owner-1', 'member-1')).toBe('editor');
+  });
+
+  it('author can always interact with own annotation', () => {
+    expect(canInteractWithAnnotationContent('commenter', 'user-1', 'user-1')).toBe(true);
+    expect(canInteractWithAnnotationContent('viewer', 'user-1', 'user-1')).toBe(true);
+    expect(canInteractWithAnnotationContent('viewer', undefined, undefined)).toBe(false);
+  });
+
+  it('owner and editor can interact with other authors annotations', () => {
+    expect(canInteractWithAnnotationContent('owner', 'user-1', 'user-2')).toBe(true);
+    expect(canInteractWithAnnotationContent('editor', 'user-1', 'user-2')).toBe(true);
+  });
+
+  it('commenter and viewer cannot interact with others annotations', () => {
+    expect(canInteractWithAnnotationContent('commenter', 'user-1', 'user-2')).toBe(false);
+    expect(canInteractWithAnnotationContent('viewer', 'user-1', 'user-2')).toBe(false);
+    expect(canInteractWithAnnotationContent('owner', 'user-1', undefined)).toBe(false);
   });
 });
 

@@ -349,6 +349,35 @@ export async function deleteObjectsByPrefix(prefix: string): Promise<void> {
     continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
   } while (continuationToken);
 }
+export async function listObjectKeysByPrefix(
+  prefix: string,
+): Promise<Array<{ key: string; lastModified: Date | null }>> {
+  if (!client) throw new Error('S3 is not configured');
+  const normalized = prefix.replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!normalized.startsWith(`${FILES_ROOT}/`)) {
+    throw new Error(`S3 prefix must start with ${FILES_ROOT}/ (got: ${prefix})`);
+  }
+  const listPrefix = `${normalized}/`;
+  const out: Array<{ key: string; lastModified: Date | null }> = [];
+  let continuationToken: string | undefined;
+  do {
+    const listed = await sendS3WithRetry('S3 listObjects', async () =>
+      client!.send(
+        new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: listPrefix,
+          ContinuationToken: continuationToken,
+        }),
+      ),
+    );
+    for (const item of listed.Contents ?? []) {
+      if (!item.Key) continue;
+      out.push({ key: item.Key, lastModified: item.LastModified ?? null });
+    }
+    continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return out;
+}
 export type DeleteVersionArtifactsOptions = {
   versionNumber?: number;
 };

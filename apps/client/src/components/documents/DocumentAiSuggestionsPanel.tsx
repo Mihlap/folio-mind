@@ -41,7 +41,7 @@ function SuggestionMetaRow({
   onGoToPage,
 }: {
   page?: number | null;
-  reason?: string;
+  reason?: string | null;
   onGoToPage: (page: number) => void;
 }) {
   const reasonText = reason?.trim();
@@ -63,6 +63,98 @@ function SuggestionMetaRow({
         </FeatureHelpButton>
       )}
     </div>
+  );
+}
+
+function PendingSuggestionCard({
+  item,
+  decisionPending,
+  onGoToPage,
+  onAccept,
+  onReject,
+}: {
+  item: {
+    id: string;
+    page?: number | null;
+    reason?: string | null;
+    originalText: string;
+    suggestion: string;
+    quoteMatched: boolean;
+  };
+  decisionPending: boolean;
+  onGoToPage: (page: number) => void;
+  onAccept: (id: string, originalText?: string) => void;
+  onReject: (id: string) => void;
+}) {
+  const [editedQuote, setEditedQuote] = useState(item.originalText);
+  const needsConfirmation = !item.quoteMatched;
+  const quoteIsValid = editedQuote.trim().length > 0;
+  return (
+    <li className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+      <SuggestionMetaRow page={item.page} reason={item.reason} onGoToPage={onGoToPage} />
+      {needsConfirmation && (
+        <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] leading-snug text-amber-900">
+          Точный фрагмент «Было» в PDF не найден — из-за текстового слоя правка может не
+          примениться. Проверьте «Было» и при необходимости замените его текстом из документа,
+          затем нажмите «Принять с исправлением».
+        </div>
+      )}
+      {needsConfirmation ? (
+        <>
+          <div className="mt-2 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-red-700">Было</p>
+            <textarea
+              value={editedQuote}
+              onChange={(e) => setEditedQuote(e.target.value)}
+              rows={2}
+              placeholder="Скопируйте текст из документа"
+              className="w-full resize-y rounded-md border border-red-200 bg-white px-2 py-1.5 font-mono text-[11px] leading-snug text-red-900"
+            />
+          </div>
+          <div className="mt-2 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Стало</p>
+            <div className="rounded-md border border-emerald-100 bg-emerald-50/80 px-2 py-1.5 text-[11px] leading-snug text-emerald-950">
+              {item.suggestion}
+            </div>
+          </div>
+        </>
+      ) : (
+        <AcceptedEditBeforeAfter
+          className="mt-2"
+          compact
+          before={item.originalText}
+          after={item.suggestion}
+          afterFormat="plain"
+        />
+      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={decisionPending || (needsConfirmation && !quoteIsValid)}
+          onClick={() => onAccept(item.id, needsConfirmation ? editedQuote.trim() : undefined)}
+          className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {needsConfirmation ? 'Принять с исправлением' : 'Принять'}
+        </button>
+        <FeatureHelpButton title="Принять правку">
+          <p>
+            Фиксирует согласие с предложенной формулировкой и добавляет её в список правок ниже.
+            PDF этой версии не меняется — для файла с пометками нажмите «Собрать PDF с правками».
+          </p>
+        </FeatureHelpButton>
+        <button
+          type="button"
+          disabled={decisionPending}
+          onClick={() => onReject(item.id)}
+          className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          Отклонить
+        </button>
+        <FeatureHelpButton title="Отклонить правку">
+          <p>Отмечает предложение как отклонённое. В PDF и аннотациях оно не попадёт.</p>
+        </FeatureHelpButton>
+      </div>
+    </li>
   );
 }
 
@@ -193,22 +285,34 @@ export function DocumentAiSuggestionsPanel({
       setError(getMutationError(err));
     }
   }
-  async function handleDecision(suggestionId: string, status: 'accepted' | 'rejected') {
+  async function handleDecision(
+    suggestionId: string,
+    status: 'accepted' | 'rejected',
+    originalText?: string,
+  ) {
     setError(null);
     try {
-      await updateSuggestion({ documentId, versionId, suggestionId, status }).unwrap();
+      await updateSuggestion({
+        documentId,
+        versionId,
+        suggestionId,
+        status,
+        ...(originalText !== undefined ? { originalText } : {}),
+      }).unwrap();
       void refetch();
     } catch (err) {
       setError(getMutationError(err));
     }
   }
   async function handleDecisionAll(status: 'accepted' | 'rejected') {
-    if (pending.length === 0) return;
+    const targets =
+      status === 'accepted' ? pending.filter((item) => item.quoteMatched) : pending;
+    if (targets.length === 0) return;
     setError(null);
     setBulkUpdating(true);
     try {
       await Promise.all(
-        pending.map((item) =>
+        targets.map((item) =>
           updateSuggestion({ documentId, versionId, suggestionId: item.id, status }).unwrap(),
         ),
       );
@@ -229,6 +333,11 @@ export function DocumentAiSuggestionsPanel({
           <>
             <p>
               ИИ предлагает замены формулировок. «Принять» фиксирует решение и добавляет запись в список правок ниже.
+            </p>
+            <p>
+              Система сверяет цитату «Было» с текстом PDF. Если точный фрагмент не найден, карточка
+              помечается предупреждением: перед принятием скопируйте «Было» из документа или
+              исправьте вручную — иначе правка может не примениться при сборке PDF.
             </p>
             <p>
               «Собрать PDF» — файл для пересылки: договор без изменений + реестр правок с полным
@@ -362,7 +471,11 @@ export function DocumentAiSuggestionsPanel({
                 onClick={() => void handleDecisionAll('accepted')}
                 className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
-                {bulkUpdating ? 'Обработка…' : 'Принять всё'}
+                {bulkUpdating
+                  ? 'Обработка…'
+                  : pending.some((item) => !item.quoteMatched)
+                    ? 'Принять подтверждённые'
+                    : 'Принять всё'}
               </button>
               <button
                 type="button"
@@ -376,50 +489,18 @@ export function DocumentAiSuggestionsPanel({
           </div>
           <ul className="space-y-3">
           {pending.map((item) => (
-            <li key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-              <SuggestionMetaRow
-                page={item.page}
-                reason={item.reason}
-                onGoToPage={onGoToPage}
-              />
-              <AcceptedEditBeforeAfter
-                className="mt-2"
-                compact
-                before={item.originalText}
-                after={item.suggestion}
-                afterFormat="plain"
-              />
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={decisionPending}
-                  onClick={() => void handleDecision(item.id, 'accepted')}
-                  className="cursor-pointer rounded-lg bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  Принять
-                </button>
-                <FeatureHelpButton title="Принять правку">
-                  <p>
-                    Фиксирует согласие с предложенной формулировкой и добавляет её в список правок
-                    ниже. PDF этой версии не меняется — для файла с пометками нажмите «Собрать PDF
-                    с правками».
-                  </p>
-                </FeatureHelpButton>
-                <button
-                  type="button"
-                  disabled={decisionPending}
-                  onClick={() => void handleDecision(item.id, 'rejected')}
-                  className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Отклонить
-                </button>
-                <FeatureHelpButton title="Отклонить правку">
-                  <p>Отмечает предложение как отклонённое. В PDF и аннотациях оно не попадёт.</p>
-                </FeatureHelpButton>
-              </div>
-            </li>
+            <PendingSuggestionCard
+              key={item.id}
+              item={item}
+              decisionPending={decisionPending}
+              onGoToPage={onGoToPage}
+              onAccept={(suggestionId, originalText) =>
+                void handleDecision(suggestionId, 'accepted', originalText)
+              }
+              onReject={(suggestionId) => void handleDecision(suggestionId, 'rejected')}
+            />
           ))}
-          </ul>
+        </ul>
         </div>
       )}
 

@@ -32,5 +32,39 @@ describe('document permissions', () => {
     expect(resolveUserDocumentRole(document, 'editor')).toBe('editor');
     expect(resolveUserDocumentRole(document, 'commenter')).toBe('commenter');
   });
+
+  it('falls back to project member role when not a document member', () => {
+    const document = {
+      ownerId: 'owner',
+      members: [],
+      project: {
+        members: [
+          { userId: 'p-editor', role: 'editor' },
+          { userId: 'p-viewer', role: 'viewer' },
+        ],
+      },
+    };
+    expect(resolveUserDocumentRole(document, 'p-editor')).toBe('editor');
+    expect(resolveUserDocumentRole(document, 'p-viewer')).toBe('viewer');
+    expect(resolveUserDocumentRole(document, 'owner')).toBe('owner');
+  });
+
+  it('prefers document member role over project member role', () => {
+    const document = {
+      ownerId: 'owner',
+      members: [{ userId: 'both', role: 'commenter' }],
+      project: { members: [{ userId: 'both', role: 'editor' }] },
+    };
+    expect(resolveUserDocumentRole(document, 'both')).toBe('commenter');
+  });
+
+  it('ignores invalid project member roles', () => {
+    const document = {
+      ownerId: 'owner',
+      members: [],
+      project: { members: [{ userId: 'bad', role: 'administrator' }] },
+    };
+    expect(resolveUserDocumentRole(document, 'bad')).toBe('viewer');
+  });
 });
 

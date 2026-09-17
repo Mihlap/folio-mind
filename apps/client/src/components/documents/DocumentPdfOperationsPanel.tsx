@@ -37,7 +37,7 @@ import { DocumentPageOrderPanel } from './DocumentPageOrderPanel.js';
 import { DocumentVersionDiffPanel } from './DocumentVersionDiffPanel.js';
 import { DocumentAnnotationsControllerProvider, DocumentAnnotationsPanel } from './DocumentAnnotationsPanel.js';
 import { DocumentEditsApplyActions } from './DocumentEditsApplyActions.js';
-import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
+// import { DocumentAiSuggestionsPanel } from './DocumentAiSuggestionsPanel.js';
 import { DocumentLayoutPanel } from './DocumentLayoutPanel.js';
 import { DocumentInternalMarkupPanel } from './DocumentInternalMarkupPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
@@ -68,6 +68,7 @@ import {
   normalizeDocumentRole,
   ROLE_RESTRICTION_HINT,
 } from '../../lib/documents/document-ui-permissions.js';
+import type { PdfActionHintKind } from './PdfActionHintBanner.js';
 function parsePageNumbers(input: string, maxPage: number): number[] | string {
   const parts = input
     .split(/[,;\s]+/)
@@ -197,6 +198,8 @@ type Props = {
   versionCreatedNotice?: VersionCreatedNotice | null;
   onDismissVersionCreatedNotice?: () => void;
   documentRole?: string | null;
+  currentUserId?: string | null;
+  onRequestPdfInteraction?: (kind: PdfActionHintKind) => void;
 };
 export function DocumentPdfOperationsPanel({
   documentId,
@@ -230,6 +233,8 @@ export function DocumentPdfOperationsPanel({
   versionCreatedNotice = null,
   onDismissVersionCreatedNotice,
   documentRole = 'viewer',
+  currentUserId = null,
+  onRequestPdfInteraction,
 }: Props) {
   const accessRole = normalizeDocumentRole(documentRole);
   const canEdit = roleHasCapability(accessRole, 'edit');
@@ -704,6 +709,15 @@ export function DocumentPdfOperationsPanel({
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [focusSection, onFocusSectionHandled]);
+  const prevLayoutEnabledRef = useRef(Boolean(layout?.enabled));
+  useEffect(() => {
+    const wasEnabled = prevLayoutEnabledRef.current;
+    const isEnabled = Boolean(layout?.enabled);
+    prevLayoutEnabledRef.current = isEnabled;
+    if (isEnabled && !wasEnabled) {
+      onRequestPdfInteraction?.('layout');
+    }
+  }, [layout?.enabled, onRequestPdfInteraction]);
   const annotationsSharedProps = {
     documentId,
     versionId: activeVersion?.id ?? '',
@@ -715,6 +729,8 @@ export function DocumentPdfOperationsPanel({
     editTextInjection,
     onGoToPage,
     onSelectVersion,
+    documentRole: accessRole,
+    currentUserId,
   };
   const annotationsController = useDocumentAnnotationsPanel(annotationsSharedProps);
   const body = (
@@ -1343,7 +1359,11 @@ export function DocumentPdfOperationsPanel({
                 </p>
               }
             >
-              <DocumentAnnotationsPanel variant="notes" hideSectionHeader />
+              <DocumentAnnotationsPanel
+                variant="notes"
+                hideSectionHeader
+                onRequestPdfInteraction={onRequestPdfInteraction}
+              />
             </ToolAccordionSection>
           </div>
           )}
@@ -1352,7 +1372,7 @@ export function DocumentPdfOperationsPanel({
           <>
           <ToolGroupHeader
             title="Правки"
-            description="Ручные замены, ИИ-предложения и сборка новой версии с правками."
+            description="Ручные замены «было/стало» и сборка новой версии с правками."
             isOpen={openGroups.has('edits')}
             onToggle={() => toggleGroup('edits')}
             disabled={!isGroupAllowed('edits')}
@@ -1361,7 +1381,7 @@ export function DocumentPdfOperationsPanel({
           <div className={openGroups.has('edits') ? '' : 'hidden'}>
             <ToolAccordionSection
               title="Правки в PDF"
-              subtitle="Ручные и ИИ-правки, сборка новой версии"
+              subtitle="Ручные правки, сборка новой версии"
               isOpen={isSectionOpen('edits')}
               onToggle={() => toggleSection('edits')}
               disabled={!isSectionAllowed('edits')}
@@ -1372,8 +1392,7 @@ export function DocumentPdfOperationsPanel({
               helpContent={
                 <>
                   <p>
-                    Зафиксируйте «было / стало» вручную или запросите предложения ИИ в этом же
-                    разделе.
+                    Внесите ручную правку «было / стало» прямо на странице PDF.
                   </p>
                   <p>
                     Затем соберите PDF с реестром правок, примените изменения в текст или выгрузите
@@ -1382,15 +1401,20 @@ export function DocumentPdfOperationsPanel({
                 </>
               }
             >
-              <DocumentAnnotationsPanel variant="edits" hideSectionHeader />
-              <DocumentAiSuggestionsPanel
+              <DocumentAnnotationsPanel
+                variant="edits"
+                hideSectionHeader
+                onRequestPdfInteraction={onRequestPdfInteraction}
+              />
+              {/* ИИ-предложения правок временно отключены — остаются только ручные правки */}
+              {/* <DocumentAiSuggestionsPanel
                 documentId={documentId}
                 versionId={activeVersion?.id ?? ''}
                 versionReady={versionReady}
                 viewerPage={viewerPage}
                 pageCount={effectivePageCount}
                 onGoToPage={onGoToPage}
-              />
+              /> */}
               <DocumentEditsApplyActions />
             </ToolAccordionSection>
           </div>

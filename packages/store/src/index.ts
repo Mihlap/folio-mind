@@ -319,7 +319,12 @@ export {
   useUpdateProjectMutation,
   useDeleteProjectMutation,
   useUpdateDocumentProjectMutation,
+  useListProjectMembersQuery,
+  useAddProjectMemberMutation,
+  useUpdateProjectMemberMutation,
+  useRemoveProjectMemberMutation,
   type ProjectItem,
+  type ProjectAccessItem,
 } from './api/projectsApi.js';
 export {
   layoutTemplatesApi,

@@ -17,6 +17,7 @@ import {
 import type { VersionCreatedNotice } from '../../hooks/useVersionCreatedNotice.js';
 import { normalizeDocumentRole } from '../../lib/documents/document-ui-permissions.js';
 export type DocumentRightTab = 'chat' | 'tools' | 'report';
+import type { PdfActionHintKind } from './PdfActionHintBanner.js';
 type Props = {
   documentId: string;
   versions: DocumentVersionItem[];
@@ -51,6 +52,7 @@ type Props = {
   versionCreatedNotice?: VersionCreatedNotice | null;
   onDismissVersionCreatedNotice?: () => void;
   documentRole?: string | null;
+  currentUserId?: string | null;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onExpand: () => void;
@@ -60,6 +62,7 @@ type Props = {
   activeTab: DocumentRightTab;
   onTabChange: (tab: DocumentRightTab) => void;
   mode?: 'docked' | 'drawer';
+  onRequestPdfInteraction?: (kind: PdfActionHintKind) => void;
 };
 const TABS: Array<{
   id: DocumentRightTab;
@@ -102,6 +105,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
     versionCreatedNotice = null,
     onDismissVersionCreatedNotice,
     documentRole = 'viewer',
+    currentUserId = null,
     collapsed,
   onToggleCollapsed,
   onExpand,
@@ -111,6 +115,7 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   activeTab,
   onTabChange,
   mode = 'docked',
+  onRequestPdfInteraction,
 },
   ref,
 ) {
@@ -249,6 +254,8 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             versionCreatedNotice={versionCreatedNotice}
             onDismissVersionCreatedNotice={onDismissVersionCreatedNotice}
             documentRole={documentRole}
+            currentUserId={currentUserId}
+            onRequestPdfInteraction={onRequestPdfInteraction}
           />
         </div>
         )}

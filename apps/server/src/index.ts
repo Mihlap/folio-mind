@@ -4,6 +4,7 @@ import { loadEnv } from './lib/config/env.js';
 import { loadAppEnv } from './lib/config/load-env.js';
 import { FILES_ROOT } from '@folio-mind/pdf-contracts';
 import { initS3, isS3Configured } from './lib/storage/s3.js';
+import { startStorageHousekeeping } from './lib/storage/housekeeping.js';
 loadAppEnv();
 initTracing('folio-mind-api');
 async function main() {
@@ -15,6 +16,9 @@ async function main() {
   const app = await buildApp({ env });
   await app.listen({ port: env.PORT, host: env.API_HOST });
   console.log(`API http://${env.API_HOST}:${env.PORT}  docs http://localhost:${env.PORT}/docs`);
+  if (app.hasDecorator('prisma')) {
+    startStorageHousekeeping(app.prisma);
+  }
 }
 main().catch((err) => {
   console.error(err);

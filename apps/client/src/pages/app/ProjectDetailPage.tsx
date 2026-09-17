@@ -13,6 +13,7 @@ import { DeleteDocumentButton } from '../../components/documents/DeleteDocumentB
 import { DocumentUploadZone } from '../../components/documents/DocumentUploadZone.js';
 import { ProjectRenameControl } from '../../components/projects/ProjectRenameControl.js';
 import { ProjectDropTarget } from '../../components/projects/ProjectDropTarget.js';
+import { ProjectAccessPanel } from '../../components/projects/ProjectAccessPanel.js';
 import { DocumentDragHandle } from '../../components/documents/DocumentDragHandle.js';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 import { useAppSelector } from '../../hooks/index.js';
@@ -101,6 +102,13 @@ export function ProjectDetailPage() {
           Перетащите документ из списка ниже или с главной страницы (⠿ у строки документа).
         </p>
       </ProjectDropTarget>
+
+      <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <h2 className="text-sm font-semibold text-slate-900">Доступ команды проекта</h2>
+        <div className="mt-3">
+          <ProjectAccessPanel projectId={project.id} />
+        </div>
+      </div>
 
       {attachableDocuments.length > 0 && (
         <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
