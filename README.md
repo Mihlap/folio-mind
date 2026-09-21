@@ -19,13 +19,13 @@ Folio Mind закрывает цепочку «загрузил → посмот
 
 ИИ **предлагает и черновит**; критические действия (публикация, отправка, применение правок) — **только по явному действию** пользователя с записью в журнал аудита.
 
-Подробнее: [docs/VISION.md](./docs/VISION.md), [docs/ICP.md](./docs/ICP.md).
+Как пользоваться: [USER_GUIDE.md](./USER_GUIDE.md). Указатель техдокументов: [docs/README.md](./docs/README.md).
 
 ---
 
 ## Какие задачи решает
 
-- **Документы и версии** — проекты (папки объектов), история `v1…vN`, подписи «черновик / на согласовании / финал», сравнение версий.
+- **Документы и версии** — проекты (папки объектов), история `v1…vN`, единый статус документа «черновик / на согласовании / утверждено», сравнение версий.
 - **Просмотр** — PDF.js в браузере: масштаб, поиск, миниатюры, режим презентации.
 - **Макет буклета** — изображения и фигуры поверх PDF, crop, сетка, шаблоны бюро, медиатека организации.
 - **Операции с PDF** — сжатие (пресеты), вырезка, объединение, перестановка и дублирование страниц.
@@ -47,22 +47,24 @@ Folio Mind закрывает цепочку «загрузил → посмот
 | **Web** (`apps/client`) | React 19, Vite, Redux Toolkit, RTK Query, Tailwind |
 | **API** (`apps/server`) | Fastify, Prisma, Zod, JWT, OpenTelemetry |
 | **Worker** (`apps/worker`) | BullMQ — превью, текст, сжатие, конвертация, ИИ-джобы |
-| **Общие пакеты** (`packages/*`) | UI (PDF.js viewer), store (API), pdf-contracts, ai-providers |
+| **Mobile** (`apps/mobile`) | Capacitor — Android/PWA-обёртка для Web |
+| **Общие пакеты** (`packages/*`) | ui (PDF.js viewer), store (API), pdf-contracts, api-client, ai-contracts, ai-providers, edit-markdown, observability |
 | **Данные** | PostgreSQL 16 + **pgvector**, Redis, S3 (MinIO локально / облако в проде) |
 | **PDF / Office** | PDF.js, pdf-lib, qpdf, Ghostscript, Gotenberg, pdf2docx (сервис в compose) |
 | **ИИ** | GigaChat или YandexGPT (переключается в `.env`) |
 
 ```
 folio-mind/
-├── apps/client/     # SPA
+├── apps/client/     # SPA (Web)
 ├── apps/server/     # REST API, Prisma, auth
 ├── apps/worker/     # фоновые очереди
-├── packages/        # ui, store, pdf-contracts, ai-providers
-├── docs/            # vision, roadmap, deploy, auth
-└── tools/           # smoke-тесты, скрипты установки GS
+├── apps/mobile/     # Capacitor — Android/PWA
+├── packages/        # ui, store, pdf-contracts, api-client, ai-contracts, ai-providers, ...
+├── docs/            # auth, SSE, public API, фикстуры
+└── tools/           # smoke-тесты, скрипты установки GS, webview-инструменты
 ```
 
-Лицензии PDF-стека: [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md). Архитектура и чеклисты: [PROJECT_PLAN.md](./PROJECT_PLAN.md).
+Лицензии PDF-стека: [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md).
 
 ---
 
@@ -110,7 +112,7 @@ pnpm dev
 
 ### Первый вход
 
-Зарегистрируйте пользователя через UI или API (см. [docs/AUTH.md](./docs/AUTH.md)). Для ИИ укажите `AI_PROVIDER` и ключи провайдера в `apps/server/.env` и `apps/worker/.env` — [docs/AI_SETUP.md](./docs/AI_SETUP.md).
+Зарегистрируйте пользователя через UI или API (см. [docs/AUTH.md](./docs/AUTH.md)). Для ИИ укажите `AI_PROVIDER` и ключи провайдера в `apps/server/.env` и `apps/worker/.env`.
 
 ---
 
@@ -136,7 +138,7 @@ powershell -File .\tools\install-ghostscript.ps1
 
 Переинициализация MinIO вручную: `powershell -File .\tools\init-minio.ps1`
 
-Порты, PgBouncer, прод: [docs/DEPLOY.md](./docs/DEPLOY.md).
+Прод-деплой (Docker Compose + Dockerfile'ы): [docker-compose.prod.yml](./docker-compose.prod.yml), [apps/server/Dockerfile](./apps/server/Dockerfile), [apps/client/Dockerfile](./apps/client/Dockerfile), [apps/worker/Dockerfile](./apps/worker/Dockerfile).
 
 ---
 
@@ -155,6 +157,8 @@ powershell -File .\tools\install-ghostscript.ps1
 | `pnpm smoke:phase1` | Smoke: upload, viewer, ИИ |
 | `pnpm smoke:phase2` | Smoke: операции PDF, правки |
 | `pnpm smoke:phase3` | Smoke: apply-edits (PDF overlay) |
+| `pnpm smoke:rag` | Smoke: RAG-чат по регламентам |
+| `pnpm mobile:apk:debug` | Сборка Android APK (Capacitor) |
 
 ---
 
@@ -163,12 +167,11 @@ powershell -File .\tools\install-ghostscript.ps1
 | Файл | Содержание |
 |------|------------|
 | [USER_GUIDE.md](./USER_GUIDE.md) | Инструкция для пользователя РазУм |
-| [docs/ROADMAP.md](./docs/ROADMAP.md) | Фазы разработки и текущий статус |
-| [PROJECT_PLAN.md](./PROJECT_PLAN.md) | Технический план, архитектура, чеклисты |
-| [docs/DEPLOY.md](./docs/DEPLOY.md) | Деплой, порты, S3, OTEL |
 | [docs/AUTH.md](./docs/AUTH.md) | Регистрация, OAuth, SMS |
-| [docs/AI_SETUP.md](./docs/AI_SETUP.md) | GigaChat / YandexGPT |
+| [docs/PASSWORD_RESET.md](./docs/PASSWORD_RESET.md) | Восстановление пароля |
+| [docs/SSE.md](./docs/SSE.md) | Live-обновления документа (SSE, Redis) |
 | [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md) | Лицензии PDF-стека |
+| [docs/api/](./docs/api/) | Публичный API (v1) и вебхуки |
 | [docs/legal/](./docs/legal/) | Privacy, DPA (черновики) |
 
 Полный указатель: [docs/README.md](./docs/README.md).

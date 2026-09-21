@@ -9,6 +9,7 @@ coverage
 # Environment & secrets (keep *.env.example in repo)
 .env
 .env.*
+.env.prod
 !.env.example
 !**/.env.example
 !.env.capacitor.example
@@ -27,9 +28,7 @@ secrets/
 /scripts/
 
 # AI tools
-.opencode/*
-!.opencode/AGENTS.md
-!.opencode/skills/
+.opencode/
 .agents/
 .cursor/
 .vscode/settings.json
@@ -58,3 +57,4 @@ apps/mobile/ios
 /docs/Folio_Mind_Plan_content.md
 /docs/AI_SETUP.md
 /PROJECT_PLAN.md
+/DEPLOY_NOTES.md
