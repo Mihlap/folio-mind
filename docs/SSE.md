@@ -76,4 +76,4 @@ Accept: text/event-stream
 - **Redis обязателен** (`REDIS_URL`).
 - nginx / ALB: `proxy_buffering off`, `proxy_read_timeout` ≥ 3600s.
 
-См. [ROADMAP.md](./ROADMAP.md), [DEPLOY.md](./DEPLOY.md).
+См. [README.md](./README.md).
