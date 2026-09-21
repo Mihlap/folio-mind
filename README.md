@@ -138,7 +138,7 @@ powershell -File .\tools\install-ghostscript.ps1
 
 Переинициализация MinIO вручную: `powershell -File .\tools\init-minio.ps1`
 
-Прод-деплой (Docker Compose + Dockerfile'ы): [docker-compose.prod.yml](./docker-compose.prod.yml), [apps/server/Dockerfile](./apps/server/Dockerfile), [apps/client/Dockerfile](./apps/client/Dockerfile), [apps/worker/Dockerfile](./apps/worker/Dockerfile).
+Прод-деплой (Docker Compose + Dockerfile'ы): [docker-compose.prod.yml](./docker-compose.prod.yml), [apps/server/Dockerfile](./apps/server/Dockerfile), [apps/client/Dockerfile](./apps/client/Dockerfile), [apps/worker/Dockerfile](./apps/worker/Dockerfile). Пошаговая инструкция развёртывания на хостинге: [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
 
@@ -167,6 +167,7 @@ powershell -File .\tools\install-ghostscript.ps1
 | Файл | Содержание |
 |------|------------|
 | [USER_GUIDE.md](./USER_GUIDE.md) | Инструкция для пользователя РазУм |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Развёртывание на хостинге (пошагово, от автора) |
 | [docs/AUTH.md](./docs/AUTH.md) | Регистрация, OAuth, SMS |
 | [docs/PASSWORD_RESET.md](./docs/PASSWORD_RESET.md) | Восстановление пароля |
 | [docs/SSE.md](./docs/SSE.md) | Live-обновления документа (SSE, Redis) |
