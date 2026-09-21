@@ -53,11 +53,6 @@ apps/mobile/android
 apps/mobile/ios
 
 # Internal docs (not published to the repo)
-/docs/DEPLOY.md
-/docs/ROADMAP.md
-/docs/VISION.md
-/docs/ICP.md
-/docs/Folio_Mind_Plan_content.md
-/docs/AI_SETUP.md
+/docs/
 /PROJECT_PLAN.md
 /DEPLOY_NOTES.md
