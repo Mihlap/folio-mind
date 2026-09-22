@@ -92,7 +92,7 @@ export function AppShell() {
   }, []);
 
   return (
-    <div data-app-root style={{ height: '100vh', maxHeight: '100vh', overflow: 'hidden' }} className="flex flex-col bg-slate-50 md:flex-row">
+    <div data-app-root style={{ overflow: 'hidden' }} className="flex flex-col bg-slate-50 md:flex-row">
       <aside
         ref={sidebarRef}
         style={{ width: sidebar.collapsed ? undefined : sidebar.panelWidth }}

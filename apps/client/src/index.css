@@ -132,6 +132,15 @@ body {
     max-height: 100dvh;
     overflow: hidden;
   }
+
+  .fixed-overlay-safe {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
 }
 
 @layer components {
