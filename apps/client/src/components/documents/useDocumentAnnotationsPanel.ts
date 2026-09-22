@@ -402,7 +402,10 @@ export function useDocumentAnnotationsPanel({
   }
 
   function saveDraftBlockedMessage(): string | null {
-    const saveable = versionReady && !creating && Boolean(editBefore.trim()) && Boolean(editAfter.trim());
+    const hasBefore = Boolean(editBefore.trim());
+    const hasAfter = Boolean(editAfter.trim());
+    if (!hasBefore && !hasAfter) return null;
+    const saveable = versionReady && !creating && hasBefore && hasAfter;
     return saveable
       ? 'Есть несохранённая правка — нажмите «Сохранить правку», иначе она не применится.'
       : 'Есть незавершённая правка: заполните оба поля и нажмите «Сохранить правку», либо очистите поля, чтобы применить правки.';
