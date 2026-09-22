@@ -29,7 +29,7 @@ export function DocumentMobileSheet({ open, title, onClose, children }: Props) {
         onClick={onClose}
       />
       <div
-        className="pointer-events-auto relative grid h-[85vh] w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-t-2xl bg-white shadow-xl"
+        className="pointer-events-auto relative grid h-[85vh] max-h-[85dvh] w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-t-2xl bg-white shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="document-mobile-sheet-title"

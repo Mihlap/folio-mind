@@ -17,15 +17,16 @@ export function LandingPage() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-4 pb-20 pt-10 text-center sm:px-6 sm:pb-24 sm:pt-16">
-        <p className="mb-4 inline-block rounded-full bg-folio-100 px-4 py-1 text-sm font-medium text-folio-700">
-          PDF + ИИ · договоры и буклеты
-        </p>
-        <h1 className="font-display text-3xl leading-tight text-slate-900 sm:text-5xl md:text-6xl">
-          Документы, которые
-          <br />
-          <span className="text-folio-600">понимают контекст</span>
-        </h1>
+      <main>
+        <section className="mx-auto max-w-6xl px-4 pb-20 pt-10 text-center sm:px-6 sm:pb-24 sm:pt-16">
+          <p className="mb-4 inline-block rounded-full bg-folio-100 px-4 py-1 text-sm font-medium text-folio-700">
+            PDF + ИИ · договоры и буклеты
+          </p>
+          <h1 className="font-display text-3xl leading-tight text-slate-900 sm:text-5xl md:text-6xl">
+            Документы, которые
+            <br />
+            <span className="text-folio-600">понимают контекст</span>
+          </h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:mt-6 sm:text-lg">
           Просмотр, версии, проверка рисков и совместная работа — без цикла «скачай, сожми,
           перекинь». Для архитекторов, юристов и команд, которые живут в PDF.
@@ -50,7 +51,12 @@ export function LandingPage() {
       </section>
 
       <section className="border-t border-slate-200 bg-white py-20">
-        <div className="mx-auto grid max-w-6xl gap-8 px-6 md:grid-cols-3">
+          <h2
+            className="mb-10 text-center font-display text-2xl text-slate-900 sm:text-3xl"
+          >
+            Почему РазУм
+          </h2>
+          <div className="mx-auto grid max-w-6xl gap-8 px-6 md:grid-cols-3">
           {[
             {
               title: 'ИИ-проверка договоров',
@@ -73,8 +79,9 @@ export function LandingPage() {
               <p className="mt-2 text-sm leading-relaxed text-slate-600">{card.text}</p>
             </article>
           ))}
-        </div>
-      </section>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

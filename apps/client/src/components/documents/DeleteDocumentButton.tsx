@@ -27,7 +27,7 @@ export function DeleteDocumentButton({
       }}
       className={
         isList
-          ? 'flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40'
+          ? 'flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-red-50/80 text-red-500 transition-colors hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 md:h-9 md:w-9 md:bg-transparent md:text-slate-400 md:hover:bg-red-50 md:hover:text-red-600'
           : 'flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-red-100 text-red-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40'
       }
     >

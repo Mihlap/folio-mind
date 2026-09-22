@@ -2,7 +2,6 @@ import { installPromiseWithResolversPolyfill } from './lib/polyfills/promise-wit
 
 installPromiseWithResolversPolyfill();
 
-import './lib/setupPdfWorker.js';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';

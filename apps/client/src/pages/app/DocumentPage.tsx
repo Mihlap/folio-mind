@@ -933,16 +933,6 @@ export function DocumentPage() {
               />
 
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                <DocumentThumbnailStrip
-                  versionId={activeVersion?.id}
-                  pages={displayPreviewPages}
-                  viewerPage={viewerPage}
-                  initialThumbPages={INITIAL_THUMB_PAGES}
-                  layout="horizontal"
-                  reviewMarkByPage={reviewMarkByPage}
-                  onGoToPage={handleGoToPage}
-                />
-
                 <div className="shrink-0 border-b border-slate-100 bg-white px-2 py-2">
                   {pdfReadyForUi && (
                     <PdfViewerToolbar
