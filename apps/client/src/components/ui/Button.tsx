@@ -11,9 +11,9 @@ const variants = {
   ghost: 'text-slate-600 hover:bg-slate-100 focus-visible:ring-slate-400',
 };
 const sizes = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-6 py-3 text-base',
+  sm: 'min-h-9 px-3 text-sm',
+  md: 'min-h-12 px-4 text-sm',
+  lg: 'min-h-12 px-6 text-base',
 };
 export function Button({
   variant = 'primary',

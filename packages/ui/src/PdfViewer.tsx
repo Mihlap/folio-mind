@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { searchPdfText, type PdfSearchMatch } from './pdf-search.js';
 import { PdfTextSelectionPrompt } from './PdfTextSelectionPrompt.js';
 import { clearDocumentSelection } from './pdf-text-selection.js';
@@ -13,6 +14,9 @@ import {
   type PdfSelectionPrompt,
 } from './pdf-viewer/usePdfTextSelection.js';
 import { clamp, scrollPageWithinContainer } from './pdf-viewer/utils.js';
+
+pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
 export type { PdfSearchMatch };
 export type PdfViewerDisplayMode = 'single' | 'continuous';
 export type PdfViewerZoomMode = 'fit-width' | 'custom';

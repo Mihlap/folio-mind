@@ -31,7 +31,23 @@ export default defineConfig({
           if (normalizedId.includes('/packages/store/')) return 'folio-store';
           if (normalizedId.includes('/packages/ui/')) return 'folio-ui';
           if (normalizedId.includes('/packages/pdf-contracts/')) return 'folio-pdf-contracts';
+          if (normalizedId.includes('/packages/edit-markdown/')) return 'markdown-vendor';
           if (!normalizedId.includes('node_modules')) return undefined;
+          if (
+            normalizedId.includes('markdown') ||
+            normalizedId.includes('micromark') ||
+            normalizedId.includes('mdast') ||
+            normalizedId.includes('hast-') ||
+            normalizedId.includes('hastscript') ||
+            normalizedId.includes('unist-') ||
+            normalizedId.includes('unified') ||
+            normalizedId.includes('vfile') ||
+            normalizedId.includes('katex') ||
+            normalizedId.includes('rehype') ||
+            normalizedId.includes('remark')
+          ) {
+            return 'markdown-vendor';
+          }
           if (
             normalizedId.includes('react') ||
             normalizedId.includes('@remix-run') ||

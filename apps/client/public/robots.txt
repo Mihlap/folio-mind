@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# ARD: advertise the agent capability manifest
+Agentmap: https://folio.46-253-132-218.sslip.io/.well-known/ard.json

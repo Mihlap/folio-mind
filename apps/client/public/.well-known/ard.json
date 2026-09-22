@@ -1,0 +1,20 @@
+{
+  "entries": [
+    {
+      "identifier": "urn:air:folio.46-253-132-218.sslip.io:app:razum",
+      "displayName": "РазУм — ИИ-анализ PDF-документов",
+      "type": "text/html",
+      "url": "https://folio.46-253-132-218.sslip.io/",
+      "description": "Веб-приложение для просмотра и совместной работы с PDF: ИИ-проверка договоров и рисков, версии документов, макеты буклетов, гостевые комментарии. Тяжёлые операции выполняются в фоне, файлы хранятся в S3.",
+      "version": "1.0.0",
+      "tags": ["pdf", "ai", "documents", "docx", "contracts", "collaboration"],
+      "capabilities": ["DocumentAnalysis", "ContractRiskReview", "PdfVersioning", "Collaboration"],
+      "representativeQueries": [
+        "проверить договор на риски и противоречия",
+        "проанализировать PDF документ с помощью ИИ",
+        "создать буклет из PDF для архитектора",
+        "обсудить документ с гостями по ссылке"
+      ]
+    }
+  ]
+}
