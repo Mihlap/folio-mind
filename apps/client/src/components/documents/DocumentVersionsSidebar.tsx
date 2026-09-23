@@ -113,7 +113,9 @@ export function DocumentVersionsSidebar({
     >
       <div
         className={`shrink-0 bg-white ${
-          isDrawer ? 'mb-3' : 'border-b border-slate-100 px-2 py-2.5 md:px-2.5'
+          isDrawer
+            ? 'mb-3 border-b border-slate-100 px-3 pt-2'
+            : 'border-b border-slate-100 px-2 py-2.5 md:px-2.5'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
@@ -155,7 +157,7 @@ export function DocumentVersionsSidebar({
       </div>
 
       <ul
-        className={`space-y-0.5 ${isDrawer ? 'pr-3 pt-1' : 'min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 pb-2 pr-4 pt-1.5 md:px-2 md:pr-4'}`}
+        className={`space-y-0.5 ${isDrawer ? 'px-3 pb-3 pt-1' : 'min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1.5 pb-2 pr-4 pt-1.5 md:px-2 md:pr-4'}`}
       >
         {versions.map((v, index) => {
           const isSelected = v.id === selectedVersionId;
