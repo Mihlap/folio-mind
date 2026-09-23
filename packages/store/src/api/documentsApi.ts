@@ -707,7 +707,7 @@ export const documentsApi = baseApi.injectEndpoints({
       }),
     }),
     getConvertedDocxUrl: build.query<
-      { url: string; expiresInSeconds: number },
+      { url: string; expiresInSeconds: number; layoutRisk: 'images' | 'deck' | 'mixed' | null },
       { documentId: string; versionId: string }
     >({
       query: ({ documentId, versionId }) =>

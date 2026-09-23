@@ -40,6 +40,9 @@ export function extractedTextKey(documentId: string, versionId: string): string 
 export function preConvertedDocxKey(documentId: string, versionId: string): string {
   return resolveS3Key('processing', `${documentId}/${versionId}/pre-converted.docx`);
 }
+export function preConvertedDocxRiskKey(documentId: string, versionId: string): string {
+  return resolveS3Key('processing', `${documentId}/${versionId}/pre-converted.risk.json`);
+}
 export function appliedDocxKey(documentId: string, versionId: string): string {
   return resolveS3Key('processing', `${documentId}/${versionId}/applied.docx`);
 }

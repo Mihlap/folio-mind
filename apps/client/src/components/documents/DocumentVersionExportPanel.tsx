@@ -39,10 +39,22 @@ type Props = {
 const actionBtn =
   'inline-flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-800 shadow-sm transition hover:border-folio-300 hover:bg-folio-50 disabled:cursor-not-allowed disabled:opacity-50';
 
+const CONVERSION_RISK_NOTICE = {
+  images:
+    'PDF был в основном картинками (текст встроен в изображения) — в DOCX текст почти не редактируется. Для правок загрузите исходный DOCX Word.',
+  deck:
+    'В PDF много картинок и нестандартные шрифты — в Word возможны наложения текста. Проверьте результат или загрузите исходный DOCX Word.',
+  mixed:
+    'В PDF много картинок и нестандартные шрифты — в DOCX возможны наложения текста и нередактируемые фрагменты. Лучше загрузить исходный DOCX Word.',
+} as const;
+
 export function DocumentVersionExportPanel({ documentId, version, versionReady }: Props) {
   const token = useAppSelector((s) => s.auth.token);
   const [error, setError] = useState<string | null>(null);
   const [statusHint, setStatusHint] = useState<string | null>(null);
+  const [conversionRisk, setConversionRisk] = useState<
+    keyof typeof CONVERSION_RISK_NOTICE | null
+  >(null);
   const [imageFormat, setImageFormat] = useState<'jpeg' | 'png'>('jpeg');
   const [imageDpi, setImageDpi] = useState(BOOKLET_EXPORT_DEFAULT_JPEG_DPI);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -83,6 +95,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
         void fetchConvertedDocx({ documentId, versionId: version.id })
           .unwrap()
           .then((result) => {
+            setConversionRisk(result.layoutRisk);
             window.open(result.url, '_blank', 'noopener,noreferrer');
           })
           .catch(() => {
@@ -158,8 +171,11 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
     if (!versionReady) return;
     setError(null);
     setStatusHint(null);
+    setConversionRisk(null);
     try {
-      await openDocxUrl(fetchConvertedDocx);
+      const result = await fetchConvertedDocx({ documentId, versionId: version.id }).unwrap();
+      setConversionRisk(result.layoutRisk);
+      window.open(result.url, '_blank', 'noopener,noreferrer');
     } catch {
       try {
         const result = await convertPdfToDocx({ documentId, versionId: version.id }).unwrap();
@@ -169,7 +185,9 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
           setStatusHint('Конвертируем PDF в DOCX…');
           return;
         }
-        await openDocxUrl(fetchConvertedDocx);
+        const urlResult = await fetchConvertedDocx({ documentId, versionId: version.id }).unwrap();
+        setConversionRisk(urlResult.layoutRisk);
+        window.open(urlResult.url, '_blank', 'noopener,noreferrer');
       } catch (err) {
         setError(toUserErrorMessage(err, 'Не удалось конвертировать PDF в DOCX'));
       }
@@ -317,6 +335,11 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
       </button>
 
       {statusHint && <p className="text-[11px] text-slate-500">{statusHint}</p>}
+      {conversionRisk && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+          {CONVERSION_RISK_NOTICE[conversionRisk]}
+        </p>
+      )}
       {error && <p className="text-[11px] text-red-600">{error}</p>}
       {!versionReady && (
         <p className="text-[11px] text-slate-400">Дождитесь статуса «готова» у выбранной версии.</p>

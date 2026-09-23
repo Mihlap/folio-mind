@@ -10,6 +10,7 @@ export {
   exportBookletZipKey,
   exportPagesZipKey,
   preConvertedDocxKey,
+  preConvertedDocxRiskKey,
   appliedDocxKey,
   previewPageKey,
   previewPageThumbKey,
@@ -32,6 +33,11 @@ export {
   type ShareLinkTtlPresetId,
 } from './share-link-ttl.js';
 export { isDocxBuffer, isUserUploadedSourceDocxKey } from './docx.js';
+export {
+  classifyDocxLayoutRisk,
+  type DocxLayoutRisk,
+  type DocxLayoutRiskStats,
+} from './docx-layout-risk.js';
 export {
   getRootVersionFromChain,
   getVersionChain,

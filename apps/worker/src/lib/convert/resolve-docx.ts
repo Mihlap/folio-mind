@@ -4,6 +4,7 @@ import {
   preConvertedDocxKey,
 } from '@folio-mind/pdf-contracts';
 import { convertPdfToDocx, isPdfToDocxConfigured } from './pdf-to-docx.js';
+import { storeDocxLayoutRisk } from './docx-layout-risk.js';
 import { getObjectBuffer, objectExists, putObjectBuffer } from '../storage/s3.js';
 export type ResolvedDocx = {
   buffer: Buffer;
@@ -51,5 +52,10 @@ export async function resolveDocxForEdits(params: {
     body: docxBuffer,
     contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
+  try {
+    await storeDocxLayoutRisk({ docxBuffer, documentId, versionId: rootVersionId });
+  } catch (err) {
+    console.warn('[docx-layout-risk] failed to store layout risk', err);
+  }
   return { buffer: docxBuffer, s3Key: cachedKey, source: 'converted' };
 }
