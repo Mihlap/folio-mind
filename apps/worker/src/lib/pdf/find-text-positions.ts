@@ -415,6 +415,15 @@ function pickBestTextBox(boxes: TextBoxPosition[]): TextBoxPosition {
   });
 }
 
+function pickNearestOrBiggest(
+  boxes: TextBoxPosition[],
+  anchor?: { xNorm: number; yNorm: number },
+  pageSize?: { width: number; height: number },
+): TextBoxPosition[] {
+  if (anchor && pageSize) return [pickBestTextBoxNearAnchor(boxes, anchor, pageSize)];
+  return [pickBestTextBox(boxes)];
+}
+
 function boxCenter(box: TextBoxPosition): { x: number; y: number } {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
@@ -502,7 +511,7 @@ export function searchTextInItems(
     }
     const single = searchSingleItems(sorted, variant);
     if (single.length > 0) {
-      return single.length === 1 ? single : [pickBestTextBox(single)];
+      return single.length === 1 ? single : pickNearestOrBiggest(single, anchor, pageSize);
     }
     if (!preferConcatenated) {
       const concat = searchConcatenatedItems(sorted, variant);
@@ -513,7 +522,7 @@ export function searchTextInItems(
   if (flexRe) {
     const flex = searchSingleItemsRegex(sorted, flexRe);
     if (flex.length > 0) {
-      return flex.length === 1 ? flex : [pickBestTextBox(flex)];
+      return flex.length === 1 ? flex : pickNearestOrBiggest(flex, anchor, pageSize);
     }
   }
   return [];

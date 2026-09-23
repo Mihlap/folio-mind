@@ -406,6 +406,56 @@ export async function processApplyEditsFinalJob(
     const docxUserKey = userSourceDocxKey ?? sourceDocxKey;
     const hasUserDocx = isUserUploadedSourceDocxKey(docxUserKey);
 
+    const overlayEdits = resolveEditsForPdfOverlay(
+      edits.map((edit) => ({
+        originalText: edit.originalText,
+        suggestion: edit.suggestion,
+        contentFormat: edit.contentFormat ?? 'markdown',
+        page: edit.page,
+        anchor: edit.anchor,
+      })),
+    );
+
+    if (!hasUserDocx) {
+      try {
+        const overlay = await applyEditsViaPdfOverlay(overlaySourceS3Key, overlayEdits);
+        if (overlay.applied > 0) {
+          console.log('[apply-edits-final] PDF overlay (primary, без исходного DOCX)', {
+            documentId,
+            editCount: edits.length,
+            applied: overlay.applied,
+            failed: overlay.failed,
+          });
+          await completeWithPdf({
+            env,
+            data,
+            operationJobId,
+            documentId,
+            editSourceVersionId: resolvedEditVersionId,
+            rootVersionId: resolvedRootVersionId,
+            targetVersionId,
+            sourceS3Key,
+            editSourceS3Key: overlaySourceS3Key,
+            targetS3Key,
+            edits,
+            pdfBuffer: overlay.buffer,
+            pageCount: overlay.pageCount,
+            applied: overlay.applied,
+            failed: overlay.failed,
+            method: 'pdf-overlay',
+            requestId,
+          });
+          return;
+        }
+        console.warn('[apply-edits-final] PDF overlay применил 0 правок, пробуем DOCX-путь');
+      } catch (err) {
+        console.warn(
+          '[apply-edits-final] PDF overlay не сработал, пробуем DOCX-путь:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
     const docxPipeline = await runDocxPipeline({
       documentId,
       rootVersionId: resolvedRootVersionId,
@@ -495,18 +545,7 @@ export async function processApplyEditsFinalJob(
       hadUserDocx: hasUserDocx,
       docxPipelineApplied: docxPipeline?.applied ?? 0,
     });
-    const overlay = await applyEditsViaPdfOverlay(
-      overlaySourceS3Key,
-      resolveEditsForPdfOverlay(
-        edits.map((edit) => ({
-          originalText: edit.originalText,
-          suggestion: edit.suggestion,
-          contentFormat: edit.contentFormat ?? 'markdown',
-          page: edit.page,
-          anchor: edit.anchor,
-        })),
-      ),
-    );
+    const overlay = await applyEditsViaPdfOverlay(overlaySourceS3Key, overlayEdits);
     if (overlay.applied === 0) {
       throw new Error(
         hasUserDocx
