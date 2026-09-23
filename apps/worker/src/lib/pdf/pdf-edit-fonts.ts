@@ -13,6 +13,7 @@ export type PdfTextStyle = {
 };
 function isSerifFamily(fontFamily: string): boolean {
   const f = fontFamily.toLowerCase();
+  if (f.includes('sans')) return false;
   return (
     f.includes('times') ||
     f.includes('serif') ||

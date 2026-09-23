@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
+  toUserErrorMessage,
+  MSG_JOB_NOT_FOUND,
   useGetJobQuery,
   useLazySearchProjectMaterialsQuery,
   useRequestBookletTitleDraftMutation,
@@ -64,10 +66,17 @@ export function DocumentBookletAiPanel({
   const [searchMaterials, { data: searchResult, isFetching: searching }] =
     useLazySearchProjectMaterialsQuery();
 
-  const { data: job } = useGetJobQuery(activeJobId!, {
+  const { data: job, isError: pollError } = useGetJobQuery(activeJobId!, {
     skip: !activeJobId,
     pollingInterval: activeJobId ? 2000 : 0,
   });
+
+  useEffect(() => {
+    if (pollError && !job && activeJobId) {
+      setError(MSG_JOB_NOT_FOUND);
+      setActiveJobId(null);
+    }
+  }, [pollError, job, activeJobId]);
 
   useEffect(() => {
     if (!job || !activeJobId) return;
@@ -81,7 +90,9 @@ export function DocumentBookletAiPanel({
     }
     if (job.status === 'failed') {
       const payload = job.payload as { error?: string } | null;
-      setError(payload?.error ?? 'Не удалось подготовить черновик. Проверьте, что ИИ настроен администратором.');
+      setError(
+        toUserErrorMessage(payload?.error, 'Не удалось подготовить черновик. Проверьте, что ИИ настроен администратором.'),
+      );
       setActiveJobId(null);
     }
   }, [job, activeJobId]);
@@ -100,9 +111,7 @@ export function DocumentBookletAiPanel({
       setStatusHint('ИИ готовит черновик титульника…');
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось запустить черновик титульника. Проверьте, что ИИ настроен администратором.',
+        toUserErrorMessage(err, 'Не удалось запустить черновик титульника. Проверьте, что ИИ настроен администратором.'),
       );
     }
   }
@@ -119,7 +128,7 @@ export function DocumentBookletAiPanel({
     try {
       await searchMaterials({ projectId, q: searchQuery.trim() }).unwrap();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось выполнить поиск. Попробуйте ещё раз.');
+      setError(toUserErrorMessage(err, 'Не удалось выполнить поиск. Попробуйте ещё раз.'));
     }
   }
 

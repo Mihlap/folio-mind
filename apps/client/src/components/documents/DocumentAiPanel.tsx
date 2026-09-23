@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
+  formatUserError,
+  toUserErrorMessage,
+  MSG_JOB_NOT_FOUND,
   useGetAiProvidersQuery,
   useGetJobQuery,
   useRequestChatMutation,
@@ -36,13 +39,19 @@ export function DocumentAiPanel({
   const [pollChat, setPollChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<ChatUiMessage[]>([]);
+  const [chatSendError, setChatSendError] = useState<string | null>(null);
   const activeProvider = provider ?? providersData?.defaultProvider ?? 'gigachat';
-  const { data: chatJob } = useGetJobQuery(chatJobId!, {
+  const { data: chatJob, isError: chatPollError } = useGetJobQuery(chatJobId!, {
     skip: !chatJobId,
     pollingInterval: pollChat ? 2000 : 0,
   });
   const chatPending = isJobPending(chatJob?.status);
-  const chatError = chatJob?.payload?.error;
+  const rawChatError = chatJob?.payload?.error as string | undefined;
+  const chatError = rawChatError
+    ? formatUserError(rawChatError)
+    : chatPollError
+      ? MSG_JOB_NOT_FOUND
+      : null;
   const chatReply = chatJob?.payload?.reply;
   const chatSources = chatJob?.payload?.sources;
   const chatMode = chatJob?.payload?.chatMode;
@@ -52,6 +61,7 @@ export function DocumentAiPanel({
     setPollChat(false);
     setMessages([]);
     setChatInput('');
+    setChatSendError(null);
   }, [versionId]);
 
   useEffect(() => {
@@ -122,7 +132,7 @@ export function DocumentAiPanel({
           </div>
         )}
 
-        {(messages.length > 0 || chatPending || chatError) && (
+        {(messages.length > 0 || chatPending || chatError || chatSendError) && (
           <div
             className={`space-y-3 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4 ${messagesMaxHeight}`}
           >
@@ -167,6 +177,7 @@ export function DocumentAiPanel({
             ))}
             {chatPending && <p className="text-sm text-slate-500">ИИ думает…</p>}
             {chatError && <p className="text-sm text-red-600">{chatError}</p>}
+            {chatSendError && <p className="text-sm text-red-600">{chatSendError}</p>}
           </div>
         )}
 
@@ -186,15 +197,20 @@ export function DocumentAiPanel({
             ];
             setMessages(nextMessages);
             setChatInput('');
-            const result = await requestChat({
-              documentId,
-              versionId,
-              prompt,
-              provider: activeProvider,
-              history: historyForApi,
-            }).unwrap();
-            setChatJobId(result.jobId);
-            setPollChat(true);
+            setChatSendError(null);
+            try {
+              const result = await requestChat({
+                documentId,
+                versionId,
+                prompt,
+                provider: activeProvider,
+                history: historyForApi,
+              }).unwrap();
+              setChatJobId(result.jobId);
+              setPollChat(true);
+            } catch (e) {
+              setChatSendError(toUserErrorMessage(e, 'Не удалось отправить сообщение'));
+            }
           }}
         >
           <textarea

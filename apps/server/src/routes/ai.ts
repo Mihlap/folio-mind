@@ -315,6 +315,7 @@ export const aiRoutes: FastifyPluginAsync<{
             provider: z.enum(['gigachat', 'yandex']),
           }),
           429: errorBody,
+          503: errorBody,
         },
       },
     },
@@ -330,10 +331,18 @@ export const aiRoutes: FastifyPluginAsync<{
       }
       const providerName: AIProviderName = request.body.provider ?? getConfiguredProviderName(env);
       const llm = createLLMFromEnv(env, providerName);
-      const result = await llm.complete({
-        prompt: request.body.prompt,
-        system: request.body.system,
-      });
+      let result: Awaited<ReturnType<typeof llm.complete>>;
+      try {
+        result = await llm.complete({
+          prompt: request.body.prompt,
+          system: request.body.system,
+        });
+      } catch (err) {
+        request.log.warn({ err }, 'ai complete failed');
+        return reply.code(503).send({
+          error: 'Отсутствует соединение с ИИ-сервисом. Попробуйте позже.',
+        });
+      }
       return {
         text: result.text,
         model: result.model,
@@ -368,11 +377,11 @@ export const aiRoutes: FastifyPluginAsync<{
       const provider = request.body.provider ?? getConfiguredProviderName(env);
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status === 'pending_upload') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply.code(400).send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       const cached = await getCachedSummary(env, versionId);
       if (cached) {
@@ -457,11 +466,11 @@ export const aiRoutes: FastifyPluginAsync<{
       const provider = request.body.provider ?? getConfiguredProviderName(env);
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status === 'pending_upload') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply.code(400).send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
@@ -532,7 +541,7 @@ export const aiRoutes: FastifyPluginAsync<{
       const { documentId, versionId } = request.params;
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       if (!document.versions.some((v: { id: string }) => v.id === versionId)) {
         return reply.code(404).send({ error: 'Version not found' });
@@ -599,11 +608,11 @@ export const aiRoutes: FastifyPluginAsync<{
       const page = request.body.page;
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status !== 'ready') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply.code(400).send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       if (scope === 'page') {
         if (!page) {
@@ -811,17 +820,17 @@ export const aiRoutes: FastifyPluginAsync<{
     },
     async (request, reply) => {
       if (!isS3Configured()) {
-        return reply.code(503).send({ error: 'S3 is not configured' });
+        return reply.code(503).send({ error: 'Файловое хранилище не настроено.' });
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!sourceVersion || sourceVersion.status !== 'ready') {
-        return reply.code(400).send({ error: 'Source version is not ready' });
+        return reply.code(400).send({ error: 'Исходная версия ещё не готова.' });
       }
       const [acceptedAiCount, manualEditsCount] = await Promise.all([
         app.prisma.aiSuggestion.count({
@@ -934,11 +943,11 @@ export const aiRoutes: FastifyPluginAsync<{
       const provider = request.body.provider ?? getConfiguredProviderName(env);
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status !== 'ready') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply.code(400).send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
@@ -1003,11 +1012,11 @@ export const aiRoutes: FastifyPluginAsync<{
       const provider = request.body.provider ?? getConfiguredProviderName(env);
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status !== 'ready') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply.code(400).send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
 
       let customSchema: ReturnType<typeof validateExtractionSchema> | undefined;
@@ -1091,20 +1100,20 @@ export const aiRoutes: FastifyPluginAsync<{
       const { documentId, versionId } = request.params;
       const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply.code(404).send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find(
         (v: { id: string; version: number; status: string }) => v.id === versionId,
       );
       if (!version || version.status === 'pending_upload') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply.code(400).send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       const cached = await getCachedSummary(env, versionId);
       if (!cached?.summary) {
         return reply.code(400).send({ error: 'Сначала получите пересказ документа' });
       }
       if (!isS3Configured()) {
-        return reply.code(503).send({ error: 'S3 is not configured' });
+        return reply.code(503).send({ error: 'Файловое хранилище не настроено.' });
       }
       const reportPayload = {
         title: document.title,
@@ -1177,7 +1186,7 @@ export const aiRoutes: FastifyPluginAsync<{
         where: { id: request.params.jobId, tenantId: user.tenantId },
       });
       if (!job) {
-        return reply.code(404).send({ error: 'Job not found' });
+        return reply.code(404).send({ error: 'Задание не найдено. Попробуйте ещё раз.' });
       }
       return {
         id: job.id,

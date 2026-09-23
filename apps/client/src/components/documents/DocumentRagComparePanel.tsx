@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useGetJobQuery, useRequestRagCompareMutation } from '@folio-mind/store';
+import {
+  toUserErrorMessage,
+  MSG_JOB_NOT_FOUND,
+  useGetJobQuery,
+  useRequestRagCompareMutation,
+} from '@folio-mind/store';
 import {
   clearDocumentRagCompareDraft,
   loadDocumentRagCompareDraft,
@@ -23,7 +28,7 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
   const [report, setReport] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { data: job } = useGetJobQuery(jobId!, {
+  const { data: job, isError: pollError } = useGetJobQuery(jobId!, {
     skip: !jobId,
     pollingInterval: pollJob ? 2000 : 0,
   });
@@ -61,18 +66,20 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
     if (job.status === 'failed') {
       setPollJob(false);
       setError(
-        typeof job.payload === 'object' && job.payload && 'error' in job.payload
-          ? String(
-              (
-                job.payload as {
-                  error?: string;
-                }
-              ).error,
-            )
-          : 'Сверка не выполнена',
+        toUserErrorMessage(
+          job.payload && 'error' in job.payload ? job.payload.error : undefined,
+          'Сверка не выполнена',
+        ),
       );
     }
   }, [job]);
+
+  useEffect(() => {
+    if (pollError && !job) {
+      setPollJob(false);
+      setError(MSG_JOB_NOT_FOUND);
+    }
+  }, [pollError, job]);
 
   async function handleCompare() {
     setError(null);
@@ -84,7 +91,7 @@ export function DocumentRagComparePanel({ documentId, versionId, versionReady }:
       setJobId(result.jobId);
       setPollJob(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось запустить сверку');
+      setError(toUserErrorMessage(e, 'Не удалось запустить сверку'));
     }
   }
 

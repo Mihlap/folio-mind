@@ -109,6 +109,18 @@ export {
   type ExtractionFieldSchema,
 } from '@folio-mind/pdf-contracts';
 export { apiBaseUrl } from './api/baseApi.js';
+export {
+  formatUserError,
+  toUserErrorMessage,
+  extractErrorText,
+  extractErrorStatus,
+  MSG_NO_CONNECTION,
+  MSG_SERVICE_UNAVAILABLE,
+  MSG_GENERIC_ERROR,
+  MSG_AI_NOT_CONFIGURED,
+  MSG_JOB_NOT_FOUND,
+  MSG_DOCUMENT_NOT_FOUND,
+} from './api/formatUserError.js';
 export { uploadPdfVersion, type UploadPdfVersionArgs } from './lib/uploadPdfVersion.js';
 export { uploadRagSource, type UploadRagSourceArgs } from './lib/uploadRagSource.js';
 export { uploadSourceDocx } from './lib/uploadSourceDocx.js';

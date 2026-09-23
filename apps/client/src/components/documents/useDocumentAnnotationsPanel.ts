@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  toUserErrorMessage,
   useApplyAcceptedSuggestionsMutation,
   useApplyEditsFinalMutation,
   useCreateAnnotationMutation,
@@ -190,9 +191,10 @@ export function useDocumentAnnotationsPanel({
     if (applyJob.status === 'failed') {
       setPollApply(false);
       setApplyHint(
-        typeof applyJob.payload === 'object' && applyJob.payload && 'error' in applyJob.payload
-          ? String((applyJob.payload as { error?: string }).error)
-          : 'Не удалось собрать PDF с правками',
+        toUserErrorMessage(
+          applyJob.payload && 'error' in applyJob.payload ? applyJob.payload.error : null,
+          'Не удалось собрать PDF с правками',
+        ),
       );
     }
   }, [applyJob, refetchDocument]);
@@ -229,12 +231,12 @@ export function useDocumentAnnotationsPanel({
     }
     if (exportHighlightJob.status === 'failed') {
       setPollExportHighlight(false);
-      const rawError =
-        typeof exportHighlightJob.payload === 'object' &&
-        exportHighlightJob.payload &&
-        'error' in exportHighlightJob.payload
-          ? String((exportHighlightJob.payload as { error?: string }).error)
-          : 'Не удалось экспортировать DOCX с подсветкой';
+      const rawError = toUserErrorMessage(
+        exportHighlightJob.payload && 'error' in exportHighlightJob.payload
+          ? exportHighlightJob.payload.error
+          : null,
+        'Не удалось экспортировать DOCX с подсветкой',
+      );
       if (/не найден в DOCX/i.test(rawError)) {
         setError(null);
         setApplyHint(
@@ -293,7 +295,7 @@ export function useDocumentAnnotationsPanel({
       setContent('');
       void refetch();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить заметку');
+      setError(toUserErrorMessage(e, 'Не удалось сохранить заметку'));
     }
   }
 
@@ -344,7 +346,7 @@ export function useDocumentAnnotationsPanel({
     try {
       await createManualEdit(before, after, consumeCoords());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить правку');
+      setError(toUserErrorMessage(e, 'Не удалось сохранить правку'));
     }
   }
 
@@ -364,7 +366,7 @@ export function useDocumentAnnotationsPanel({
       await createManualEdit(conflictEdit.before, conflictEdit.after, conflictEdit.coords);
       setConflictEdit(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить правку');
+      setError(toUserErrorMessage(e, 'Не удалось сохранить правку'));
     } finally {
       setResolvingConflict(false);
     }
@@ -391,13 +393,7 @@ export function useDocumentAnnotationsPanel({
       setPollExportHighlight(true);
       setApplyHint('Готовим DOCX с подсветкой правок…');
     } catch (err) {
-      const msg =
-        typeof err === 'object' && err && 'data' in err
-          ? typeof (err as { data: unknown }).data === 'string'
-            ? (err as { data: string }).data
-            : 'Не удалось запустить экспорт DOCX'
-          : 'Не удалось запустить экспорт DOCX';
-      setError(msg);
+      setError(toUserErrorMessage(err, 'Не удалось запустить экспорт DOCX'));
     }
   }
 
@@ -427,13 +423,7 @@ export function useDocumentAnnotationsPanel({
       onSelectVersion(result.versionId);
       setApplyHint(`Версия ${result.version} создаётся — PDF появится через несколько секунд.`);
     } catch (err) {
-      const msg =
-        typeof err === 'object' && err && 'data' in err
-          ? typeof (err as { data: unknown }).data === 'string'
-            ? (err as { data: string }).data
-            : 'Не удалось применить правки'
-          : 'Не удалось применить правки';
-      setError(msg);
+      setError(toUserErrorMessage(err, 'Не удалось применить правки'));
     }
   }
 
@@ -480,13 +470,7 @@ export function useDocumentAnnotationsPanel({
       onSelectVersion(result.versionId);
       setApplyHint(`Создана версия ${result.version}. Собираем PDF…`);
     } catch (err) {
-      const msg =
-        typeof err === 'object' && err && 'data' in err
-          ? typeof (err as { data: unknown }).data === 'string'
-            ? (err as { data: string }).data
-            : 'Не удалось собрать PDF с правками'
-          : 'Не удалось собрать PDF с правками';
-      setError(msg);
+      setError(toUserErrorMessage(err, 'Не удалось собрать PDF с правками'));
     }
   }
 

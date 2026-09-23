@@ -35,10 +35,7 @@ export class GigaChatProvider implements LLMProvider {
     maxTokens?: number;
   }): Promise<CompletionResponse> {
     if (!this.config?.credentials) {
-      return {
-        text: `[GigaChat stub] PDF: ${params.filename ?? 'document.pdf'}`,
-        model: 'gigachat-stub',
-      };
+      throw new Error('ИИ-сервис не настроен: укажите ключ GigaChat на сервере');
     }
     const client = this.createClient();
     const filename = params.filename ?? 'document.pdf';
@@ -78,28 +75,7 @@ export class GigaChatProvider implements LLMProvider {
   }
   async complete(params: CompletionRequest): Promise<CompletionResponse> {
     if (!this.config?.credentials) {
-      if (params.system?.includes('"suggestions"')) {
-        return {
-          text: JSON.stringify({
-            suggestions: [
-              {
-                fragmentId: 'stub-1',
-                originalText: 'пример исходного текста',
-                suggestion: 'пример улучшенной формулировки',
-                reason: 'тестовая правка (stub)',
-                page: 1,
-              },
-            ],
-          }),
-          model: 'gigachat-stub',
-          usage: { promptTokens: 0, completionTokens: 0 },
-        };
-      }
-      return {
-        text: `[GigaChat stub] ${params.prompt.slice(0, 120)}…`,
-        model: 'gigachat-stub',
-        usage: { promptTokens: 0, completionTokens: 0 },
-      };
+      throw new Error('ИИ-сервис не настроен: укажите ключ GigaChat на сервере');
     }
     const client = this.createClient();
     const completion = await client.chat({

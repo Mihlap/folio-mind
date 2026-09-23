@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   OPTIMIZE_PRESET_INFO,
   OPTIMIZE_PRESETS,
+  toUserErrorMessage,
   useGetJobQuery,
   useGetVersionPreviewsQuery,
   useMergeVersionsMutation,
@@ -85,24 +86,7 @@ function parsePageNumbers(input: string, maxPage: number): number[] | string {
   return pages.sort((a, b) => a - b);
 }
 function getMutationError(err: unknown): string {
-  if (typeof err === 'object' && err && 'data' in err) {
-    const data = (
-      err as {
-        data?: unknown;
-      }
-    ).data;
-    if (typeof data === 'string') return data;
-    if (typeof data === 'object' && data && 'error' in data) {
-      return String(
-        (
-          data as {
-            error: string;
-          }
-        ).error,
-      );
-    }
-  }
-  return 'Не удалось выполнить операцию';
+  return toUserErrorMessage(err, 'Не удалось выполнить операцию');
 }
 type ToolGroupId = 'pdf' | 'layout' | 'approval' | 'edits';
 const TOOL_GROUP_IDS: ToolGroupId[] = ['pdf', 'layout', 'approval', 'edits'];
@@ -352,17 +336,12 @@ export function DocumentPdfOperationsPanel({
       setOperationJobId(null);
       setTargetVersionId(null);
       const payload = operationJob.payload;
-      const msg =
-        typeof payload === 'object' && payload && 'error' in payload
-          ? String(
-              (
-                payload as {
-                  error?: string;
-                }
-              ).error ?? 'Операция завершилась с ошибкой',
-            )
-          : 'Операция завершилась с ошибкой';
-      setOperationError(msg);
+      setOperationError(
+        toUserErrorMessage(
+          payload && 'error' in payload ? payload.error : undefined,
+          'Операция завершилась с ошибкой',
+        ),
+      );
       setStatusHint(null);
       setStatusHintVersionId(null);
     }
