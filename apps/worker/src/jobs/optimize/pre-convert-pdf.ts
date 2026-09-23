@@ -2,6 +2,7 @@ import { isDocxBuffer, preConvertedDocxKey } from '@folio-mind/pdf-contracts';
 import type { WorkerJobPayload } from '../../lib/config/job-types.js';
 import type { WorkerEnv } from '../../lib/config/env.js';
 import { convertPdfToDocx, isPdfToDocxConfigured } from '../../lib/convert/pdf-to-docx.js';
+import { storeDocxLayoutRisk } from '../../lib/convert/docx-layout-risk.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import { getObjectBuffer, isWorkerS3Configured, putObjectBuffer } from '../../lib/storage/s3.js';
 type PreConvertPayload = WorkerJobPayload & {
@@ -57,6 +58,11 @@ export async function processPreConvertPdfJob(
       body: docxBuffer,
       contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
+    try {
+      await storeDocxLayoutRisk({ docxBuffer, documentId, versionId });
+    } catch (err) {
+      console.warn(`[pre-convert] layout risk store failed for version ${versionId}:`, err);
+    }
     console.log(`[pre-convert] PDF→DOCX done for version ${versionId}`, { docxS3Key });
   } catch (err) {
     console.warn(`[pre-convert] PDF→DOCX failed for version ${versionId}:`, err);

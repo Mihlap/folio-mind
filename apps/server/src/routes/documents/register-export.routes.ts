@@ -7,6 +7,8 @@ import {
   exportBookletZipKey,
   exportPagesZipKey,
   preConvertedDocxKey,
+  preConvertedDocxRiskKey,
+  type DocxLayoutRisk,
 } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
 import type { Env } from '../../lib/config/env.js';
@@ -16,7 +18,12 @@ import {
   enqueueExportPagesJob,
   enqueuePrintReadinessJob,
 } from '../../lib/queue/queue.js';
-import { getPresignedGetUrl, isS3Configured, s3ObjectExists } from '../../lib/storage/s3.js';
+import {
+  getPresignedGetUrl,
+  isS3Configured,
+  s3ObjectExists,
+  tryGetObjectBuffer,
+} from '../../lib/storage/s3.js';
 import { errorBody } from './schemas.js';
 
 const exportPagesBodySchema = z.object({
@@ -368,7 +375,11 @@ export const registerExportRoutes: FastifyPluginAsync<{ env: Env }> = async (app
       schema: {
         params: z.object({ documentId: z.string(), versionId: z.string() }),
         response: {
-          200: z.object({ url: z.string(), expiresInSeconds: z.number() }),
+          200: z.object({
+            url: z.string(),
+            expiresInSeconds: z.number(),
+            layoutRisk: z.enum(['images', 'deck', 'mixed']).nullable(),
+          }),
           404: errorBody,
           503: errorBody,
         },
@@ -389,6 +400,18 @@ export const registerExportRoutes: FastifyPluginAsync<{ env: Env }> = async (app
       }
       const expiresInSeconds = 3600;
       const url = await getPresignedGetUrl({ key: docxKey, expiresInSeconds });
+      let layoutRisk: DocxLayoutRisk = null;
+      const riskBuffer = await tryGetObjectBuffer(
+        preConvertedDocxRiskKey(resolved.document.id, resolved.version.id),
+      );
+      if (riskBuffer) {
+        try {
+          const parsed = JSON.parse(riskBuffer.toString('utf8')) as { risk?: DocxLayoutRisk };
+          layoutRisk = parsed.risk ?? null;
+        } catch {
+          layoutRisk = null;
+        }
+      }
       await app.prisma.auditLog.create({
         data: {
           action: 'document.download_converted_docx',
@@ -398,7 +421,7 @@ export const registerExportRoutes: FastifyPluginAsync<{ env: Env }> = async (app
           meta: { versionId: resolved.version.id, docxKey },
         },
       });
-      return { url, expiresInSeconds };
+      return { url, expiresInSeconds, layoutRisk };
     },
   );
 };
