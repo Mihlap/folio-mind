@@ -1,16 +1,11 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  setCredentials,
-  useAcceptTenantInviteMutation,
-  useLoginMutation,
-} from '@folio-mind/store';
+import { setCredentials, useAcceptTenantInviteMutation, useLoginMutation } from '@folio-mind/store';
 import { useAppDispatch } from '../../hooks/index.js';
 import { Button } from '../../components/ui/Button.js';
 import { PasswordInput } from '../../components/auth/PasswordInput.js';
 import { TurnstileWidget } from '../../components/auth/TurnstileWidget.js';
-// import { OAuthButtons } from '../../components/auth/OAuthButtons.js';
-// import { PhoneAuthForm } from '../../components/auth/PhoneAuthForm.js';
+
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
@@ -18,8 +13,6 @@ import {
   clearPendingVerifyEmail,
   getPendingVerifyEmail,
 } from '../../lib/auth/pending-verify-email.js';
-
-// type AuthTab = 'email' | 'phone';
 
 type TenantInvitePreview = {
   valid: true;
@@ -32,7 +25,7 @@ type TenantInvitePreview = {
 export function LoginPage() {
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get('invite')?.trim() || null;
-  // const [tab, setTab] = useState<AuthTab>('email');
+
   const [login, { isLoading, error }] = useLoginMutation();
   const [acceptTenantInvite] = useAcceptTenantInviteMutation();
   const dispatch = useAppDispatch();
@@ -49,9 +42,7 @@ export function LoginPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(
-          `/api/auth/tenant-invite?token=${encodeURIComponent(inviteToken)}`,
-        );
+        const res = await fetch(`/api/auth/tenant-invite?token=${encodeURIComponent(inviteToken)}`);
         if (!res.ok) {
           if (!cancelled) setInviteError('Ссылка приглашения недействительна или истекла');
           return;
@@ -106,9 +97,7 @@ export function LoginPage() {
             return;
           }
         } catch (acceptErr) {
-          setInviteAcceptError(
-            getAuthErrorMessage(acceptErr, 'Не удалось принять приглашение'),
-          );
+          setInviteAcceptError(getAuthErrorMessage(acceptErr, 'Не удалось принять приглашение'));
         }
       }
 

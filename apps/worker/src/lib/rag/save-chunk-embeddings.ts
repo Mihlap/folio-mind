@@ -9,20 +9,13 @@ type PrismaLike = {
   $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
 };
 
-/**
- * Save embeddings for RagChunk / DocumentChunk rows.
- * Uses provider when available and dim=384; otherwise local. Never throws per-row.
- */
 export async function saveChunkEmbeddings(
   prisma: PrismaLike,
   table: '"RagChunk"' | '"DocumentChunk"',
   rows: Array<{ id: string; content: string }>,
   provider?: LLMProvider | null,
 ): Promise<{ providerCount: number; localCount: number }> {
-  const embed =
-    provider?.embed != null
-      ? (text: string) => provider.embed!(text)
-      : undefined;
+  const embed = provider?.embed != null ? (text: string) => provider.embed!(text) : undefined;
 
   let providerCount = 0;
   let localCount = 0;

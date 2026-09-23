@@ -33,10 +33,6 @@ function buildPageAwareChunks(pages: PageText[]): PageChunk[] {
   return result;
 }
 
-/**
- * Index a document version into DocumentChunk for RAG chat.
- * Safe to call from preview pipeline (best-effort) or as a dedicated job.
- */
 export async function indexDocumentVersionChunks(params: {
   env: WorkerEnv;
   documentId: string;

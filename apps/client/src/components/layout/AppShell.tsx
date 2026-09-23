@@ -22,7 +22,6 @@ type NavLinkItem = {
 
 type NavEntry = NavLinkItem | { type: 'divider' };
 
-/** Регламенты → проекты/документы → медиатека */
 const nav: NavEntry[] = [
   { type: 'link', to: '/app/regulations', label: 'Регламенты', end: true, icon: '📋' },
   { type: 'divider' },
@@ -92,7 +91,11 @@ export function AppShell() {
   }, []);
 
   return (
-    <div data-app-root style={{ overflow: 'hidden' }} className="flex flex-col bg-slate-50 md:flex-row">
+    <div
+      data-app-root
+      style={{ overflow: 'hidden' }}
+      className="flex flex-col bg-slate-50 md:flex-row"
+    >
       <aside
         ref={sidebarRef}
         style={{ width: sidebar.collapsed ? undefined : sidebar.panelWidth }}
@@ -211,13 +214,19 @@ export function AppShell() {
         )}
       </aside>
 
-      <aside className={`flex w-full shrink-0 flex-col border-b border-slate-200 bg-white md:hidden ${isDocumentPage ? 'hidden' : ''}`}>
+      <aside
+        className={`flex w-full shrink-0 flex-col border-b border-slate-200 bg-white md:hidden ${isDocumentPage ? 'hidden' : ''}`}
+      >
         <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
             <span className="font-display text-lg text-folio-950">РазУм</span>
             <p className="mt-0.5 truncate text-[10px] text-slate-500">{me?.email}</p>
           </div>
-          <Button variant="ghost" className="shrink-0 px-2 py-1 text-xs" onClick={() => dispatch(logout())}>
+          <Button
+            variant="ghost"
+            className="shrink-0 px-2 py-1 text-xs"
+            onClick={() => dispatch(logout())}
+          >
             Выйти
           </Button>
         </div>
@@ -225,10 +234,9 @@ export function AppShell() {
           <div className="flex min-w-max items-center gap-1">
             {navLinks.map((item, index) => (
               <Fragment key={item.label}>
-                {index > 0 &&
-                  (item.to === '/app/projects' || item.to === '/app/media') && (
-                    <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" aria-hidden />
-                  )}
+                {index > 0 && (item.to === '/app/projects' || item.to === '/app/media') && (
+                  <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" aria-hidden />
+                )}
                 <NavLink
                   to={item.to}
                   end={item.end}

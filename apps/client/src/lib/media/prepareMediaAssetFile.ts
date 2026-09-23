@@ -13,7 +13,6 @@ export type PreparedMediaFile = {
   wasOptimized: boolean;
 };
 
-/** Сжимать файлы больше этого порога (2 МБ). */
 const COMPRESS_IF_LARGER_THAN_BYTES = 2 * 1024 * 1024;
 
 function replaceExt(name: string, ext: string): string {
@@ -47,15 +46,10 @@ function imageHasAlpha(ctx: CanvasRenderingContext2D, width: number, height: num
   return false;
 }
 
-function canvasToBlob(
-  canvas: HTMLCanvasElement,
-  type: string,
-  quality?: number,
-): Promise<Blob> {
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) =>
-        blob ? resolve(blob) : reject(new Error('Не удалось сжать изображение')),
+      (blob) => (blob ? resolve(blob) : reject(new Error('Не удалось сжать изображение'))),
       type,
       quality,
     );
@@ -89,9 +83,6 @@ async function rasterizeToFile(
   return new File([blob], replaceExt(sourceName, '.jpg'), { type: 'image/jpeg' });
 }
 
-/**
- * Проверяет лимиты и при необходимости сжимает изображение перед загрузкой в медиатеку.
- */
 export async function prepareMediaAssetFile(file: File): Promise<PreparedMediaFile> {
   const img = await loadImageFromFile(file);
   const width = img.naturalWidth;
@@ -114,8 +105,7 @@ export async function prepareMediaAssetFile(file: File): Promise<PreparedMediaFi
     return { file, width, height, wasOptimized: false };
   }
 
-  const scale =
-    longest > MEDIA_STORE_MAX_PIXEL_SIDE ? MEDIA_STORE_MAX_PIXEL_SIDE / longest : 1;
+  const scale = longest > MEDIA_STORE_MAX_PIXEL_SIDE ? MEDIA_STORE_MAX_PIXEL_SIDE / longest : 1;
   const targetW = Math.max(1, Math.round(width * scale));
   const targetH = Math.max(1, Math.round(height * scale));
   const preferPng = file.type === 'image/png' || /\.png$/i.test(file.name);

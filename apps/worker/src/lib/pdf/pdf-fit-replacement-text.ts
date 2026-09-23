@@ -93,7 +93,6 @@ function placeWrappedAtLayout(
   }));
 }
 
-/** Подбирает перенос и размер шрифта, чтобы текст остался на той же странице. */
 export function fitReplacementOnPage(params: {
   font: PDFFont;
   text: string;
@@ -139,7 +138,6 @@ export function fitReplacementOnPage(params: {
   };
 }
 
-/** Переносит абзац по ширине страницы и ставит строки на Y исходного PDF. */
 export function fitReplacementAtLayoutLines(params: {
   font: PDFFont;
   text: string;

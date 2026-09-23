@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   buildExtractionDisplayRows,
   formatExtractionPlainText,
+  toUserErrorMessage,
+  MSG_JOB_NOT_FOUND,
   useGetExtractionTemplatesQuery,
   useGetJobQuery,
   useRequestDocumentExtractMutation,
@@ -47,7 +49,7 @@ export function DocumentExtractPanel({ documentId, versionId, versionReady }: Pr
   const [error, setError] = useState<string | null>(null);
   const [copiedHint, setCopiedHint] = useState(false);
 
-  const { data: job } = useGetJobQuery(jobId!, {
+  const { data: job, isError: pollError } = useGetJobQuery(jobId!, {
     skip: !jobId,
     pollingInterval: pollJob ? 2000 : 0,
   });
@@ -123,12 +125,20 @@ export function DocumentExtractPanel({ documentId, versionId, versionReady }: Pr
     if (job.status === 'failed') {
       setPollJob(false);
       setError(
-        typeof job.payload === 'object' && job.payload && 'error' in job.payload
-          ? String((job.payload as { error?: string }).error ?? 'Извлечение не выполнено')
-          : 'Извлечение не выполнено',
+        toUserErrorMessage(
+          job.payload && 'error' in job.payload ? job.payload.error : undefined,
+          'Извлечение не выполнено',
+        ),
       );
     }
   }, [job, templateId]);
+
+  useEffect(() => {
+    if (pollError && !job) {
+      setPollJob(false);
+      setError(MSG_JOB_NOT_FOUND);
+    }
+  }, [pollError, job]);
 
   const jsonText = useMemo(
     () => (extracted ? JSON.stringify(extracted, null, 2) : ''),
@@ -155,7 +165,7 @@ export function DocumentExtractPanel({ documentId, versionId, versionReady }: Pr
       setJobId(result.jobId);
       setPollJob(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось запустить извлечение');
+      setError(toUserErrorMessage(e, 'Не удалось запустить извлечение'));
     }
   }
 

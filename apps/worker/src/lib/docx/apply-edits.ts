@@ -22,7 +22,7 @@ function stripIllegalXmlControls(text: string): string {
   let out = '';
   for (let i = 0; i < text.length; i += 1) {
     const code = text.charCodeAt(i);
-    // XML 1.0 allows TAB (0x09), LF (0x0A), CR (0x0D); other C0 controls are illegal.
+
     if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) continue;
     out += text[i];
   }
@@ -460,9 +460,7 @@ function insertMultilineParagraphsReplacement(
   if (!coversWholeParagraph) return null;
 
   const rPr = extractRunPr(xml, startRunOpen);
-  const paragraphs = lines
-    .map((line) => `<w:p>${pPr}${buildStyledRun(rPr, line)}</w:p>`)
-    .join('');
+  const paragraphs = lines.map((line) => `<w:p>${pPr}${buildStyledRun(rPr, line)}</w:p>`).join('');
   return xml.slice(0, paraStart) + paragraphs + xml.slice(paraEnd + '</w:p>'.length);
 }
 
@@ -782,7 +780,7 @@ export async function applyEditsToDocx(
     const replacementRuns =
       options?.mode === 'highlight'
         ? null
-        : edit.suggestionRunsXml ?? plainMultilineToDocxXml(replacementPlain);
+        : (edit.suggestionRunsXml ?? plainMultilineToDocxXml(replacementPlain));
     const highlightPlain = options?.mode === 'highlight' ? replacementPlain : null;
     for (const path of partPaths) {
       const xml = partXml.get(path);

@@ -7,7 +7,6 @@ export type PageTextHint = {
   text: string;
 };
 
-/** Загружает text.json для версии (если есть). */
 export async function loadPageTextHints(
   documentId: string,
   versionId: string,
@@ -22,9 +21,6 @@ export async function loadPageTextHints(
   }
 }
 
-/**
- * Расширяет фразу «было» контекстом со страницы PDF — помогает выбрать одно вхождение в DOCX.
- */
 export function buildPageContextSearchVariants(
   pageText: string | undefined,
   originalText: string,
@@ -53,9 +49,6 @@ export function buildPageContextSearchVariants(
   return [...new Set(variants.filter((v) => v.length > originalText.length))];
 }
 
-export function getPageTextForEdit(
-  hints: PageTextHint[],
-  page: number,
-): string | undefined {
+export function getPageTextForEdit(hints: PageTextHint[], page: number): string | undefined {
   return hints.find((h) => h.page === page)?.text;
 }

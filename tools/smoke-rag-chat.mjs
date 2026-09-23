@@ -1,14 +1,3 @@
-/**
- * Smoke: длинный PDF → индекс чанков → RAG-чат с источниками (цитатой).
- *
- * Требует: API + worker + S3 + Postgres (+ настроенный AI_PROVIDER для полного ответа).
- * Env:
- *   SMOKE_API_URL (default http://localhost:3001)
- *   SMOKE_PAGES (default 120)
- *   SMOKE_MARKER_PAGE (default 87)
- *   SMOKE_CHAT_TIMEOUT_MS (default 180000)
- *   SMOKE_INDEX_TIMEOUT_MS (default 180000)
- */
 const API = process.env.SMOKE_API_URL ?? 'http://localhost:3001';
 const PAGE_COUNT = Number(process.env.SMOKE_PAGES ?? 120);
 const MARKER_PAGE = Number(process.env.SMOKE_MARKER_PAGE ?? 87);
@@ -16,7 +5,7 @@ const INDEX_TIMEOUT_MS = Number(process.env.SMOKE_INDEX_TIMEOUT_MS ?? 180_000);
 const CHAT_TIMEOUT_MS = Number(process.env.SMOKE_CHAT_TIMEOUT_MS ?? 180_000);
 const PREVIEW_TIMEOUT_MS = Number(process.env.SMOKE_PREVIEW_TIMEOUT_MS ?? 180_000);
 const SMOKE_PASSWORD = 'Smoke-test-pass-123';
-/** Латиница: Type1 Helvetica в synthetic PDF не держит кириллицу для extract. */
+
 const MARKER = 'ALPHA-MARKER-8841';
 const MARKER_CLAUSE = `Article 17. Special late-payment penalty ${MARKER} equals 0.1 percent per each day of delay.`;
 
@@ -50,7 +39,9 @@ function buildLongContractPdf(totalPages, markerPage) {
           ];
     const stream =
       'BT /F1 12 Tf 50 800 Td ' +
-      lines.map((line, i) => (i === 0 ? `(${esc(line)}) Tj` : `0 -18 Td (${esc(line)}) Tj`)).join(' ') +
+      lines
+        .map((line, i) => (i === 0 ? `(${esc(line)}) Tj` : `0 -18 Td (${esc(line)}) Tj`))
+        .join(' ') +
       ' ET\n';
     const len = Buffer.byteLength(stream, 'utf8');
     pageParts.push(
@@ -204,7 +195,9 @@ async function waitForChunks(versionId, minCount = 3) {
       }
       await sleep(2000);
     }
-    throw new Error(`DocumentChunk index timeout (need >= ${minCount}) after ${INDEX_TIMEOUT_MS}ms`);
+    throw new Error(
+      `DocumentChunk index timeout (need >= ${minCount}) after ${INDEX_TIMEOUT_MS}ms`,
+    );
   } finally {
     await prisma.$disconnect();
   }
@@ -276,9 +269,7 @@ async function main() {
   assert(sources.length > 0, 'Нет sources (цитат) в ответе RAG-чата');
 
   const sourceHit = sources.some(
-    (s) =>
-      (typeof s.excerpt === 'string' && s.excerpt.includes(MARKER)) ||
-      s.page === MARKER_PAGE,
+    (s) => (typeof s.excerpt === 'string' && s.excerpt.includes(MARKER)) || s.page === MARKER_PAGE,
   );
   assert(sourceHit, `Sources не содержат маркер ${MARKER} и/или стр. ${MARKER_PAGE}`);
 

@@ -9,7 +9,6 @@ import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
 import { DocumentAnnotationsContext } from './DocumentAnnotationsPanel.js';
 
-/** Кнопки сборки/применения правок — внизу всего блока «Правки». */
 export function DocumentEditsApplyActions() {
   const c = useContext(DocumentAnnotationsContext);
   if (!c) return null;
@@ -49,8 +48,8 @@ export function DocumentEditsApplyActions() {
           buttonClassName={reportActionBtnHighlight}
           helpContent={
             <p>
-              Создаёт новую версию с реестром правок. Исходный текст на страницах PDF не переписывается
-              — рабочая версия для согласования.
+              Создаёт новую версию с реестром правок. Исходный текст на страницах PDF не
+              переписывается — рабочая версия для согласования.
             </p>
           }
         >
@@ -64,8 +63,8 @@ export function DocumentEditsApplyActions() {
           helpContent={
             <>
               <p>
-                Создаёт новую версию с изменённым текстом. При наличии Word правки вносятся в документ
-                и PDF пересобирается из Word.
+                Создаёт новую версию с изменённым текстом. При наличии Word правки вносятся в
+                документ и PDF пересобирается из Word.
               </p>
               {hasSourceDocx ? (
                 <p>При загруженном DOCX PDF и Word совпадут по тексту правок.</p>
@@ -94,23 +93,24 @@ export function DocumentEditsApplyActions() {
             hasSourceDocx ? (
               <>
                 <p>
-                  Word-файл с подсветкой: «Было» — жёлтым, «Стало» — зелёным рядом. Текст в документе не
-                  заменяется, удобно для ручной правки.
+                  Word-файл с подсветкой: «Было» — жёлтым, «Стало» — зелёным рядом. Текст в
+                  документе не заменяется, удобно для ручной правки.
                 </p>
                 <p>Исходный DOCX прикреплён — совпадение с полем «Было» обычно надёжное.</p>
               </>
             ) : (
               <>
                 <p>
-                  Word-файл с подсветкой принятых правок — для ручной доработки без автозамены текста.
+                  Word-файл с подсветкой принятых правок — для ручной доработки без автозамены
+                  текста.
                 </p>
                 <p>
                   Без исходного DOCX система конвертирует PDF→Word автоматически; текст в Word часто
                   не совпадает с выделением в PDF, и подсветка может не сработать.
                 </p>
                 <p>
-                  Если DOCX недоступен, используйте «Собрать PDF с правками» (красные рамки на исходном
-                  PDF) или «Применить правки» (наложение на PDF).
+                  Если DOCX недоступен, используйте «Собрать PDF с правками» (красные рамки на
+                  исходном PDF) или «Применить правки» (наложение на PDF).
                 </p>
               </>
             )

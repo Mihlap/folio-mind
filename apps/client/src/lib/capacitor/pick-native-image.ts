@@ -18,15 +18,10 @@ function extForMime(mime: string): string {
   return 'jpg';
 }
 
-/** Доступна ли съёмка/галерея через Capacitor Camera. */
 export function canUseNativeCamera(): boolean {
   return isNativeApp() && isCapacitorPluginAvailable('Camera');
 }
 
-/**
- * Снимок или выбор из галереи → File для существующего upload pipeline медиатеки.
- * На web не вызывается (кнопки скрыты).
- */
 export async function pickNativeImageFile(source: NativeImageSource): Promise<File> {
   const photo = await Camera.getPhoto({
     quality: 85,

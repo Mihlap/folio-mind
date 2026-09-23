@@ -81,7 +81,6 @@ export function collectAcceptedEditsForPdf(
   return deduped;
 }
 
-/** Конфликтующие правки на одном месте: оставляем последнюю (по порядку создания). */
 export function dedupeAcceptedEdits(edits: CollectedAcceptedEdit[]): CollectedAcceptedEdit[] {
   const seen = new Set<string>();
   const deduped: CollectedAcceptedEdit[] = [];

@@ -22,12 +22,10 @@ function segmentToDocxRun(segment: InlineSegment): string {
   return `<w:r>${rPr}<w:t${preserve}>${escapeXml(segment.text)}</w:t></w:r>`;
 }
 
-/** Inline Markdown → фрагмент OOXML (набор <w:r>). */
 export function markdownInlineToDocxXml(text: string): string {
   return parseInlineMarkdown(text).map(segmentToDocxRun).join('');
 }
 
-/** Несколько строк plain text → OOXML с переносами <w:br/>. */
 export function plainMultilineToDocxXml(text: string): string | null {
   const lines = text
     .split('\n')

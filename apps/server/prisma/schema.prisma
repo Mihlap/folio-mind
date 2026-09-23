@@ -319,9 +319,9 @@ model DocumentVersion {
   confidenceSummary   String?
   confidenceDetails   Json?
   confidenceAnalyzedAt DateTime?
-  /// pdfjs | vision-ocr
+
   textSource           String?
-  /// queued | processing | ready | failed | skipped | not_needed
+
   visionOcrStatus      String?
   createdAt  DateTime @default(now())
   chunks     DocumentChunk[]

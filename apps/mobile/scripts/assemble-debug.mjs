@@ -1,7 +1,3 @@
-/**
- * CLI-сборка debug APK без GUI Android Studio.
- * Требует: ANDROID_HOME / %LOCALAPPDATA%\Android\Sdk, JDK (Studio jbr).
- */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';

@@ -3,7 +3,6 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 type Props = { children: ReactNode; label?: string };
 type State = { error: Error | null };
 
-/** Ловит uncaught render errors — иначе на Capacitor WebView пустой #root. */
 export class AppErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
 

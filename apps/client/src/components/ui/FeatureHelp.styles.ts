@@ -1,7 +1,7 @@
 export const reportActionBtnBase =
   'inline-flex min-h-8 min-w-0 max-w-full cursor-pointer items-center justify-center rounded-md px-3 py-1.5 text-xs font-medium leading-snug transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-[14rem]';
 export const reportActionBtnPrimary = `${reportActionBtnBase} bg-folio-600 text-white hover:bg-folio-700`;
-/** Как primary, но без ограничения ширины — для парных кнопок в колонке. */
+
 export const reportActionBtnPrimaryStretch = reportActionBtnPrimary.replace(
   ' sm:max-w-[14rem]',
   '',

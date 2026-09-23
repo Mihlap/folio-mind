@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
   BOOKLET_EXPORT_DEFAULT_JPEG_DPI,
+  toUserErrorMessage,
+  MSG_JOB_NOT_FOUND,
   useConvertPdfToDocxMutation,
   useExportBookletMutation,
   useExportPagesMutation,
@@ -54,10 +56,18 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
   const [fetchPagesUrl] = useLazyGetPagesExportUrlQuery();
   const [fetchBookletUrl] = useLazyGetBookletExportUrlQuery();
 
-  const { data: job } = useGetJobQuery(activeJobId!, {
+  const { data: job, isError: pollError } = useGetJobQuery(activeJobId!, {
     skip: !activeJobId,
     pollingInterval: activeJobId ? 2000 : 0,
   });
+
+  useEffect(() => {
+    if (pollError && !job && activeJobId) {
+      setError(MSG_JOB_NOT_FOUND);
+      setActiveJobId(null);
+      setJobKind(null);
+    }
+  }, [pollError, job, activeJobId]);
 
   const busy = converting || exportingPages || exportingBooklet || Boolean(activeJobId);
   const pageCount = version.pageCount ?? 0;
@@ -104,7 +114,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
     }
     if (job.status === 'failed') {
       const payload = job.payload as { error?: string } | null;
-      setError(payload?.error ?? 'Не удалось выполнить операцию.');
+      setError(toUserErrorMessage(payload?.error, 'Не удалось выполнить операцию.'));
       setActiveJobId(null);
       setJobKind(null);
     }
@@ -161,7 +171,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
         }
         await openDocxUrl(fetchConvertedDocx);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Не удалось конвертировать PDF в DOCX');
+        setError(toUserErrorMessage(err, 'Не удалось конвертировать PDF в DOCX'));
       }
     }
   }
@@ -182,7 +192,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
       setActiveJobId(result.operationJobId);
       setStatusHint(`Готовим ${allPages.length} стр. в ${imageFormat.toUpperCase()}…`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось экспортировать страницы');
+      setError(toUserErrorMessage(err, 'Не удалось экспортировать страницы'));
     }
   }
 
@@ -200,7 +210,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
       setActiveJobId(result.operationJobId);
       setStatusHint('Собираем ZIP: PDF и JPG по каждой странице…');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось собрать ZIP-пакет');
+      setError(toUserErrorMessage(err, 'Не удалось собрать ZIP-пакет'));
     }
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { useApplyLayoutPdfMutation, useGetJobQuery, LAYOUT_MARGIN_PRESETS, isLayoutImageObject, isLayoutShapeObject, DEFAULT_LAYOUT_SOLID_FILL, DEFAULT_LAYOUT_GRADIENT_FILL, HINT_LAYOUT_SAVE_NEW_VERSION, HINT_LAYOUT_SAVE_REPLACE_CURRENT, msgNewVersionStarted, msgReplaceCurrentStarted, formatProcessingWaitMessage } from '@folio-mind/store';
+import { useApplyLayoutPdfMutation, useGetJobQuery, toUserErrorMessage, LAYOUT_MARGIN_PRESETS, isLayoutImageObject, isLayoutShapeObject, DEFAULT_LAYOUT_SOLID_FILL, DEFAULT_LAYOUT_GRADIENT_FILL, HINT_LAYOUT_SAVE_NEW_VERSION, HINT_LAYOUT_SAVE_REPLACE_CURRENT, msgNewVersionStarted, msgReplaceCurrentStarted, formatProcessingWaitMessage } from '@folio-mind/store';
 import { normalizeLayoutObjectsForPdf, estimateLayoutObjectsBytes } from '../../lib/layout/normalizeLayoutImage.js';
 import { FeatureHelpActionButton, FeatureHelpButton } from '../ui/FeatureHelp.js';
 import {
@@ -40,19 +40,7 @@ function getMutationError(err: unknown): string {
       return 'Изображения слишком большие для отправки. Удалите лишние или используйте файлы меньшего размера.';
     }
   }
-  if (typeof err === 'object' && err && 'data' in err) {
-    const data = (err as { data?: unknown }).data;
-    if (typeof data === 'string') {
-      if (/payload too large/i.test(data)) {
-        return 'Изображения слишком большие для отправки. Удалите лишние или уменьшите файлы.';
-      }
-      return data;
-    }
-    if (typeof data === 'object' && data && 'error' in data) {
-      return String((data as { error: string }).error);
-    }
-  }
-  return 'Не удалось сохранить макет';
+  return toUserErrorMessage(err, 'Не удалось сохранить макет');
 }
 
 export function DocumentLayoutPanel({
@@ -125,11 +113,12 @@ export function DocumentLayoutPanel({
       setOperationJobId(null);
       setTargetVersionId(null);
       const payload = operationJob.payload;
-      const msg =
-        typeof payload === 'object' && payload && 'error' in payload
-          ? String((payload as { error?: string }).error ?? 'Операция завершилась с ошибкой')
-          : 'Операция завершилась с ошибкой';
-      setError(msg);
+      setError(
+        toUserErrorMessage(
+          payload && 'error' in payload ? payload.error : undefined,
+          'Операция завершилась с ошибкой',
+        ),
+      );
     }
   }, [layout, onSelectVersion, operationJob, operationJobId, targetVersionId]);
 

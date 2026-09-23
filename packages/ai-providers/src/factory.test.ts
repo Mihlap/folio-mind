@@ -6,9 +6,8 @@ describe('createLLMProvider', () => {
     expect(p.id).toBe('gigachat');
     expect(await p.healthCheck()).toBe(false);
   });
-  it('completes with stub text', async () => {
+  it('throws a user-friendly error without credentials', async () => {
     const p = createLLMProvider('yandex');
-    const res = await p.complete({ prompt: 'test prompt' });
-    expect(res.text).toContain('YandexGPT stub');
+    await expect(p.complete({ prompt: 'test prompt' })).rejects.toThrow('ИИ-сервис');
   });
 });

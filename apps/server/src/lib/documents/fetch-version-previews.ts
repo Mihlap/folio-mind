@@ -33,7 +33,7 @@ export async function fetchVersionPreviews(params: {
   requestId?: string;
   enqueueMissing?: boolean;
   variant?: PreviewPageVariant;
-  /** Для гостевого просмотра: пока нет view, отдать thumb и поставить догенерацию view. */
+
   allowThumbFallback?: boolean;
 }): Promise<VersionPreviewsResult> {
   const {

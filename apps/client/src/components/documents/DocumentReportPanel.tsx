@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
+  toUserErrorMessage,
+  MSG_JOB_NOT_FOUND,
   useExportReportMutation,
   useGetAiProvidersQuery,
   useGetJobQuery,
@@ -46,7 +48,7 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
   const [exportFormatLoading, setExportFormatLoading] = useState<'pdf' | 'word' | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const { data: summaryJob } = useGetJobQuery(summaryJobId!, {
+  const { data: summaryJob, isError: summaryPollError } = useGetJobQuery(summaryJobId!, {
     skip: !summaryJobId,
     pollingInterval: pollSummary ? 2000 : 0,
   });
@@ -86,22 +88,23 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
         setSummary(summaryJob.payload.summary);
       }
       if (summaryJob.status === 'failed') {
-        const msg =
-          typeof summaryJob.payload === 'object' &&
-          summaryJob.payload &&
-          'error' in summaryJob.payload
-            ? String(
-                (
-                  summaryJob.payload as {
-                    error?: string;
-                  }
-                ).error ?? 'Не удалось получить пересказ',
-              )
-            : 'Не удалось получить пересказ';
+        const msg = toUserErrorMessage(
+          summaryJob.payload && 'error' in summaryJob.payload
+            ? summaryJob.payload.error
+            : null,
+          'Не удалось получить пересказ',
+        );
         setSummaryError(msg);
       }
     }
   }, [summaryJob?.payload, summaryJob?.status]);
+
+  useEffect(() => {
+    if (summaryPollError && !summaryJob) {
+      setPollSummary(false);
+      setSummaryError(MSG_JOB_NOT_FOUND);
+    }
+  }, [summaryPollError, summaryJob]);
 
   function handleDismissSummary() {
     setSummaryJobId(null);
@@ -136,9 +139,7 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
                 setSummaryJobId(result.jobId);
                 setPollSummary(result.status !== 'completed');
               } catch (error) {
-                setSummaryError(
-                  error instanceof Error ? error.message : 'Не удалось получить пересказ',
-                );
+                setSummaryError(toUserErrorMessage(error, 'Не удалось получить пересказ'));
               }
             }}
             className={reportActionBtnSoft}
@@ -178,9 +179,7 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
               }).unwrap();
               openDownloadUrl(result.url, '_blank');
             } catch (error) {
-              setExportError(
-                error instanceof Error ? error.message : 'Не удалось экспортировать отчёт PDF',
-              );
+              setExportError(toUserErrorMessage(error, 'Не удалось экспортировать отчёт PDF'));
             } finally {
               setExportFormatLoading(null);
             }
@@ -206,9 +205,7 @@ export function DocumentReportPanel({ documentId, versionId, versionReady }: Pro
               }).unwrap();
               openDownloadUrl(result.url, '_self');
             } catch (error) {
-              setExportError(
-                error instanceof Error ? error.message : 'Не удалось экспортировать отчёт Word',
-              );
+              setExportError(toUserErrorMessage(error, 'Не удалось экспортировать отчёт Word'));
             } finally {
               setExportFormatLoading(null);
             }

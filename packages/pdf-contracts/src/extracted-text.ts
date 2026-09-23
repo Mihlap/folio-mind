@@ -9,7 +9,7 @@ export type ExtractedDocumentText = {
   text: string;
   pages: PageText[];
   extractedAt?: string;
-  /** How text was obtained. Older caches omit this — treat as pdfjs. */
+
   source?: ExtractedTextSource;
 };
 
@@ -49,4 +49,3 @@ export function parseExtractedTextJson(raw: string): ExtractedDocumentText {
     source,
   };
 }
-

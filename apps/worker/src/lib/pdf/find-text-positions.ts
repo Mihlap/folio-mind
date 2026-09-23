@@ -50,9 +50,9 @@ function stripListMarkerForSearch(line: string): string {
     .trim();
 }
 function looksLikeListQuote(searchText: string): boolean {
-  return searchText.split(/\n+/).some((line) =>
-    /^\s*([-*+•●\uF0B7]|\d+[.)]|&bullet;)/i.test(line.trim()),
-  );
+  return searchText
+    .split(/\n+/)
+    .some((line) => /^\s*([-*+•●\uF0B7]|\d+[.)]|&bullet;)/i.test(line.trim()));
 }
 function shouldSearchLineByLine(searchText: string): boolean {
   const lines = searchText
@@ -218,12 +218,7 @@ function unionManyBoxes(boxes: TextBoxPosition[]): TextBoxPosition {
   return result;
 }
 function boxesOverlap(a: TextBoxPosition, b: TextBoxPosition): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  );
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 function styleFromItems(items: TextItem[]): PdfTextStyle {
   if (items.length === 0) {
@@ -254,7 +249,10 @@ function styleFromItems(items: TextItem[]): PdfTextStyle {
       fontFamily = meta.family;
     }
   }
-  const fontSize = Math.max(6, Math.min(totalChars > 0 ? fontSizeSum / totalChars : items[0]!.fontSize, 72));
+  const fontSize = Math.max(
+    6,
+    Math.min(totalChars > 0 ? fontSizeSum / totalChars : items[0]!.fontSize, 72),
+  );
   const lineHeight = Math.max(maxHeight, fontSize) * 1.2;
   return { fontSize, fontName, fontFamily, lineHeight };
 }
@@ -283,15 +281,14 @@ function getMatchedItems(items: TextItem[], box: TextBoxPosition): TextItem[] {
     const b = itemBox(item);
     const cx = b.x + b.width / 2;
     const cy = b.y + b.height / 2;
-    return (
-      cx >= box.x &&
-      cx <= box.x + box.width &&
-      cy >= box.y &&
-      cy <= box.y + box.height
-    );
+    return cx >= box.x && cx <= box.x + box.width && cy >= box.y && cy <= box.y + box.height;
   });
 }
-function toHighlightMatch(items: TextItem[], boxes: TextBoxPosition[], searchText: string): TextMatch {
+function toHighlightMatch(
+  items: TextItem[],
+  boxes: TextBoxPosition[],
+  searchText: string,
+): TextMatch {
   const lines = boxes.map((box) => {
     const matched = getMatchedItems(items, box);
     const style = resolveMatchStyle(items, box);
@@ -362,8 +359,7 @@ function toMatch(
       },
     ];
   }
-  const fullBox =
-    lines.length > 0 ? unionManyBoxes(lines.map((line) => line.box)) : box;
+  const fullBox = lines.length > 0 ? unionManyBoxes(lines.map((line) => line.box)) : box;
   return {
     box: fullBox,
     style: lines[0]?.style ?? resolveMatchStyle(items, box),
@@ -382,7 +378,9 @@ async function collectPageTextItems(page: {
     if (typeof raw.str !== 'string' || !raw.str) continue;
     const transform = Array.isArray(raw.transform) ? (raw.transform as number[]) : [];
     const fontName = typeof raw.fontName === 'string' ? raw.fontName : '';
-    const fontFamily = fontName ? (content.styles[fontName]?.fontFamily ?? 'sans-serif') : 'sans-serif';
+    const fontFamily = fontName
+      ? (content.styles[fontName]?.fontFamily ?? 'sans-serif')
+      : 'sans-serif';
     const fontSize = fontSizeFromTransform(transform);
     const height = typeof raw.height === 'number' ? raw.height : fontSize;
     const width = typeof raw.width === 'number' ? raw.width : 0;
@@ -434,7 +432,6 @@ function distanceSq(a: { x: number; y: number }, b: { x: number; y: number }): n
   return dx * dx + dy * dy;
 }
 
-/** Нормализованная точка (0–1, origin сверху-слева) → PDF points (origin снизу-слева). */
 export function pageAnchorNormToPdfPoint(
   anchor: { xNorm: number; yNorm: number },
   pageWidth: number,
@@ -446,7 +443,6 @@ export function pageAnchorNormToPdfPoint(
   };
 }
 
-/** При нескольких совпадениях текста — выбирает bbox ближе к якорю выделения. */
 export function pickBestTextBoxNearAnchor(
   boxes: TextBoxPosition[],
   anchor?: { xNorm: number; yNorm: number },
@@ -621,8 +617,7 @@ export function expandEraseRegion(
     if (!inSug && !extraWords) continue;
     if (inOrig && normOrig.length >= normSug.length) continue;
     const box = itemBox(item);
-    const hOverlap =
-      box.x < region.x + region.width + 48 && box.x + box.width > region.x - 48;
+    const hOverlap = box.x < region.x + region.width + 48 && box.x + box.width > region.x - 48;
     const verticallyClose =
       Math.abs(item.y - (region.y + region.height * 0.5)) < lineH * 4 ||
       (item.y < region.y + lineH && region.y - item.y < lineH * 3);

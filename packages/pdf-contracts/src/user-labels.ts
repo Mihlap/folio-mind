@@ -7,9 +7,9 @@ export const MSG_ARCHIVE_PDF_FALLBACK =
 
 export const MSG_PROCESSING = 'Идёт подготовка на сервере…';
 export const MSG_PROCESSING_WAIT = 'Идёт обработка, подождите…';
-export const MSG_NETWORK_STORAGE = 'Не удалось связаться с хранилищем. Проверьте интернет или обратитесь к администратору.';
+export const MSG_NETWORK_STORAGE =
+  'Не удалось связаться с хранилищем. Проверьте интернет или обратитесь к администратору.';
 
-/** Короткая подпись статуса версии в списках. */
 export const VERSION_STATUS_LABELS = {
   pending_upload: 'не загружен',
   processing: 'идёт обработка',
@@ -17,7 +17,6 @@ export const VERSION_STATUS_LABELS = {
   failed: 'ошибка',
 } as const;
 
-/** В списке документов: версию уже можно открыть, пока догружаются миниатюры. */
 export const MSG_VERSION_VIEWABLE_WHILE_PROCESSING = 'можно смотреть';
 
 export function getVersionStatusLabel(status: string): string {
@@ -58,12 +57,12 @@ export const HINT_PAGE_ORDER_SAVE_REPLACE_CURRENT =
 
 export const MSG_OPERATION_STARTING = formatProcessingWaitMessage('Запускаем операцию');
 export const MSG_OPTIMIZE_RUNNING = formatProcessingWaitMessage('Сжимаем PDF');
-export const MSG_OPTIMIZE_DONE_SUFFIX = 'Файл открыт в просмотрщике, картинки страниц подгружаются.';
+export const MSG_OPTIMIZE_DONE_SUFFIX =
+  'Файл открыт в просмотрщике, картинки страниц подгружаются.';
 export const MSG_OPTIMIZE_NO_CHANGE = 'Размер почти не изменился — файл уже достаточно компактный.';
 export const MSG_OPTIMIZE_NO_TOOLS =
   'Размер не изменился. Сообщите администратору — на сервере не настроено сжатие PDF.';
-export const MSG_OPTIMIZE_SAVED = (savedPct: number) =>
-  `Размер уменьшен примерно на ${savedPct}%`;
+export const MSG_OPTIMIZE_SAVED = (savedPct: number) => `Размер уменьшен примерно на ${savedPct}%`;
 export const MSG_OPTIMIZE_ASSEMBLED = 'Новая версия собрана без уменьшения размера';
 
 export function formatOptimizeWaitHint(sourceBytes: number): string | null {

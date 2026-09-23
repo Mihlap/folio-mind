@@ -5,6 +5,8 @@ import {
   LABEL_ARCHIVE_PDF,
   LABEL_ARCHIVE_PDF_HINT,
   MSG_ARCHIVE_PDF_FALLBACK,
+  toUserErrorMessage,
+  MSG_JOB_NOT_FOUND,
   useExportBookletMutation,
   useExportPagesMutation,
   useGetJobQuery,
@@ -81,10 +83,18 @@ export function DocumentBookletExportPanel({
   const [fetchBookletUrl] = useLazyGetBookletExportUrlQuery();
   const [fetchPagesUrl] = useLazyGetPagesExportUrlQuery();
 
-  const { data: job } = useGetJobQuery(activeJobId!, {
+  const { data: job, isError: pollError } = useGetJobQuery(activeJobId!, {
     skip: !activeJobId,
     pollingInterval: activeJobId ? 2000 : 0,
   });
+
+  useEffect(() => {
+    if (pollError && !job && activeJobId) {
+      setError(MSG_JOB_NOT_FOUND);
+      setActiveJobId(null);
+      setJobKind(null);
+    }
+  }, [pollError, job, activeJobId]);
 
   useEffect(() => {
     setPagesInput(String(viewerPage));
@@ -130,7 +140,7 @@ export function DocumentBookletExportPanel({
     }
     if (job.status === 'failed') {
       const payload = job.payload as { error?: string } | null;
-      setError(payload?.error ?? 'Не удалось выполнить операцию. Попробуйте ещё раз.');
+      setError(toUserErrorMessage(payload?.error, 'Не удалось выполнить операцию. Попробуйте ещё раз.'));
       setActiveJobId(null);
       setJobKind(null);
     }
@@ -146,7 +156,7 @@ export function DocumentBookletExportPanel({
       setActiveJobId(result.operationJobId);
       setStatusHint('Собираем ZIP: PDF и JPG по каждой странице…');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось запустить сборку пакета');
+      setError(toUserErrorMessage(err, 'Не удалось запустить сборку пакета'));
     }
   }
 
@@ -171,7 +181,7 @@ export function DocumentBookletExportPanel({
       setActiveJobId(result.operationJobId);
       setStatusHint(`Готовим ${parsed.length} стр. в ${exportFormat.toUpperCase()}…`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось экспортировать страницы');
+      setError(toUserErrorMessage(err, 'Не удалось экспортировать страницы'));
     }
   }
 
@@ -185,7 +195,7 @@ export function DocumentBookletExportPanel({
       setActiveJobId(result.operationJobId);
       setStatusHint('Проверяем качество картинок и шрифты…');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось запустить проверку');
+      setError(toUserErrorMessage(err, 'Не удалось запустить проверку'));
     }
   }
 

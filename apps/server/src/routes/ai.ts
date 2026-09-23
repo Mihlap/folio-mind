@@ -35,11 +35,7 @@ import { getPresignedGetUrl, isS3Configured, putObjectByKey } from '../lib/stora
 import { resolveDefaultProvider, type AIProviderName } from '@folio-mind/ai-providers';
 const errorBody = z.object({ error: z.string() });
 const require = createRequire(import.meta.url);
-// function linkedSuggestionIdFromMeta(meta: unknown): string | null {
-//   if (!meta || typeof meta !== 'object') return null;
-//   const id = (meta as { suggestionId?: unknown }).suggestionId;
-//   return typeof id === 'string' ? id : null;
-// }
+
 function buildOriginalKey(documentId: string, version: number, fileName: string) {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
   return resolveS3Key('originals', `${documentId}/v${version}-${safeName}`);
@@ -315,6 +311,7 @@ export const aiRoutes: FastifyPluginAsync<{
             provider: z.enum(['gigachat', 'yandex']),
           }),
           429: errorBody,
+          503: errorBody,
         },
       },
     },
@@ -330,10 +327,18 @@ export const aiRoutes: FastifyPluginAsync<{
       }
       const providerName: AIProviderName = request.body.provider ?? getConfiguredProviderName(env);
       const llm = createLLMFromEnv(env, providerName);
-      const result = await llm.complete({
-        prompt: request.body.prompt,
-        system: request.body.system,
-      });
+      let result: Awaited<ReturnType<typeof llm.complete>>;
+      try {
+        result = await llm.complete({
+          prompt: request.body.prompt,
+          system: request.body.system,
+        });
+      } catch (err) {
+        request.log.warn({ err }, 'ai complete failed');
+        return reply.code(503).send({
+          error: 'Отсутствует соединение с ИИ-сервисом. Попробуйте позже.',
+        });
+      }
       return {
         text: result.text,
         model: result.model,
@@ -366,13 +371,19 @@ export const aiRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      const document = await findDocumentForUser(app.prisma, documentId, user, {
+        capability: 'edit',
+      });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply
+          .code(404)
+          .send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status === 'pending_upload') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply
+          .code(400)
+          .send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       const cached = await getCachedSummary(env, versionId);
       if (cached) {
@@ -455,13 +466,19 @@ export const aiRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      const document = await findDocumentForUser(app.prisma, documentId, user, {
+        capability: 'edit',
+      });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply
+          .code(404)
+          .send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status === 'pending_upload') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply
+          .code(400)
+          .send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
@@ -502,294 +519,7 @@ export const aiRoutes: FastifyPluginAsync<{
       return reply.status(202).send({ jobId: job.id, status: 'queued' });
     },
   );
-  /* ИИ-предложения правок временно отключены — остаются только ручные правки
-  const suggestionItemSchema = z.object({
-    id: z.string(),
-    fragmentId: z.string(),
-    originalText: z.string(),
-    suggestion: z.string(),
-    reason: z.string(),
-    page: z.number().nullable(),
-    quoteMatched: z.boolean(),
-    status: z.string(),
-    annotationId: z.string().nullable(),
-    createdAt: z.string(),
-  });
-  r.get(
-    '/documents/:documentId/versions/:versionId/ai/suggestions',
-    {
-      preHandler: [app.authenticate],
-      schema: {
-        params: z.object({ documentId: z.string(), versionId: z.string() }),
-        response: {
-          200: z.object({ items: z.array(suggestionItemSchema) }),
-          404: errorBody,
-        },
-      },
-    },
-    async (request, reply) => {
-      const user = getAuthUser(request);
-      const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
-      if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
-      }
-      if (!document.versions.some((v: { id: string }) => v.id === versionId)) {
-        return reply.code(404).send({ error: 'Version not found' });
-      }
-      const items = await app.prisma.aiSuggestion.findMany({
-        where: { documentId, versionId, tenantId: user.tenantId },
-        orderBy: { createdAt: 'asc' },
-      });
-      const annotations = await app.prisma.documentAnnotation.findMany({
-        where: { documentId, versionId, kind: 'accepted_edit' },
-        select: { id: true, meta: true },
-      });
-      const annotationBySuggestionId = new Map<string, string>();
-      for (const ann of annotations) {
-        const suggestionId = linkedSuggestionIdFromMeta(ann.meta);
-        if (suggestionId && !annotationBySuggestionId.has(suggestionId)) {
-          annotationBySuggestionId.set(suggestionId, ann.id);
-        }
-      }
-      return {
-        items: items.map((item) => ({
-          id: item.id,
-          fragmentId: item.fragmentId,
-          originalText: item.originalText,
-          suggestion: item.suggestion,
-          reason: item.reason,
-          page: item.page,
-          quoteMatched: item.quoteMatched,
-          status: item.status,
-          annotationId: annotationBySuggestionId.get(item.id) ?? null,
-          createdAt: item.createdAt.toISOString(),
-        })),
-      };
-    },
-  );
-  r.post(
-    '/documents/:documentId/versions/:versionId/ai/suggestions',
-    {
-      preHandler: [app.authenticate],
-      schema: {
-        params: z.object({ documentId: z.string(), versionId: z.string() }),
-        body: z
-          .object({
-            provider: z.enum(['gigachat', 'yandex']).optional(),
-            scope: z.enum(['document', 'page']).optional(),
-            page: z.number().int().min(1).optional(),
-          })
-          .refine((body) => body.scope !== 'page' || body.page != null, {
-            message: 'page is required when scope is page',
-          }),
-        response: {
-          202: z.object({ jobId: z.string(), status: z.string() }),
-          400: errorBody,
-          404: errorBody,
-          429: errorBody,
-        },
-      },
-    },
-    async (request, reply) => {
-      const user = getAuthUser(request);
-      const { documentId, versionId } = request.params;
-      const provider = request.body.provider ?? getConfiguredProviderName(env);
-      const scope = request.body.scope ?? 'document';
-      const page = request.body.page;
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
-      if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
-      }
-      const version = document.versions.find((v: { id: string }) => v.id === versionId);
-      if (!version || version.status !== 'ready') {
-        return reply.code(400).send({ error: 'Version not ready' });
-      }
-      if (scope === 'page') {
-        if (!page) {
-          return reply.code(400).send({ error: 'Укажите номер страницы' });
-        }
-        if (version.pageCount && page > version.pageCount) {
-          return reply
-            .code(400)
-            .send({ error: `Страница ${page} больше числа страниц (${version.pageCount})` });
-        }
-      }
-      try {
-        await checkAndIncrementAiUsage(env, user.tenantId);
-      } catch (err) {
-        if (err instanceof AiLimitError) {
-          return reply.code(429).send({ error: err.message });
-        }
-        throw err;
-      }
-      const job = await app.prisma.job.create({
-        data: {
-          type: 'ai-suggestions',
-          status: 'queued',
-          tenantId: user.tenantId,
-          payload: {
-            documentId,
-            versionId,
-            provider,
-            scope,
-            ...(scope === 'page' ? { page } : {}),
-          },
-        },
-      });
-      try {
-        await enqueueAiJob(env, {
-          jobId: job.id,
-          documentId,
-          versionId,
-          tenantId: user.tenantId,
-          type: 'suggestions',
-          requestId: request.requestId,
-        });
-      } catch (err) {
-        await markAiEnqueueFailed(job.id, user.tenantId, err);
-        throw err;
-      }
-      return reply.status(202).send({ jobId: job.id, status: 'queued' });
-    },
-  );
-  r.patch(
-    '/documents/:documentId/versions/:versionId/ai/suggestions/:suggestionId',
-    {
-      preHandler: [app.authenticate],
-      schema: {
-        params: z.object({
-          documentId: z.string(),
-          versionId: z.string(),
-          suggestionId: z.string(),
-        }),
-        body: z.object({
-          status: z.enum(['accepted', 'rejected']),
-          originalText: z.string().trim().min(1).max(300).optional(),
-        }),
-        response: {
-          200: suggestionItemSchema,
-          404: errorBody,
-        },
-      },
-    },
-    async (request, reply) => {
-      const user = getAuthUser(request);
-      const { documentId, versionId, suggestionId } = request.params;
-      const suggestion = await app.prisma.aiSuggestion.findFirst({
-        where: {
-          id: suggestionId,
-          documentId,
-          versionId,
-          tenantId: user.tenantId,
-        },
-      });
-      if (!suggestion) {
-        return reply.code(404).send({ error: 'Suggestion not found' });
-      }
-      const textOverride =
-        request.body.originalText !== undefined ? request.body.originalText.trim() : null;
-      const effectiveOriginalText = textOverride ?? suggestion.originalText;
-      if (suggestion.status === request.body.status && !textOverride) {
-        return {
-          id: suggestion.id,
-          fragmentId: suggestion.fragmentId,
-          originalText: suggestion.originalText,
-          suggestion: suggestion.suggestion,
-          reason: suggestion.reason,
-          page: suggestion.page,
-          quoteMatched: suggestion.quoteMatched,
-          status: suggestion.status,
-          annotationId: null,
-          createdAt: suggestion.createdAt.toISOString(),
-        };
-      }
-      const updated = await app.prisma.aiSuggestion.update({
-        where: { id: suggestionId },
-        data: {
-          status: request.body.status,
-          ...(textOverride && textOverride !== suggestion.originalText
-            ? { originalText: textOverride, quoteMatched: true }
-            : {}),
-        },
-      });
-      void publishSuggestionStatusDocumentEvent(
-        env,
-        documentId,
-        versionId,
-        request.body.status,
-        suggestionId,
-      ).catch((err) => {
-        request.log.warn({ err }, 'suggestion status event publish failed');
-      });
-      let linkedAnnotationId: string | null = null;
-      if (request.body.status === 'accepted') {
-        const page = suggestion.page ?? 1;
-        const existingAnnotation = await app.prisma.documentAnnotation.findFirst({
-          where: {
-            documentId,
-            versionId,
-            page,
-            kind: 'accepted_edit',
-            quote: effectiveOriginalText,
-            content: suggestion.suggestion,
-          },
-          select: { id: true },
-        });
-        if (existingAnnotation) {
-          linkedAnnotationId = existingAnnotation.id;
-        } else {
-          const created = await app.prisma.documentAnnotation.create({
-            data: {
-              documentId,
-              versionId,
-              userId: user.sub,
-              page,
-              kind: 'accepted_edit',
-              content: suggestion.suggestion,
-              quote: effectiveOriginalText,
-              meta: { suggestionId: suggestion.id, reason: suggestion.reason },
-            },
-          });
-          linkedAnnotationId = created.id;
-          void publishAnnotationDocumentEvent(
-            env,
-            documentId,
-            versionId,
-            'created',
-            created.id,
-          ).catch((err) => {
-            request.log.warn({ err }, 'annotation created event publish failed');
-          });
-        }
-      }
-      await app.prisma.auditLog.create({
-        data: {
-          action:
-            request.body.status === 'accepted'
-              ? 'ai.suggestion_accepted'
-              : 'ai.suggestion_rejected',
-          userId: user.sub,
-          tenantId: user.tenantId,
-          documentId,
-          meta: { suggestionId, versionId, fragmentId: suggestion.fragmentId },
-        },
-      });
-      return {
-        id: updated.id,
-        fragmentId: updated.fragmentId,
-        originalText: updated.originalText,
-        suggestion: updated.suggestion,
-        reason: updated.reason,
-        page: updated.page,
-        quoteMatched: updated.quoteMatched,
-        status: updated.status,
-        annotationId: linkedAnnotationId,
-        createdAt: updated.createdAt.toISOString(),
-      };
-    },
-  );
-  */
+
   r.post(
     '/documents/:documentId/versions/:versionId/ai/apply-accepted',
     {
@@ -811,17 +541,21 @@ export const aiRoutes: FastifyPluginAsync<{
     },
     async (request, reply) => {
       if (!isS3Configured()) {
-        return reply.code(503).send({ error: 'S3 is not configured' });
+        return reply.code(503).send({ error: 'Файловое хранилище не настроено.' });
       }
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      const document = await findDocumentForUser(app.prisma, documentId, user, {
+        capability: 'edit',
+      });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply
+          .code(404)
+          .send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const sourceVersion = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!sourceVersion || sourceVersion.status !== 'ready') {
-        return reply.code(400).send({ error: 'Source version is not ready' });
+        return reply.code(400).send({ error: 'Исходная версия ещё не готова.' });
       }
       const [acceptedAiCount, manualEditsCount] = await Promise.all([
         app.prisma.aiSuggestion.count({
@@ -899,7 +633,12 @@ export const aiRoutes: FastifyPluginAsync<{
           },
         },
       });
-      void publishVersionCreatedDocumentEvent(env, document.id, targetVersion.id, targetVersion.version).catch((err) => {
+      void publishVersionCreatedDocumentEvent(
+        env,
+        document.id,
+        targetVersion.id,
+        targetVersion.version,
+      ).catch((err) => {
         request.log.warn({ err }, 'version_created event publish failed');
       });
       return reply.status(202).send({
@@ -932,13 +671,19 @@ export const aiRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      const document = await findDocumentForUser(app.prisma, documentId, user, {
+        capability: 'edit',
+      });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply
+          .code(404)
+          .send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status !== 'ready') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply
+          .code(400)
+          .send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       try {
         await checkAndIncrementAiUsage(env, user.tenantId);
@@ -1001,13 +746,19 @@ export const aiRoutes: FastifyPluginAsync<{
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
       const provider = request.body.provider ?? getConfiguredProviderName(env);
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      const document = await findDocumentForUser(app.prisma, documentId, user, {
+        capability: 'edit',
+      });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply
+          .code(404)
+          .send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find((v: { id: string }) => v.id === versionId);
       if (!version || version.status !== 'ready') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply
+          .code(400)
+          .send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
 
       let customSchema: ReturnType<typeof validateExtractionSchema> | undefined;
@@ -1089,22 +840,28 @@ export const aiRoutes: FastifyPluginAsync<{
     async (request, reply) => {
       const user = getAuthUser(request);
       const { documentId, versionId } = request.params;
-      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      const document = await findDocumentForUser(app.prisma, documentId, user, {
+        capability: 'edit',
+      });
       if (!document) {
-        return reply.code(404).send({ error: 'Document not found' });
+        return reply
+          .code(404)
+          .send({ error: 'Документ не найден. Возможно, он был удалён или у вас нет доступа.' });
       }
       const version = document.versions.find(
         (v: { id: string; version: number; status: string }) => v.id === versionId,
       );
       if (!version || version.status === 'pending_upload') {
-        return reply.code(400).send({ error: 'Version not ready' });
+        return reply
+          .code(400)
+          .send({ error: 'Версия ещё не готова. Подождите завершения обработки.' });
       }
       const cached = await getCachedSummary(env, versionId);
       if (!cached?.summary) {
         return reply.code(400).send({ error: 'Сначала получите пересказ документа' });
       }
       if (!isS3Configured()) {
-        return reply.code(503).send({ error: 'S3 is not configured' });
+        return reply.code(503).send({ error: 'Файловое хранилище не настроено.' });
       }
       const reportPayload = {
         title: document.title,
@@ -1177,7 +934,7 @@ export const aiRoutes: FastifyPluginAsync<{
         where: { id: request.params.jobId, tenantId: user.tenantId },
       });
       if (!job) {
-        return reply.code(404).send({ error: 'Job not found' });
+        return reply.code(404).send({ error: 'Задание не найдено. Попробуйте ещё раз.' });
       }
       return {
         id: job.id,

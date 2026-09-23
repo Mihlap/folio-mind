@@ -16,7 +16,7 @@ describe('splitTextIntoChunks', () => {
     const chunks = splitTextIntoChunks(text, { maxChunkSize: 1000, overlap: 100 });
     expect(chunks.length).toBeGreaterThan(2);
     expect(chunks[0]!.length).toBeLessThanOrEqual(1000);
-    // Overlap: end of first chunk should appear at start of second.
+
     const overlapProbe = chunks[0]!.slice(-80);
     expect(chunks[1]!.startsWith(overlapProbe.slice(0, 50))).toBe(true);
   });

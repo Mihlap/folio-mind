@@ -65,7 +65,12 @@ function drawPageChrome(
   const margin = 24;
   const startPageNumber = chrome.startPageNumber ?? 1;
 
-  const header = formatLayoutPageChromeText(chrome.headerText, pageIndex + 1, pageCount, startPageNumber);
+  const header = formatLayoutPageChromeText(
+    chrome.headerText,
+    pageIndex + 1,
+    pageCount,
+    startPageNumber,
+  );
   if (header) {
     const textWidth = font.widthOfTextAtSize(header, fontSize);
     page.drawText(header, {
@@ -124,7 +129,7 @@ export async function applyLayoutToPdfBuffer(
   const maxObjectPage = objects.reduce((max, object) => Math.max(max, object.page), 0);
   appendTrailingBlankPages(pdfDoc, pdfDoc.getPageCount(), maxObjectPage, pageSize);
   const pageCount = pdfDoc.getPageCount();
-  // Helvetica/WinAnsi cannot encode Cyrillic (headers like «Договор…», captions).
+
   const textFont = await embedCyrillicFont(pdfDoc);
   let appliedCount = 0;
   let skippedCount = 0;
@@ -138,7 +143,9 @@ export async function applyLayoutToPdfBuffer(
     const page = pdfDoc.getPage(object.page - 1);
     const { width: pageWidth, height: pageHeight } = page.getSize();
     const { mime, bytes } = parseImageDataUrl(object.imageSrc);
-    const image = mime.includes('png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+    const image = mime.includes('png')
+      ? await pdfDoc.embedPng(bytes)
+      : await pdfDoc.embedJpg(bytes);
 
     const draw = computeLayoutImageDrawParams(
       object.rect,

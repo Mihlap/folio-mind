@@ -77,7 +77,7 @@ type FeatureHelpActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   helpTitle: string;
   helpContent: ReactNode;
   buttonClassName?: string;
-  /** Кнопка на всю ширину строки (иконка «i» справа в той же строке). */
+
   stretch?: boolean;
 };
 export function FeatureHelpActionButton({

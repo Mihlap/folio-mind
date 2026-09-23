@@ -184,7 +184,6 @@ async function main() {
 
   await api('/health');
 
-  /* ---------- auth ---------- */
   console.log('\n[Auth]');
   const { email, data: regData } = await register();
   let token = regData?.token;
@@ -194,14 +193,12 @@ async function main() {
   }
   console.log('  \u2714 user registered/logged in');
 
-  /* ---------- upload base PDF ---------- */
   console.log('\n[Upload + preview]');
   const pdf = buildSmokePdf(10);
   const { documentId, versionId } = await uploadDocument(token, pdf, 'smoke-phase2-base');
   const version = await waitForReady(token, documentId, versionId);
   console.log(`  \u2714 uploaded, version ${version.version}, pageCount=${version.pageCount}`);
 
-  /* ---------- integrity badge ---------- */
   console.log('\n[Integrity v1]');
   {
     const s = step('version has integrityStatus');
@@ -221,7 +218,6 @@ async function main() {
     }
   }
 
-  /* ---------- annotations CRUD ---------- */
   console.log('\n[Annotations CRUD]');
   let createdAnnotationId;
   {
@@ -303,7 +299,6 @@ async function main() {
     }
   }
 
-  /* ---------- annotation coordinates ---------- */
   console.log('\n[Annotation coordinates]');
   {
     const s = step('create annotation with x,y');
@@ -339,7 +334,6 @@ async function main() {
     }
   }
 
-  /* ---------- PDF operations ---------- */
   console.log('\n[PDF operations]');
   {
     const s = step('upload second version for merge');
@@ -377,14 +371,11 @@ async function main() {
   {
     const s = step('split pages');
     try {
-      const result = await api(
-        `/documents/${documentId}/versions/${versionId}/operations/split`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pages: [1, 2, 3] }),
-        },
-      );
+      const result = await api(`/documents/${documentId}/versions/${versionId}/operations/split`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pages: [1, 2, 3] }),
+      });
       if (result.operationJobId) s.ok();
       else s.fail(new Error('split did not return operationJobId'));
     } catch (e) {
@@ -392,7 +383,6 @@ async function main() {
     }
   }
 
-  /* ---------- RAG ---------- */
   console.log('\n[RAG]');
   {
     const s = step('upload rag source');
@@ -446,7 +436,6 @@ async function main() {
     }
   }
 
-  /* ---------- version diff ---------- */
   console.log('\n[Version diff]');
   {
     const s = step('version diff endpoint');
@@ -474,7 +463,6 @@ async function main() {
     }
   }
 
-  /* ---------- summary ---------- */
   const total = passed + failed;
   console.log(`\n\u2500${'\u2500'.repeat(48)}`);
   console.log(

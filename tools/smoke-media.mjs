@@ -17,7 +17,6 @@ async function api(path, options = {}) {
 }
 
 function tinyPng() {
-  // 1x1 red PNG
   return Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
     'base64',
@@ -95,7 +94,12 @@ async function main() {
   const list = await api('/media-assets', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  console.log('list count', list.items?.length ?? 0, list.items?.[0]?.title, list.items?.[0]?.status);
+  console.log(
+    'list count',
+    list.items?.length ?? 0,
+    list.items?.[0]?.title,
+    list.items?.[0]?.status,
+  );
 
   const quota = await api('/media-assets/quota', {
     headers: { Authorization: `Bearer ${token}` },

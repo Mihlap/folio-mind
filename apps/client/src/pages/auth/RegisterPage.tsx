@@ -4,14 +4,11 @@ import { useRegisterMutation } from '@folio-mind/store';
 import { Button } from '../../components/ui/Button.js';
 import { PasswordInput } from '../../components/auth/PasswordInput.js';
 import { TurnstileWidget } from '../../components/auth/TurnstileWidget.js';
-// import { OAuthButtons } from '../../components/auth/OAuthButtons.js';
-// import { PhoneAuthForm } from '../../components/auth/PhoneAuthForm.js';
+
 import { AuthLayout } from '../../components/layout/AuthLayout.js';
 import { getAuthErrorMessage, validatePasswordClient } from '../../lib/auth/authErrors.js';
 import { isTurnstileEnabled } from '../../lib/auth/authConfig.js';
 import { setPendingVerifyEmail } from '../../lib/auth/pending-verify-email.js';
-
-// type AuthTab = 'email' | 'phone';
 
 type TenantInvitePreview = {
   valid: true;
@@ -24,7 +21,7 @@ type TenantInvitePreview = {
 export function RegisterPage() {
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get('invite')?.trim() || null;
-  // const [tab, setTab] = useState<AuthTab>('email');
+
   const [register, { isLoading, error }] = useRegisterMutation();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -41,9 +38,7 @@ export function RegisterPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(
-          `/api/auth/tenant-invite?token=${encodeURIComponent(inviteToken)}`,
-        );
+        const res = await fetch(`/api/auth/tenant-invite?token=${encodeURIComponent(inviteToken)}`);
         if (!res.ok) {
           if (!cancelled) setInviteError('Ссылка приглашения недействительна или истекла');
           return;

@@ -1,10 +1,7 @@
-/** Минимальный DPI для печати A4/A3 (ориентир для бюро). */
 export const PRINT_MIN_DPI = 150;
 
-/** Рекомендуемый DPI для JPG в пакете заказчику. */
 export const BOOKLET_EXPORT_DEFAULT_JPEG_DPI = 150;
 
-/** Максимум страниц в одном экспорте (лимит worker). */
 export const BOOKLET_EXPORT_MAX_PAGES = 200;
 
 export type BookletExportImageFormat = 'jpeg' | 'png';

@@ -21,9 +21,12 @@ function itemBox(item: TextItem): { x: number; y: number; width: number; height:
     height: h * 1.3,
   };
 }
-function unionBoxes(
-  boxes: Array<{ x: number; y: number; width: number; height: number }>,
-): { x: number; y: number; width: number; height: number } {
+function unionBoxes(boxes: Array<{ x: number; y: number; width: number; height: number }>): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
   const x1 = Math.min(...boxes.map((b) => b.x));
   const y1 = Math.min(...boxes.map((b) => b.y));
   const x2 = Math.max(...boxes.map((b) => b.x + b.width));
@@ -119,8 +122,7 @@ export function buildMatchedLines(
   for (const item of items) {
     if (matchedItems.includes(item)) continue;
     const sameColumn = Math.abs(item.x - anchor.x) < 140;
-    const below =
-      item.y < anchor.y - lineH * 0.2 && item.y > anchor.y - lineH * 2.8;
+    const below = item.y < anchor.y - lineH * 0.2 && item.y > anchor.y - lineH * 2.8;
     if (!sameColumn || !below) continue;
     const t = norm(item.str);
     if (!t) continue;
@@ -139,7 +141,6 @@ export function explicitTextLines(text: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-/** Многострочный абзац в PDF — один блок; список с новыми пунктами — expanded. */
 export function paragraphDrawMode(
   layoutLineCount: number,
   suggestion: string,

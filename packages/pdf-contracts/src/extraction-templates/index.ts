@@ -12,7 +12,6 @@ const TEMPLATES: Record<ExtractionTemplateId, ExtractionTemplate> = {
   tz: tzTemplate,
 };
 
-/** Stable UI order: key facts first, then structure overview, then other types. */
 export function listExtractionTemplates(): ExtractionTemplate[] {
   return EXTRACTION_TEMPLATE_IDS.map((id) => TEMPLATES[id]);
 }

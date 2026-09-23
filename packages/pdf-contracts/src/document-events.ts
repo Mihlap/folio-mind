@@ -93,7 +93,6 @@ export type DocumentMetaScopeEvent =
   | ShareLinkDocumentEvent;
 export type DocumentScopeEvent = DocumentVersionScopeEvent | DocumentMetaScopeEvent;
 
-/** @deprecated Use DocumentVersionScopeEvent */
 export type DocumentVersionEvent = DocumentVersionScopeEvent;
 
 export function documentVersionEventsChannel(documentId: string, versionId: string): string {
@@ -104,9 +103,7 @@ export function documentMetaEventsChannel(documentId: string): string {
   return `${DOCUMENT_EVENTS_CHANNEL_PREFIX}:${documentId}:${DOCUMENT_META_CHANNEL_SUFFIX}`;
 }
 
-function isGuestCommentEvent(
-  parsed: DocumentScopeEvent,
-): parsed is GuestCommentDocumentEvent {
+function isGuestCommentEvent(parsed: DocumentScopeEvent): parsed is GuestCommentDocumentEvent {
   if (parsed.type !== 'guest_comment') return false;
   if (typeof parsed.documentId !== 'string' || typeof parsed.versionId !== 'string') return false;
   return (
@@ -126,11 +123,7 @@ function isPageReviewEvent(parsed: DocumentScopeEvent): parsed is PageReviewDocu
 function isAnnotationEvent(parsed: DocumentScopeEvent): parsed is AnnotationDocumentEvent {
   if (parsed.type !== 'annotation') return false;
   if (typeof parsed.documentId !== 'string' || typeof parsed.versionId !== 'string') return false;
-  return (
-    parsed.action === 'created' ||
-    parsed.action === 'updated' ||
-    parsed.action === 'deleted'
-  );
+  return parsed.action === 'created' || parsed.action === 'updated' || parsed.action === 'deleted';
 }
 
 function isSuggestionEvent(parsed: DocumentScopeEvent): parsed is SuggestionDocumentEvent {
@@ -153,9 +146,7 @@ function isMemberAccessEvent(parsed: DocumentScopeEvent): parsed is MemberAccess
   if (parsed.type !== 'member_access') return false;
   if (typeof parsed.documentId !== 'string' || typeof parsed.userId !== 'string') return false;
   return (
-    parsed.action === 'added' ||
-    parsed.action === 'role_changed' ||
-    parsed.action === 'removed'
+    parsed.action === 'added' || parsed.action === 'role_changed' || parsed.action === 'removed'
   );
 }
 

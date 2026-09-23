@@ -4,7 +4,6 @@ const INVALID_FORMAT_MESSAGE =
 const NO_SUGGESTIONS_MESSAGE =
   'ИИ не смог сформировать предложения по документу. Попробуйте снова или укажите одну страницу.';
 
-/** Убирает технические подробности из текста ошибки ИИ-правок для показа в UI. */
 export function formatAiSuggestionsError(message: string | null | undefined): string {
   const trimmed = message?.trim() ?? '';
   if (!trimmed) return NO_SUGGESTIONS_MESSAGE;
