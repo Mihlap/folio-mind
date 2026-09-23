@@ -40,7 +40,6 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-/** DOCX→Gotenberg переразбивает страницы — постраничное сравнение с исходным PDF некорректно. */
 export function scoreDocxReflowConfidence(params: {
   sourcePageCount: number;
   targetPageCount: number;
@@ -142,11 +141,9 @@ export function scoreApplyEditsConfidence(params: {
     }
   }
 
-  const driftRatio =
-    unchangedPagesChecked > 0 ? unchangedPagesDrifted / unchangedPagesChecked : 0;
+  const driftRatio = unchangedPagesChecked > 0 ? unchangedPagesDrifted / unchangedPagesChecked : 0;
 
-  const layoutDriftRatio =
-    layoutPagesChecked > 0 ? layoutDriftPages / layoutPagesChecked : 0;
+  const layoutDriftRatio = layoutPagesChecked > 0 ? layoutDriftPages / layoutPagesChecked : 0;
 
   let score = 100;
   if (pageCountDelta > 1) score -= 45;

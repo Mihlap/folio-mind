@@ -7,11 +7,6 @@ export type ResolvedEmbedding = {
   source: EmbeddingSource;
 };
 
-/**
- * Resolve a fixed-size embedding for RAG.
- * Provider vectors are used only when dim matches pgvector(384); otherwise local fallback.
- * Keeps index and search compatible when credentials/dim differ.
- */
 export async function resolveEmbeddingVector(
   text: string,
   embed?: (input: string) => Promise<number[]>,

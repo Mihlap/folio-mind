@@ -79,7 +79,7 @@ describe('buildExtractionDisplayRows', () => {
     );
     expect(rows.some((r) => r.label === 'Оплата')).toBe(true);
     expect(rows.find((r) => r.label === 'Оплата')?.value).toMatch(/10 банковских/);
-    // short TOC fluff without facts is hidden
+
     expect(rows.find((r) => r.label === 'Права')).toBeUndefined();
   });
 });

@@ -1,6 +1,5 @@
 import { normalizeMarkdownInput } from '@folio-mind/edit-markdown';
 
-/** HTML-буфер (Word, браузер) → markdown-список. */
 export function htmlListsToMarkdown(html: string): string | null {
   try {
     const doc = new DOMParser().parseFromString(html, 'text/html');

@@ -1,8 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type {
-  DocumentMetaScopeEvent,
-  DocumentVersionScopeEvent,
-} from '@folio-mind/pdf-contracts';
+import type { DocumentMetaScopeEvent, DocumentVersionScopeEvent } from '@folio-mind/pdf-contracts';
 import type { Env } from '../config/env.js';
 import { parseCorsOrigins } from '../config/cors-origins.js';
 import {
@@ -13,12 +10,6 @@ import {
 
 const SSE_HEARTBEAT_MS = 30_000;
 
-/**
- * `@fastify/cors` добавляет CORS-заголовки в хуке `onSend`, который
- * обходится при `reply.hijack()`. Поэтому для SSE-стрима, пишущего в raw-ответ
- * напрямую, CORS-заголовки нужно проставлять вручную — иначе браузер блокирует
- * cross-origin ответ, и клиент бесконечно переподключается с растущим backoff.
- */
 function resolveCorsOrigin(
   requestOrigin: string | undefined,
   allowed: string | string[],

@@ -15,12 +15,12 @@ export function isBlankExtractedValue(value: unknown): boolean {
     const t = value.trim();
     if (!t) return true;
     if (/^[_\s.\-–—«»№]+$/u.test(t)) return true;
-    // Blank form noise without a real word: « » 20 13 г., №_______, ____
+
     if ((/[«»_]/.test(t) || /^№\s*_/.test(t)) && !/[а-яёА-ЯЁa-zA-Z]{3,}/u.test(t)) {
       return true;
-    }   
+    }
     if (/[«»_]/.test(t) && /\d{0,4}\s*г\.?/iu.test(t)) return true;
-    if (/«\s*»/.test(t) && /\d{2,4}/.test(t) && /г\.?/iu.test(t)) return true;   
+    if (/«\s*»/.test(t) && /\d{2,4}/.test(t) && /г\.?/iu.test(t)) return true;
     if (isRolePlaceholderName(t)) return true;
     return false;
   }
@@ -68,7 +68,6 @@ export function sanitizeExtractedValue(value: unknown): unknown {
 function fieldLabel(field: ExtractionFieldSchema | undefined, key: string): string {
   if (field?.label?.trim()) return field.label.trim();
   if (field?.description?.trim()) {
-    // short label: take description before comma/paren
     const d = field.description.trim();
     const cut = d.split(/[,(]/)[0]?.trim();
     if (cut) return cut;
@@ -121,7 +120,9 @@ const FALLBACK_LABELS: Record<string, string> = {
   quantity: 'Количество',
 };
 
-function schemaByName(schema: ExtractionFieldSchema[] | undefined): Map<string, ExtractionFieldSchema> {
+function schemaByName(
+  schema: ExtractionFieldSchema[] | undefined,
+): Map<string, ExtractionFieldSchema> {
   const map = new Map<string, ExtractionFieldSchema>();
   if (!schema) return map;
   for (const field of schema) map.set(field.name, field);
@@ -146,7 +147,7 @@ function expandTermArrayRows(
     const topicRaw = obj.topic ?? obj.title;
     const detailRaw = obj.detail ?? obj.summary;
     if (isBlankExtractedValue(detailRaw) && isBlankExtractedValue(topicRaw)) continue;
-    if (isBlankExtractedValue(detailRaw)) continue;   
+    if (isBlankExtractedValue(detailRaw)) continue;
     if (typeof detailRaw === 'string' && isMetaSectionSummary(detailRaw)) continue;
     const label =
       typeof topicRaw === 'string' && !isBlankExtractedValue(topicRaw)

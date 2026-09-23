@@ -2,10 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
 import type { FastifyPluginAsync } from 'fastify';
 
-/**
- * Accept empty JSON bodies (e.g. DELETE with Content-Type: application/json).
- * Fastify's default parser rejects them with FST_ERR_CTP_EMPTY_JSON_BODY.
- */
 const jsonBodyPluginImpl: FastifyPluginAsync = async (app) => {
   registerLenientJsonParser(app);
 };

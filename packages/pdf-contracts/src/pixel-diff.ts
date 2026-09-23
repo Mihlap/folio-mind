@@ -21,7 +21,6 @@ function colorDistance(a: Uint8ClampedArray, b: Uint8ClampedArray, offset: numbe
   );
 }
 
-/** Доля пикселей, отличающихся по RGB выше порога (alpha игнорируем). */
 export function computePixelDiffRatio(
   source: RgbaPageBitmap,
   target: RgbaPageBitmap,

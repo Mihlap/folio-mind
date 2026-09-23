@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 
-/** online/offline без лишних подписок в SSR. */
 export function useOnlineStatus(): boolean {
-  const [online, setOnline] = useState(
-    typeof navigator === 'undefined' ? true : navigator.onLine,
-  );
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
 
   useEffect(() => {
     const on = () => setOnline(true);

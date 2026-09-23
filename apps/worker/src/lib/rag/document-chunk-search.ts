@@ -101,10 +101,6 @@ async function searchByVector(
   }));
 }
 
-/**
- * Hybrid search по чанкам версии документа: keyword (приоритет) + vector.
- * Без keyword локальные FNV-эмбеддинги часто дают случайный top-k на однотипных страницах.
- */
 export async function searchDocumentChunks(
   prisma: PrismaClient,
   versionId: string,

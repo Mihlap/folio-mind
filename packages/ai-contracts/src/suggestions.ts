@@ -6,7 +6,7 @@ export const aiSuggestionItemSchema = z.object({
   suggestion: z.string().min(1),
   reason: z.string().min(1),
   page: z.number().int().min(1).optional(),
-  /** true = цитата «было» подтверждена дословным совпадением с текстом PDF. */
+
   quoteMatched: z.boolean().optional(),
 });
 export const aiSuggestionsResponseSchema = z.object({
@@ -22,7 +22,6 @@ export const AI_SUGGESTIONS_USER_ERROR = {
     'ИИ не смог сформировать предложения по документу. Попробуйте снова или укажите одну страницу.',
 } as const;
 
-/** Сообщение для UI без технических подробностей (JSON, stack, коды API). */
 export function toUserFacingAiSuggestionsError(err: unknown): string {
   if (!(err instanceof Error)) return AI_SUGGESTIONS_USER_ERROR.noSuggestions;
   const msg = err.message.trim();

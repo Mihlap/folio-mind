@@ -6,14 +6,16 @@ export function readContentFormat(meta: unknown): EditContentFormat {
   return format === 'markdown' ? 'markdown' : 'plain';
 }
 
-/** Правки «было/стало» без meta — markdown (как на сервере при создании). */
 export function readAcceptedEditContentFormat(meta: unknown): EditContentFormat {
   if (!meta || typeof meta !== 'object') return 'markdown';
   const format = (meta as AnnotationEditMeta).contentFormat;
   return format === 'plain' ? 'plain' : 'markdown';
 }
 
-export function mergeAnnotationMeta(meta: unknown, patch: Partial<AnnotationEditMeta>): AnnotationEditMeta {
+export function mergeAnnotationMeta(
+  meta: unknown,
+  patch: Partial<AnnotationEditMeta>,
+): AnnotationEditMeta {
   const base =
     meta && typeof meta === 'object' && !Array.isArray(meta)
       ? { ...(meta as AnnotationEditMeta) }

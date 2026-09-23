@@ -1,6 +1,5 @@
 import { stripInlineMarkdown } from './inline.js';
 
-/** Декодирует частые HTML-сущности и разворачивает списки, вставленные в одну строку. */
 export function normalizeMarkdownInput(markdown: string): string {
   const unified = markdown
     .replace(/&bullet;/gi, '•')
@@ -27,10 +26,7 @@ function expandInlineListLine(line: string): string[] {
   const bulletParts = trimmed.split(/\s+[•●]\s+/);
   if (bulletParts.length > 1) {
     const first = bulletParts[0]!.replace(/^[•●]\s*/, '').trim();
-    return [
-      `• ${first}`,
-      ...bulletParts.slice(1).map((part) => `• ${part.trim()}`),
-    ];
+    return [`• ${first}`, ...bulletParts.slice(1).map((part) => `• ${part.trim()}`)];
   }
 
   if (/^-\s+/.test(trimmed) && /\s-\s+/.test(trimmed)) {
@@ -53,9 +49,6 @@ function formatListLine(line: string): string | null {
   return null;
 }
 
-/**
- * Преобразует Markdown «Стало» в plain text для PDF и сопоставления в DOCX.
- */
 export function markdownToPlainText(markdown: string): string {
   const normalized = normalizeMarkdownInput(markdown);
   const lines = normalized.split('\n');
@@ -92,14 +85,12 @@ export function markdownToPlainText(markdown: string): string {
   return blocks.join('\n').trim();
 }
 
-/** Одна строка без блочной разметки — для inline-замены в DOCX. */
 export function markdownFirstLinePlain(markdown: string): string {
   const plain = markdownToPlainText(markdown);
   const first = plain.split('\n').find((line) => line.trim().length > 0);
   return first?.trim() ?? stripInlineMarkdown(markdown.replace(/\s+/g, ' ').trim());
 }
 
-/** Первая строка исходного markdown без list/heading префикса — для inline DOCX runs. */
 export function markdownFirstLineInlineSource(markdown: string): string {
   const line =
     markdown

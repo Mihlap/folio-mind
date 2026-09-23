@@ -80,7 +80,6 @@ function dedupeSuggestions(items: AiSuggestionItem[]): AiSuggestionItem[] {
   return out;
 }
 
-/** Подтверждает «было» дословным совпадением с текстом PDF, заменяя цитату на фактический текст. */
 function verifyQuotes(items: AiSuggestionItem[], pages: PageText[]): AiSuggestionItem[] {
   return items.map((item) => {
     const result = findBestVerbatimQuote(pages, item.originalText);
@@ -141,7 +140,8 @@ async function collectSuggestionsForPages(
     const items = verifyQuotes(
       result.items.map((item) => ({
         ...item,
-        page: scope === 'page' && targetPage ? targetPage : (item.page ?? pages[0]?.page ?? undefined),
+        page:
+          scope === 'page' && targetPage ? targetPage : (item.page ?? pages[0]?.page ?? undefined),
       })),
       pages,
     );
@@ -235,22 +235,16 @@ export async function processAiSuggestionsJob(
       pdfBuffer,
       version.pageCount,
     );
-    const pages = await resolveAiSuggestionsPages(
-      allPages,
-      scope,
-      targetPage,
-      pdfBuffer,
-    );
+    const pages = await resolveAiSuggestionsPages(allPages, scope, targetPage, pdfBuffer);
     if (pages.length === 0 || !formatPagesForAiPrompt(pages).trim()) {
       throw new Error('В документе нет текстового слоя');
     }
     const llm = createLLMFromWorkerEnv(env, provider);
-    const { items, model, rawText: llmRawText } = await collectSuggestionsForPages(
-      llm,
-      pages,
-      scope,
-      targetPage,
-    );
+    const {
+      items,
+      model,
+      rawText: llmRawText,
+    } = await collectSuggestionsForPages(llm, pages, scope, targetPage);
     rawText = llmRawText;
     await prisma.aiSuggestion.deleteMany({
       where:

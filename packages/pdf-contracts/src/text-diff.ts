@@ -24,9 +24,8 @@ export type VersionTextCompareResult = {
   pages: PageTextDiff[];
 };
 export type CompareVersionTextsOptions = {
-  /** Страницы с правками — на остальных игнорируем шум пересохранения PDF. */
   editedPages?: ReadonlySet<number>;
-  /** Строгое сравнение без смягчения diff (после apply-edits-final). */
+
   strict?: boolean;
 };
 

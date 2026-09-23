@@ -3,7 +3,6 @@ import { PDFDocument } from 'pdf-lib';
 import type { LayoutImageObject } from '@folio-mind/pdf-contracts';
 import { applyLayoutToPdfBuffer } from './apply-layout-pdf.js';
 
-/** 1×1 красный PNG */
 const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
@@ -57,7 +56,9 @@ describe('applyLayoutToPdfBuffer', () => {
       },
     ];
 
-    const result = await applyLayoutToPdfBuffer(sourceBuffer, objects, [{ afterPage: 1, count: 1 }]);
+    const result = await applyLayoutToPdfBuffer(sourceBuffer, objects, [
+      { afterPage: 1, count: 1 },
+    ]);
     expect(result.appliedCount).toBe(1);
     expect(result.pageCount).toBe(4);
 

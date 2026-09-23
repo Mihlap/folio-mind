@@ -17,7 +17,6 @@ const RATIO_BY_PRESET: Record<
   email: { min: 0.2, max: 0.55, textMin: 0.88, textMax: 1 },
 };
 
-/** ~80 КБ на страницу — эвристика «в основном текст». */
 const TEXT_ONLY_BYTES_PER_PAGE = 80_000;
 
 export function estimateOptimizeSize(
@@ -27,8 +26,7 @@ export function estimateOptimizeSize(
 ): OptimizeSizeEstimate | null {
   if (!Number.isFinite(sourceBytes) || sourceBytes <= 0) return null;
 
-  const likelyTextOnly =
-    pageCount > 0 && sourceBytes / pageCount < TEXT_ONLY_BYTES_PER_PAGE;
+  const likelyTextOnly = pageCount > 0 && sourceBytes / pageCount < TEXT_ONLY_BYTES_PER_PAGE;
   const ratio = RATIO_BY_PRESET[preset];
   const minRatio = likelyTextOnly ? ratio.textMin : ratio.min;
   const maxRatio = likelyTextOnly ? ratio.textMax : ratio.max;

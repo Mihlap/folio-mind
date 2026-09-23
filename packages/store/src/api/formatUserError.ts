@@ -25,11 +25,11 @@ const OUT_OF_RANGE_PATTERN = /out of range|больш[ее] числа стра�
 const PAYLOAD_LARGE_PATTERN = /payload too large/i;
 const JSON_PATTERN =
   /invalid json|unexpected (token|end|character)|unexpected end of json|json.*(parse|valid|format)|expected.*json|не в формате json|валидным json|invalid.*json|response.*not.*json|json.*object/i;
-const API_ERROR_PATTERN = /api error|responsestatus|http \d{3}|status \d{3}|axios|max retries|retry/i;
+const API_ERROR_PATTERN =
+  /api error|responsestatus|http \d{3}|status \d{3}|axios|max retries|retry/i;
 const NOT_CONFIGURED_PATTERN = /not configured|не настроен/i;
 const VALIDATION_PATTERN = /must be at least|validation error|invalid (request|body|input)|zod/i;
 
-/** Достаёт сырой текст ошибки из любого объекта ошибки (RTK Query, Error, строка…). */
 export function extractErrorText(err: unknown): string | undefined {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
@@ -54,7 +54,6 @@ export function extractErrorStatus(err: unknown): number | string | undefined {
   return typeof status === 'number' || typeof status === 'string' ? status : undefined;
 }
 
-/** Превращает сырой текст ошибки в короткое русское сообщение для пользователя. */
 export function formatUserError(text: unknown, status?: number | string): string {
   const raw = typeof text === 'string' ? text.trim() : text != null ? String(text).trim() : '';
   if (!raw || /^(undefined|null|nan|\[object )/i.test(raw)) {
@@ -67,13 +66,16 @@ export function formatUserError(text: unknown, status?: number | string): string
   if (CREDENTIALS_PATTERN.test(raw)) return MSG_AI_NOT_CONFIGURED;
   if (S3_PATTERN.test(raw)) return 'Файловое хранилище не настроено. Сообщите администратору.';
   if (S3_OBJECT_NOT_FOUND_PATTERN.test(raw)) return 'Файл не найден в хранилище.';
-  if (GOTENBERG_PATTERN.test(raw)) return 'Не удалось сконвертировать документ. Попробуйте ещё раз.';
+  if (GOTENBERG_PATTERN.test(raw))
+    return 'Не удалось сконвертировать документ. Попробуйте ещё раз.';
   if (PDF2DOCX_PATTERN.test(raw)) return 'Конвертация в DOCX не удалась. Попробуйте ещё раз.';
-  if (TARGET_VERSION_DELETED_PATTERN.test(raw)) return 'Целевая версия была удалена. Создайте новую.';
+  if (TARGET_VERSION_DELETED_PATTERN.test(raw))
+    return 'Целевая версия была удалена. Создайте новую.';
   if (JOB_NOT_FOUND_PATTERN.test(raw)) return MSG_JOB_NOT_FOUND;
   if (DOCUMENT_NOT_FOUND_PATTERN.test(raw)) return MSG_DOCUMENT_NOT_FOUND;
   if (OUT_OF_RANGE_PATTERN.test(raw)) return 'Номер страницы выходит за пределы документа.';
-  if (PAYLOAD_LARGE_PATTERN.test(raw)) return 'Файл слишком большой для отправки. Уменьшите размер или удалите лишнее.';
+  if (PAYLOAD_LARGE_PATTERN.test(raw))
+    return 'Файл слишком большой для отправки. Уменьшите размер или удалите лишнее.';
   if (JSON_PATTERN.test(raw)) return 'Сервис вернул некорректный ответ. Попробуйте ещё раз.';
   if (API_ERROR_PATTERN.test(raw)) return MSG_SERVICE_UNAVAILABLE;
   if (NOT_CONFIGURED_PATTERN.test(raw)) return MSG_AI_NOT_CONFIGURED;
@@ -83,11 +85,7 @@ export function formatUserError(text: unknown, status?: number | string): string
   return raw;
 }
 
-/** Полная функция для показа ошибки пользователю: Error/RTK-Query/строка → короткий русский текст. */
-export function toUserErrorMessage(
-  err: unknown,
-  fallback: string = MSG_GENERIC_ERROR,
-): string {
+export function toUserErrorMessage(err: unknown, fallback: string = MSG_GENERIC_ERROR): string {
   const text = extractErrorText(err);
   if (!text) return fallback;
   return formatUserError(text, extractErrorStatus(err));

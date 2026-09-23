@@ -3,10 +3,7 @@ import type { Env } from '../config/env.js';
 
 export type Mailer = {
   sendPasswordResetEmail(params: { to: string; resetUrl: string }): Promise<void>;
-  sendEmailVerification(params: {
-    to: string;
-    verifyUrl: string;
-  }): Promise<void>;
+  sendEmailVerification(params: { to: string; verifyUrl: string }): Promise<void>;
   sendMagicLinkEmail(params: { to: string; magicUrl: string }): Promise<void>;
   sendGuestCommentNotification(params: {
     to: string;
@@ -30,16 +27,15 @@ export type Mailer = {
 
 const DEFAULT_FROM_NAME = 'РазУм';
 
-/** From как объект — nodemailer кодирует кириллицу в RFC 2047 (иначе в Mail.ru «Р°Р·РЈРј»). */
-export function resolveSmtpFrom(rawFrom: string, fromName?: string): { name: string; address: string } {
+export function resolveSmtpFrom(
+  rawFrom: string,
+  fromName?: string,
+): { name: string; address: string } {
   const trimmed = rawFrom.trim().replace(/^["']|["']$/g, '');
   const angled = trimmed.match(/^(.*?)\s*<([^>]+)>\s*$/);
   const address = (angled ? angled[2]! : trimmed).trim();
   const nameFromEnv = fromName?.trim();
-  const name =
-    nameFromEnv && nameFromEnv.length > 0
-      ? nameFromEnv
-      : DEFAULT_FROM_NAME;
+  const name = nameFromEnv && nameFromEnv.length > 0 ? nameFromEnv : DEFAULT_FROM_NAME;
   return { name, address };
 }
 

@@ -28,7 +28,6 @@ function sharePasswordKey(token: string): string {
   return `folio-share-pwd:${token}`;
 }
 
-/** Миниатюры (fallback) не содержат watermark в PNG — накладываем в CSS. */
 const THUMB_WATERMARK_MAX_WIDTH = 240;
 
 const WATERMARK_TEXT = 'ТОЛЬКО ПРОСМОТР';
@@ -191,44 +190,44 @@ function GuestPageComments({
           {comments.map((comment) => {
             const isResolved = comment.status === 'resolved';
             return (
-            <li
-              key={comment.id}
-              className={[
-                'rounded-lg border px-3 py-2 text-sm',
-                isResolved
-                  ? 'border-emerald-200 bg-emerald-50/80 text-slate-800'
-                  : 'border-slate-200 bg-slate-50 text-slate-800',
-              ].join(' ')}
-            >
-              {isResolved && (
-                <p className="mb-1.5 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-900">
-                  {LABEL_GUEST_COMMENT_RESOLVED_GUEST}
-                </p>
-              )}
-              <p className="whitespace-pre-wrap">{comment.content}</p>
-              {isResolved && comment.authorReply && (
-                <div className="mt-2 rounded-md border border-emerald-200 bg-white px-2.5 py-2 text-xs">
-                  <p className="font-medium text-emerald-800">{LABEL_GUEST_AUTHOR_REPLY}</p>
-                  <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">
-                    {comment.authorReply}
+              <li
+                key={comment.id}
+                className={[
+                  'rounded-lg border px-3 py-2 text-sm',
+                  isResolved
+                    ? 'border-emerald-200 bg-emerald-50/80 text-slate-800'
+                    : 'border-slate-200 bg-slate-50 text-slate-800',
+                ].join(' ')}
+              >
+                {isResolved && (
+                  <p className="mb-1.5 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-900">
+                    {LABEL_GUEST_COMMENT_RESOLVED_GUEST}
                   </p>
-                </div>
-              )}
-              <p className="mt-1 text-[11px] text-slate-500">
-                {comment.authorName?.trim() || 'Заказчик'}
-                {comment.x != null && comment.y != null && !isResolved
-                  ? ' · с меткой на странице'
-                  : ''}
-                {isResolved && comment.resolvedAt
-                  ? ` · исправлено ${new Date(comment.resolvedAt).toLocaleString('ru-RU', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}`
-                  : ''}
-              </p>
-            </li>
+                )}
+                <p className="whitespace-pre-wrap">{comment.content}</p>
+                {isResolved && comment.authorReply && (
+                  <div className="mt-2 rounded-md border border-emerald-200 bg-white px-2.5 py-2 text-xs">
+                    <p className="font-medium text-emerald-800">{LABEL_GUEST_AUTHOR_REPLY}</p>
+                    <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">
+                      {comment.authorReply}
+                    </p>
+                  </div>
+                )}
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {comment.authorName?.trim() || 'Заказчик'}
+                  {comment.x != null && comment.y != null && !isResolved
+                    ? ' · с меткой на странице'
+                    : ''}
+                  {isResolved && comment.resolvedAt
+                    ? ` · исправлено ${new Date(comment.resolvedAt).toLocaleString('ru-RU', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}`
+                    : ''}
+                </p>
+              </li>
             );
           })}
         </ul>
@@ -359,7 +358,10 @@ export function GuestSharePage() {
     }
   }, [token]);
 
-  const resolveSharePassword = useCallback((pwd?: string | null) => pwd ?? sharePasswordRef.current, []);
+  const resolveSharePassword = useCallback(
+    (pwd?: string | null) => pwd ?? sharePasswordRef.current,
+    [],
+  );
 
   const commentsByPage = useMemo(() => {
     const map = new Map<number, GuestShareComment[]>();
@@ -371,10 +373,7 @@ export function GuestSharePage() {
     return map;
   }, [comments]);
 
-  const reviewMarkByPage = useMemo(
-    () => pageReviewMarksByPage(pageReviewMarks),
-    [pageReviewMarks],
-  );
+  const reviewMarkByPage = useMemo(() => pageReviewMarksByPage(pageReviewMarks), [pageReviewMarks]);
 
   const pagesNeedingFix = useMemo(
     () => pageReviewMarks.filter((m) => m.status === 'needs_fix').map((m) => m.page),
@@ -595,7 +594,11 @@ export function GuestSharePage() {
         },
         sharePassword,
       );
-      setComments((prev) => [...prev, created].sort((a, b) => a.page - b.page || a.createdAt.localeCompare(b.createdAt)));
+      setComments((prev) =>
+        [...prev, created].sort(
+          (a, b) => a.page - b.page || a.createdAt.localeCompare(b.createdAt),
+        ),
+      );
       setPinByPage((prev) => ({ ...prev, [page]: null }));
       setPinModePage(null);
     } finally {
@@ -651,7 +654,9 @@ export function GuestSharePage() {
       window.open(result.url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setBookletDownloadError(
-        err instanceof Error ? err.message : 'Не удалось скачать пакет. Попробуйте позже или обратитесь к отправителю.',
+        err instanceof Error
+          ? err.message
+          : 'Не удалось скачать пакет. Попробуйте позже или обратитесь к отправителю.',
       );
     } finally {
       setBookletDownloadBusy(false);
@@ -702,7 +707,8 @@ export function GuestSharePage() {
                     </button>
                   ) : (
                     <p className="text-xs text-slate-500">
-                      Пакет для скачивания ещё не собран — попросите отправителя подготовить ZIP в разделе «Буклет».
+                      Пакет для скачивания ещё не собран — попросите отправителя подготовить ZIP в
+                      разделе «Буклет».
                     </p>
                   )}
                   {bookletDownloadError && (
@@ -765,11 +771,15 @@ export function GuestSharePage() {
           </p>
         )}
 
-        {!needsPassword && !error && previewStatus === 'partial' && pages.length > 0 && pendingPages.length > 0 && (
-          <p className="mb-4 text-sm text-slate-600">
-            Загружаем оставшиеся страницы ({pages.length} из {pageCount})…
-          </p>
-        )}
+        {!needsPassword &&
+          !error &&
+          previewStatus === 'partial' &&
+          pages.length > 0 &&
+          pendingPages.length > 0 && (
+            <p className="mb-4 text-sm text-slate-600">
+              Загружаем оставшиеся страницы ({pages.length} из {pageCount})…
+            </p>
+          )}
 
         {!needsPassword && !error && pages.length > 0 && (
           <p className="mb-4 text-sm text-slate-600">
@@ -781,76 +791,75 @@ export function GuestSharePage() {
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
             <p className="font-medium">Отправитель просит проверить страницы</p>
             <p className="mt-1 text-xs leading-relaxed text-amber-900">
-              Нужны правки:{' '}
-              {pagesNeedingFix.map((page) => `стр. ${page}`).join(', ')}. Ниже на этих листах — жёлтый
-              баннер с пояснением.
+              Нужны правки: {pagesNeedingFix.map((page) => `стр. ${page}`).join(', ')}. Ниже на этих
+              листах — жёлтый баннер с пояснением.
             </p>
           </div>
         )}
 
         {!needsPassword && (
-        <div className="space-y-6">
-          {pages.map((item) => {
-            const reviewStatus = reviewMarkByPage[item.page];
-            return (
-            <figure
-              key={item.page}
-              className={[
-                'overflow-hidden rounded-xl border bg-white shadow-sm',
-                reviewStatus === 'needs_fix' ? 'border-amber-300' : 'border-slate-200',
-              ].join(' ')}
-            >
-              <figcaption className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2 text-xs text-slate-500">
-                <span>
-                  Страница {item.page}
-                  {pageCount > 0 ? ` из ${pageCount}` : ''}
-                </span>
-                {reviewStatus === 'needs_fix' && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
-                    {LABEL_GUEST_PAGE_NEEDS_FIX}
-                  </span>
-                )}
-                {reviewStatus === 'ok' && (
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
-                    {LABEL_GUEST_PAGE_OK}
-                  </span>
-                )}
-              </figcaption>
-              {reviewStatus === 'needs_fix' && (
-                <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs leading-relaxed text-amber-950">
-                  {MSG_GUEST_PAGE_NEEDS_FIX}
-                </div>
-              )}
-              <GuestSharePageImage
-                url={item.url}
-                page={item.page}
-                pinMode={pinModePage === item.page}
-                pin={pinByPage[item.page] ?? null}
-                onPin={(pin) => {
-                  setPinByPage((prev) => ({ ...prev, [item.page]: pin }));
-                  setPinModePage(null);
-                }}
-              />
-              <GuestPageComments
-                page={item.page}
-                comments={commentsByPage.get(item.page) ?? []}
-                authorName={authorName}
-                authorEmail={authorEmail}
-                pin={pinByPage[item.page] ?? null}
-                pinMode={pinModePage === item.page}
-                submitting={submittingPage === item.page}
-                onTogglePinMode={() =>
-                  setPinModePage((prev) => (prev === item.page ? null : item.page))
-                }
-                onClearPin={() => setPinByPage((prev) => ({ ...prev, [item.page]: null }))}
-                onAuthorNameChange={handleAuthorNameChange}
-                onAuthorEmailChange={handleAuthorEmailChange}
-                onSubmit={(content) => handleSubmitComment(item.page, content)}
-              />
-            </figure>
-            );
-          })}
-        </div>
+          <div className="space-y-6">
+            {pages.map((item) => {
+              const reviewStatus = reviewMarkByPage[item.page];
+              return (
+                <figure
+                  key={item.page}
+                  className={[
+                    'overflow-hidden rounded-xl border bg-white shadow-sm',
+                    reviewStatus === 'needs_fix' ? 'border-amber-300' : 'border-slate-200',
+                  ].join(' ')}
+                >
+                  <figcaption className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2 text-xs text-slate-500">
+                    <span>
+                      Страница {item.page}
+                      {pageCount > 0 ? ` из ${pageCount}` : ''}
+                    </span>
+                    {reviewStatus === 'needs_fix' && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                        {LABEL_GUEST_PAGE_NEEDS_FIX}
+                      </span>
+                    )}
+                    {reviewStatus === 'ok' && (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                        {LABEL_GUEST_PAGE_OK}
+                      </span>
+                    )}
+                  </figcaption>
+                  {reviewStatus === 'needs_fix' && (
+                    <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs leading-relaxed text-amber-950">
+                      {MSG_GUEST_PAGE_NEEDS_FIX}
+                    </div>
+                  )}
+                  <GuestSharePageImage
+                    url={item.url}
+                    page={item.page}
+                    pinMode={pinModePage === item.page}
+                    pin={pinByPage[item.page] ?? null}
+                    onPin={(pin) => {
+                      setPinByPage((prev) => ({ ...prev, [item.page]: pin }));
+                      setPinModePage(null);
+                    }}
+                  />
+                  <GuestPageComments
+                    page={item.page}
+                    comments={commentsByPage.get(item.page) ?? []}
+                    authorName={authorName}
+                    authorEmail={authorEmail}
+                    pin={pinByPage[item.page] ?? null}
+                    pinMode={pinModePage === item.page}
+                    submitting={submittingPage === item.page}
+                    onTogglePinMode={() =>
+                      setPinModePage((prev) => (prev === item.page ? null : item.page))
+                    }
+                    onClearPin={() => setPinByPage((prev) => ({ ...prev, [item.page]: null }))}
+                    onAuthorNameChange={handleAuthorNameChange}
+                    onAuthorEmailChange={handleAuthorEmailChange}
+                    onSubmit={(content) => handleSubmitComment(item.page, content)}
+                  />
+                </figure>
+              );
+            })}
+          </div>
         )}
 
         {!needsPassword && !error && loadedThrough > 0 && pageCount > loadedThrough && (

@@ -4,7 +4,7 @@ type Props = {
   onClick: () => void;
   title: string;
   className?: string;
-  /** Фиксированная позиция по центру рабочей области документа. */
+
   syncedToWorkspace?: boolean;
 };
 
@@ -55,9 +55,7 @@ export function PanelViewportToggle({
       onClick={onClick}
       className={[
         'z-50 flex h-11 w-2.5 -translate-y-1/2 cursor-pointer items-center justify-center border border-slate-300 bg-[#e9eef5] text-slate-600 shadow-sm hover:border-slate-400 hover:bg-slate-200 hover:text-slate-800',
-        syncedToWorkspace
-          ? 'fixed top-[var(--panel-toggle-top)]'
-          : 'absolute top-1/2',
+        syncedToWorkspace ? 'fixed top-[var(--panel-toggle-top)]' : 'absolute top-1/2',
         syncedToWorkspace && side === 'left'
           ? 'left-[calc(var(--panel-toggle-left-edge)-0.625rem)]'
           : '',
@@ -68,12 +66,8 @@ export function PanelViewportToggle({
         !syncedToWorkspace && side === 'right'
           ? 'absolute left-0 rounded-l-sm rounded-r-none border-r-0'
           : '',
-        syncedToWorkspace && side === 'left'
-          ? 'rounded-r-sm rounded-l-none border-l-0'
-          : '',
-        syncedToWorkspace && side === 'right'
-          ? 'rounded-l-sm rounded-r-none border-r-0'
-          : '',
+        syncedToWorkspace && side === 'left' ? 'rounded-r-sm rounded-l-none border-l-0' : '',
+        syncedToWorkspace && side === 'right' ? 'rounded-l-sm rounded-r-none border-r-0' : '',
         className,
       ]
         .filter(Boolean)

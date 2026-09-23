@@ -6,7 +6,6 @@ import {
   type LayoutShapeObject,
 } from './layout-editor.js';
 
-/** Объект шаблона без imageSrc — слот под фото или фигура. */
 export type LayoutTemplateStoredObject =
   | {
       kind: 'image-slot';
@@ -137,7 +136,6 @@ function clampPage(page: number, maxPage: number): number {
   return normalized;
 }
 
-/** Разворачивает шаблон на целевую страницу (page 1 шаблона → targetPage). */
 export function applyLayoutTemplateObjects(
   templateObjects: LayoutTemplateStoredObject[],
   targetPage: number,

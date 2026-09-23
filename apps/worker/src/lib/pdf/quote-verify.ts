@@ -4,20 +4,17 @@ export type QuoteVerification = {
   matched: boolean;
   verbatim: string;
   confidence: number;
-  /** Номер страницы документа (1-based), на которой найдена цитата. Определён, только если matched=true. */
+
   page?: number;
 };
 
-/** Длинные цитаты не проверяем нечётко — дорого и ненадёжно. */
 const MAX_FUZZY_LENGTH = 200;
 const MIN_SIMILARITY = 0.82;
 
-/** Схлопывает любые пробелы (включая переносы строк) в один пробел, сохраняя регистр и пунктуацию. */
 export function collapseWhitespace(text: string): string {
   return text.normalize('NFC').replace(/\s+/g, ' ').trim();
 }
 
-/** Нормализация для сопоставления: пробелы + кавычки/тире в нейтральном виде. */
 export function normalizeForMatch(text: string): string {
   return collapseWhitespace(text)
     .replace(/[\u2018\u2019]/g, "'")
@@ -62,10 +59,6 @@ function alnumKey(text: string): { key: string; charIndexes: number[] } {
   return { key: parts.join(''), charIndexes };
 }
 
-/**
- * Ищет дословную цитату `candidate` в тексте страницы.
- * Возвращает нетривиальный вербатим: фактический текст документа с одним пробелом между словами.
- */
 export function findVerbatimQuote(pageText: string, candidate: string): QuoteVerification {
   const source = collapseWhitespace(pageText);
   const cand = normalizeForMatch(candidate);
@@ -108,7 +101,6 @@ export function findVerbatimQuote(pageText: string, candidate: string): QuoteVer
   return { matched: false, verbatim: candidate, confidence: best?.confidence ?? 0 };
 }
 
-/** Выбирает лучшую страницу для цитаты и возвращает дословный текст документа. */
 export function findBestVerbatimQuote(pages: PageText[], candidate: string): QuoteVerification {
   let best: QuoteVerification = { matched: false, verbatim: candidate, confidence: 0 };
   for (const page of pages) {

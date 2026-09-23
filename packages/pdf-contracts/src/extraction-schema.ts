@@ -17,28 +17,12 @@ export type ExtractionTemplate = {
   schema: ExtractionFieldSchema[];
 };
 
-export const EXTRACTION_TEMPLATE_IDS = [
-  'contract',
-  'contract_sections',
-  'act',
-  'tz',
-] as const;
+export const EXTRACTION_TEMPLATE_IDS = ['contract', 'contract_sections', 'act', 'tz'] as const;
 
-export const EXTRACTION_FIELD_TYPES = [
-  'string',
-  'number',
-  'boolean',
-  'array',
-  'object',
-] as const;
+export const EXTRACTION_FIELD_TYPES = ['string', 'number', 'boolean', 'array', 'object'] as const;
 
 export function isExtractionTemplateId(value: unknown): value is ExtractionTemplateId {
-  return (
-    value === 'contract' ||
-    value === 'contract_sections' ||
-    value === 'act' ||
-    value === 'tz'
-  );
+  return value === 'contract' || value === 'contract_sections' || value === 'act' || value === 'tz';
 }
 
 export function isExtractionFieldType(value: unknown): value is ExtractionFieldType {
@@ -51,7 +35,6 @@ export function isExtractionFieldType(value: unknown): value is ExtractionFieldT
   );
 }
 
-/** Lightweight runtime validation (Zod-compatible shape without hard Zod dep in contracts). */
 export function validateExtractionSchema(schema: unknown): ExtractionFieldSchema[] {
   if (!Array.isArray(schema) || schema.length === 0) {
     throw new Error('Схема извлечения должна быть непустым массивом полей');
@@ -96,9 +79,7 @@ function validateField(item: unknown, path: string): ExtractionFieldSchema {
     if (row.children.length > 20) {
       throw new Error(`${path}.children: слишком много вложенных полей`);
     }
-    field.children = row.children.map((child, i) =>
-      validateField(child, `${path}.children[${i}]`),
-    );
+    field.children = row.children.map((child, i) => validateField(child, `${path}.children[${i}]`));
   }
   return field;
 }

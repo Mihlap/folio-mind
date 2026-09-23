@@ -125,7 +125,6 @@ export function useDocumentAnnotationsPanel({
     setConflictEdit(null);
   }, [versionId]);
 
-  // После сборки/применения правок переключаемся на новую версию, как только она станет доступна.
   useEffect(() => {
     if (!pendingApplyVersionId) return;
     const target = docData?.versions.find((v) => v.id === pendingApplyVersionId);

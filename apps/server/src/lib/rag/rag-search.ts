@@ -20,7 +20,7 @@ export type RagChunkHit = {
 
 export type RagSearchOptions = {
   limit?: number;
-  /** Optional provider embed; falls back to local when missing/failing/wrong dim. */
+
   embed?: (text: string) => Promise<number[]>;
 };
 
@@ -112,10 +112,6 @@ async function searchRagChunksAny(
   });
 }
 
-/**
- * Hybrid RAG search: keyword hits first (stable during embedding migrations),
- * then vector fill, then any-chunk fallback. Vector failures never break search.
- */
 export async function searchRagChunks(
   prisma: PrismaClient,
   tenantId: string,
@@ -130,13 +126,7 @@ export async function searchRagChunks(
 
   let vectorHits: RagChunkHit[] = [];
   try {
-    const hits = await searchRagChunksByVector(
-      prisma,
-      tenantId,
-      query,
-      limit,
-      options.embed,
-    );
+    const hits = await searchRagChunksByVector(prisma, tenantId, query, limit, options.embed);
     if (hits) vectorHits = hits;
   } catch {
     // Vector search is optional; keyword/any fallback keeps RAG usable.

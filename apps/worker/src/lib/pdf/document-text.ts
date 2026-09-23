@@ -1,9 +1,10 @@
+import { extractedTextKey, parseExtractedTextJson, type PageText } from '@folio-mind/pdf-contracts';
 import {
-  extractedTextKey,
-  parseExtractedTextJson,
-  type PageText,
-} from '@folio-mind/pdf-contracts';
-import { extractTextFromPdf, extractTextFromPdfForAi, extractSinglePageTextFromPdf, getAiExtractMaxPages } from './pdf-text.js';
+  extractTextFromPdf,
+  extractTextFromPdfForAi,
+  extractSinglePageTextFromPdf,
+  getAiExtractMaxPages,
+} from './pdf-text.js';
 import { tryGetObjectBuffer } from '../storage/s3.js';
 
 export type AiSuggestionsScope = 'document' | 'page';
@@ -60,7 +61,6 @@ function isPagesExtractionIncomplete(
   return lastPage < expectedPages;
 }
 
-/** Для ИИ/RAG: при неполном кэше превью перечитывает PDF (до EXTRACT_AI_MAX_PAGES). */
 export async function loadDocumentPagesForAi(
   documentId: string,
   versionId: string,

@@ -239,9 +239,9 @@ export async function processGeneratePreviewsJob(
             },
           },
         });
-        
+
         if (resolvedTenantId) {
-          try {     
+          try {
             const indexResult = await indexDocumentVersionChunks({
               env,
               documentId,
@@ -275,7 +275,7 @@ export async function processGeneratePreviewsJob(
         }
       } catch (err) {
         const textError = err instanceof Error ? err.message : 'Text extraction failed';
-        // Empty extract often means a scan — try vision OCR when GigaChat is configured.
+
         let resolvedTenantId = tenantId;
         if (!resolvedTenantId) {
           const doc = await prisma.document.findUnique({

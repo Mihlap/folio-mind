@@ -1,4 +1,3 @@
-/** CORS_ORIGIN: один origin или список через запятую (web + Capacitor). */
 export function parseCorsOrigins(raw: string): string | string[] {
   const parts = raw
     .split(',')

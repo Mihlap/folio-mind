@@ -1,10 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { FILES_ROOT, resolveS3Key } from '@folio-mind/pdf-contracts';
-import {
-  deleteObjectByKey,
-  isS3Configured,
-  listObjectKeysByPrefix,
-} from './s3.js';
+import { deleteObjectByKey, isS3Configured, listObjectKeysByPrefix } from './s3.js';
 
 export type StorageHousekeepingSummary = {
   exportsDeleted: number;
@@ -42,10 +38,13 @@ function housekeepingIntervalMs(): number {
 
 function startDelayMs(): number {
   const minutes = Number(
-    process.env.STORAGE_HOUSEKEEPING_START_DELAY_MINUTES ?? DEFAULT_HOUSEKEEPING_START_DELAY_MINUTES,
+    process.env.STORAGE_HOUSEKEEPING_START_DELAY_MINUTES ??
+      DEFAULT_HOUSEKEEPING_START_DELAY_MINUTES,
   );
   return (
-    (Number.isFinite(minutes) && minutes >= 0 ? minutes : DEFAULT_HOUSEKEEPING_START_DELAY_MINUTES) *
+    (Number.isFinite(minutes) && minutes >= 0
+      ? minutes
+      : DEFAULT_HOUSEKEEPING_START_DELAY_MINUTES) *
     60 *
     1000
   );
@@ -59,7 +58,10 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-function versionPairFromKey(key: string, root: string): { documentId: string; versionId: string } | null {
+function versionPairFromKey(
+  key: string,
+  root: string,
+): { documentId: string; versionId: string } | null {
   const base = `${FILES_ROOT}/${root}/`;
   if (!key.startsWith(base)) return null;
   const rest = key.slice(base.length);
@@ -68,9 +70,7 @@ function versionPairFromKey(key: string, root: string): { documentId: string; ve
   return { documentId, versionId };
 }
 
-function originalFromKey(
-  key: string,
-): { documentId: string; versionNumber: number } | null {
+function originalFromKey(key: string): { documentId: string; versionNumber: number } | null {
   const base = `${FILES_ROOT}/originals/`;
   if (!key.startsWith(base)) return null;
   const rest = key.slice(base.length);
@@ -104,10 +104,6 @@ async function deleteKeysBestEffort(keys: string[], log: Logger, label: string):
   return deleted;
 }
 
-// Экспортные файлы (DOCX с подсветкой, отчёты, form-data) — одноразовые загрузки.
-// Удаляем их по TTL, чтобы они не копились в S3 после скачивания или отказа от выгрузки.
-// booklet.zip НЕ трогаем: он может ещё выдаваться по публичной ссылке; его чистит
-// sweep-сирот (для удалённой версии) и удаление версии/документа.
 export async function sweepStaleExports(log: Logger): Promise<number> {
   const ttl = exportsTtlMs();
   const now = Date.now();
@@ -179,11 +175,7 @@ export async function sweepOrphanedVersionObjects(
   const originalObjectsToDelete = originalObjects
     .filter((item) => !existingOriginals.has(`${item.documentId}:v${item.versionNumber}`))
     .map((item) => item.key);
-  const originals = await deleteKeysBestEffort(
-    originalObjectsToDelete,
-    log,
-    'orphaned originals',
-  );
+  const originals = await deleteKeysBestEffort(originalObjectsToDelete, log, 'orphaned originals');
 
   return { versionObjects, originals };
 }

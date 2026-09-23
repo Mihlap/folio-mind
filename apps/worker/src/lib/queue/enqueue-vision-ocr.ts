@@ -21,7 +21,6 @@ function getPreviewQueue(redisUrl: string): Queue {
   return previewQueue;
 }
 
-/** Create DB job + enqueue vision-ocr on the preview queue (worker-side). */
 export async function enqueueVisionOcrJob(params: {
   env: WorkerEnv;
   documentId: string;
@@ -32,16 +31,7 @@ export async function enqueueVisionOcrJob(params: {
   provider?: AIProviderName;
   requestId?: string;
 }): Promise<string> {
-  const {
-    env,
-    documentId,
-    versionId,
-    tenantId,
-    s3Key,
-    pageCount,
-    provider,
-    requestId,
-  } = params;
+  const { env, documentId, versionId, tenantId, s3Key, pageCount, provider, requestId } = params;
   const prisma = getPrisma();
   const job = await prisma.job.create({
     data: {

@@ -2,13 +2,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { useBackgroundUpload } from '../../context/useBackgroundUpload.js';
 
-/** Ошибки фоновой загрузки. Прогресс — на странице, где начали upload. */
 export function BackgroundUploadBanner() {
   const location = useLocation();
   const { active, error, clearError, kind } = useBackgroundUpload();
   const pathRef = useRef(location.pathname);
 
-  // Ошибка остаётся в Redux после сбоя; при переходе в меню баннер не должен «ехать» за пользователем.
   useEffect(() => {
     if (pathRef.current !== location.pathname) {
       pathRef.current = location.pathname;

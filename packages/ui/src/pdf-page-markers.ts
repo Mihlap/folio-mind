@@ -4,10 +4,10 @@ export type PdfPageMarker = {
   page: number;
   kind: PdfPageMarkerKind;
   title: string;
-  /** Позиция в пикселях на отрендеренной странице */
+
   x?: number;
   y?: number;
-  /** Нормализованная позиция 0–1 (гостевые метки) */
+
   xNorm?: number;
   yNorm?: number;
 };

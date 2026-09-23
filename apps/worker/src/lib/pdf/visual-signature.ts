@@ -8,7 +8,6 @@ export type VisualSignaturePlacement = {
   heightNorm: number;
 };
 
-/** Визуальная подпись (изображение) — трек A; не PAdES/PKCS#7. */
 export async function applyVisualSignature(
   pdfBuffer: Buffer,
   imagePng: Buffer,
