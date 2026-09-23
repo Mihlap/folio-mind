@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import {
   fetchMediaAssetDataUrl,
   formatBytesShort,
@@ -71,7 +71,20 @@ export function MediaLibraryPanel() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [success]);
+
+  useEffect(() => {
+    if (!deletedNotice) return;
+    const timer = window.setTimeout(() => setDeletedNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [deletedNotice]);
 
   const { data, isLoading, refetch } = useListMediaAssetsQuery(
     searchQuery.trim() ? { q: searchQuery.trim() } : undefined,
@@ -104,6 +117,7 @@ export function MediaLibraryPanel() {
 
       setError(null);
       setSuccess(null);
+      setDeletedNotice(null);
       setUploading(true);
       let optimizedCount = 0;
       try {
@@ -192,8 +206,11 @@ export function MediaLibraryPanel() {
     const ok = window.confirm(`Удалить «${asset.title}» из медиатеки? Все файлы в хранилище будут удалены.`);
     if (!ok) return;
     setError(null);
+    setSuccess(null);
+    setDeletedNotice(null);
     try {
       await deleteMediaAsset({ assetId: asset.id }).unwrap();
+      setDeletedNotice(`Изображение «${asset.title}» удалено из медиатеки`);
       if (previewAsset?.id === asset.id) closePreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось удалить');
@@ -279,6 +296,11 @@ export function MediaLibraryPanel() {
       {error && (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
           {error}
+        </p>
+      )}
+      {deletedNotice && (
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="status">
+          {deletedNotice}
         </p>
       )}
       {success && (
