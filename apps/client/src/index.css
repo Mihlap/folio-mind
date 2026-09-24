@@ -154,3 +154,16 @@ body {
     @apply border-slate-300/80;
   }
 }
+
+@keyframes folio-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.progress-indeterminate {
+  animation: folio-indeterminate 1.4s ease-in-out infinite;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   BOOKLET_EXPORT_DEFAULT_JPEG_DPI,
   toUserErrorMessage,
@@ -14,6 +14,7 @@ import {
 } from '@folio-mind/store';
 import { useAppSelector } from '../../hooks/index.js';
 import { downloadDocumentPdf } from '../../lib/documents/documentPdf.js';
+import { formatConvertFailure, openDownloadUrl } from '../../lib/documents/exportDownload.js';
 import {
   docxDownloadLabel,
   hasUserSourceDocx,
@@ -41,20 +42,21 @@ const actionBtn =
 
 const CONVERSION_RISK_NOTICE = {
   images:
-    'PDF был в основном картинками (текст встроен в изображения) — в DOCX текст почти не редактируется. Для правок загрузите исходный DOCX Word.',
-  deck:
-    'В PDF много картинок и нестандартные шрифты — в Word возможны наложения текста. Проверьте результат или загрузите исходный DOCX Word.',
+    'Текст в этом PDF отсутствует как текст — страницы состоят из картинок, и конвертация в Word не сделает его редактируемым. Для правок загрузите исходный DOCX Word.',
+  deck: 'PDF похож на презентацию: много картинок и нестандартных шрифтов — в Word текст может накладываться друг на друга. Проверьте результат или загрузите исходный DOCX Word.',
   mixed:
-    'В PDF много картинок и нестандартные шрифты — в DOCX возможны наложения текста и нередактируемые фрагменты. Лучше загрузить исходный DOCX Word.',
+    'Качественно сконвертировать этот файл в Word невозможно: текст частично встроен в картинки, вёрстка в Word ломается. Используйте исходный DOCX Word для правок.',
 } as const;
 
 export function DocumentVersionExportPanel({ documentId, version, versionReady }: Props) {
   const token = useAppSelector((s) => s.auth.token);
   const [error, setError] = useState<string | null>(null);
   const [statusHint, setStatusHint] = useState<string | null>(null);
-  const [conversionRisk, setConversionRisk] = useState<
-    keyof typeof CONVERSION_RISK_NOTICE | null
-  >(null);
+  const [conversionRisk, setConversionRisk] = useState<keyof typeof CONVERSION_RISK_NOTICE | null>(
+    null,
+  );
+  const [convertStartedAt, setConvertStartedAt] = useState<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [imageFormat, setImageFormat] = useState<'jpeg' | 'png'>('jpeg');
   const [imageDpi, setImageDpi] = useState(BOOKLET_EXPORT_DEFAULT_JPEG_DPI);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -73,18 +75,33 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
     pollingInterval: activeJobId ? 2000 : 0,
   });
 
+  const resetConvertProgress = useCallback(() => {
+    setConvertStartedAt(null);
+    setElapsedSec(0);
+  }, []);
+
   useEffect(() => {
     if (pollError && !job && activeJobId) {
       setError(MSG_JOB_NOT_FOUND);
       setActiveJobId(null);
       setJobKind(null);
+      resetConvertProgress();
     }
-  }, [pollError, job, activeJobId]);
+  }, [pollError, job, activeJobId, resetConvertProgress]);
 
   const busy = converting || exportingPages || exportingBooklet || Boolean(activeJobId);
+  const convertInProgress = converting || jobKind === 'convert';
+
+  useEffect(() => {
+    if (!convertInProgress || convertStartedAt == null) return;
+    const update = () => setElapsedSec(Math.round((Date.now() - convertStartedAt) / 1000));
+    update();
+    const id = window.setInterval(update, 1000);
+    return () => window.clearInterval(id);
+  }, [convertInProgress, convertStartedAt]);
+
   const pageCount = version.pageCount ?? 0;
-  const allPages =
-    pageCount > 0 ? Array.from({ length: pageCount }, (_, index) => index + 1) : [];
+  const allPages = pageCount > 0 ? Array.from({ length: pageCount }, (_, index) => index + 1) : [];
 
   useEffect(() => {
     if (!job || !activeJobId) return;
@@ -96,17 +113,17 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
           .unwrap()
           .then((result) => {
             setConversionRisk(result.layoutRisk);
-            window.open(result.url, '_blank', 'noopener,noreferrer');
+            openDownloadUrl(result.url);
           })
           .catch(() => {
-            setError('DOCX готов, но ссылку открыть не удалось — попробуйте ещё раз.');
+            setError('DOCX готов, но ссылку открыть не удалось — нажмите «DOCX из PDF» ещё раз.');
           });
       } else if (jobKind === 'pages') {
         setStatusHint(String(payload?.message ?? 'Картинки страниц готовы.'));
         void fetchPagesUrl({ documentId, versionId: version.id })
           .unwrap()
           .then((result) => {
-            window.open(result.url, '_blank', 'noopener,noreferrer');
+            openDownloadUrl(result.url);
           })
           .catch(() => {
             setError('Экспорт готов, но ссылку открыть не удалось.');
@@ -116,7 +133,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
         void fetchBookletUrl({ documentId, versionId: version.id })
           .unwrap()
           .then((result) => {
-            window.open(result.url, '_blank', 'noopener,noreferrer');
+            openDownloadUrl(result.url);
           })
           .catch(() => {
             setError('Пакет готов, но ссылку открыть не удалось.');
@@ -124,12 +141,18 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
       }
       setActiveJobId(null);
       setJobKind(null);
+      resetConvertProgress();
     }
     if (job.status === 'failed') {
       const payload = job.payload as { error?: string } | null;
-      setError(toUserErrorMessage(payload?.error, 'Не удалось выполнить операцию.'));
+      if (jobKind === 'convert') {
+        setError(formatConvertFailure(payload?.error));
+      } else {
+        setError(toUserErrorMessage(payload?.error, 'Не удалось выполнить операцию.'));
+      }
       setActiveJobId(null);
       setJobKind(null);
+      resetConvertProgress();
     }
   }, [
     job,
@@ -140,6 +163,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
     fetchConvertedDocx,
     fetchPagesUrl,
     fetchBookletUrl,
+    resetConvertProgress,
   ]);
 
   async function handlePdfDownload() {
@@ -154,7 +178,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
 
   async function openDocxUrl(fetcher: typeof fetchSourceDocx) {
     const { url } = await fetcher({ documentId, versionId: version.id }).unwrap();
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openDownloadUrl(url);
   }
 
   async function handleSourceDocxDownload() {
@@ -175,21 +199,23 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
     try {
       const result = await fetchConvertedDocx({ documentId, versionId: version.id }).unwrap();
       setConversionRisk(result.layoutRisk);
-      window.open(result.url, '_blank', 'noopener,noreferrer');
+      openDownloadUrl(result.url);
     } catch {
+      setConvertStartedAt(Date.now());
+      setElapsedSec(0);
       try {
         const result = await convertPdfToDocx({ documentId, versionId: version.id }).unwrap();
         if ('operationJobId' in result) {
           setJobKind('convert');
           setActiveJobId(result.operationJobId);
-          setStatusHint('Конвертируем PDF в DOCX…');
           return;
         }
         const urlResult = await fetchConvertedDocx({ documentId, versionId: version.id }).unwrap();
         setConversionRisk(urlResult.layoutRisk);
-        window.open(urlResult.url, '_blank', 'noopener,noreferrer');
+        openDownloadUrl(urlResult.url);
       } catch (err) {
-        setError(toUserErrorMessage(err, 'Не удалось конвертировать PDF в DOCX'));
+        resetConvertProgress();
+        setError(formatConvertFailure(toUserErrorMessage(err, '')));
       }
     }
   }
@@ -235,9 +261,7 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <p className="text-xs font-medium text-slate-800">
-          Экспорт версии v{version.version}
-        </p>
+        <p className="text-xs font-medium text-slate-800">Экспорт версии v{version.version}</p>
         <FeatureHelpButton title="Экспорт и конвертация">
           <p>Скачайте текущую версию в нужном формате или конвертируйте PDF в Word.</p>
           <p>
@@ -277,11 +301,34 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
             disabled={busy}
             onClick={() => void handleConvertedDocxDownload()}
           >
-            <span>{converting || jobKind === 'convert' ? 'Конвертация…' : 'DOCX из PDF'}</span>
+            <span className="inline-flex items-center gap-1.5">
+              {convertInProgress && (
+                <span
+                  className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-folio-600"
+                  aria-hidden
+                />
+              )}
+              {convertInProgress ? 'Конвертация…' : 'DOCX из PDF'}
+            </span>
             <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
           </button>
         )}
       </div>
+
+      {convertInProgress && (
+        <div className="space-y-1.5" role="status" aria-live="polite">
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="progress-indeterminate h-full w-1/4 rounded-full bg-folio-500" />
+          </div>
+          <p className="text-[11px] text-slate-600">
+            Конвертируем PDF в DOCX… прошло {elapsedSec} с
+          </p>
+          <p className="text-[11px] text-slate-400">
+            Обычно занимает 10–60 секунд, для файлов свыше 10 МБ — до нескольких минут. Скачивание
+            начнётся автоматически.
+          </p>
+        </div>
+      )}
 
       <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
         <p className="text-[11px] font-medium text-slate-700">Страницы как картинки</p>
@@ -304,7 +351,9 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
               min={72}
               max={600}
               value={imageDpi}
-              onChange={(e) => setImageDpi(Number(e.target.value) || BOOKLET_EXPORT_DEFAULT_JPEG_DPI)}
+              onChange={(e) =>
+                setImageDpi(Number(e.target.value) || BOOKLET_EXPORT_DEFAULT_JPEG_DPI)
+              }
               className="w-16 rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px]"
             />
           </label>
@@ -330,17 +379,26 @@ export function DocumentVersionExportPanel({ documentId, version, versionReady }
         disabled={!versionReady || busy}
         onClick={() => void handleExportBooklet()}
       >
-        <span>{exportingBooklet || jobKind === 'booklet' ? 'Сборка ZIP…' : 'ZIP: PDF + JPG всех страниц'}</span>
+        <span>
+          {exportingBooklet || jobKind === 'booklet'
+            ? 'Сборка ZIP…'
+            : 'ZIP: PDF + JPG всех страниц'}
+        </span>
         <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
       </button>
 
       {statusHint && <p className="text-[11px] text-slate-500">{statusHint}</p>}
       {conversionRisk && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+        <p className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+          <span className="font-semibold">Внимание: </span>
           {CONVERSION_RISK_NOTICE[conversionRisk]}
         </p>
       )}
-      {error && <p className="text-[11px] text-red-600">{error}</p>}
+      {error && (
+        <p className="rounded-md border-l-4 border-red-400 bg-red-50 px-3 py-2 text-[11px] leading-relaxed text-red-700">
+          {error}
+        </p>
+      )}
       {!versionReady && (
         <p className="text-[11px] text-slate-400">Дождитесь статуса «готова» у выбранной версии.</p>
       )}
