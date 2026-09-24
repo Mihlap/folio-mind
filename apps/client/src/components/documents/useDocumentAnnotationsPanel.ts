@@ -116,6 +116,7 @@ export function useDocumentAnnotationsPanel({
   });
 
   useEffect(() => {
+    if (pendingApplyVersionId && versionId === pendingApplyVersionId) return;
     setContent('');
     setEditBefore('');
     setEditAfter('');
@@ -129,7 +130,7 @@ export function useDocumentAnnotationsPanel({
     setApplyFailedEdits([]);
     setApplyFailureRetryable(false);
     setConflictEdit(null);
-  }, [versionId]);
+  }, [versionId, pendingApplyVersionId]);
 
   useEffect(() => {
     if (!pendingApplyVersionId) return;

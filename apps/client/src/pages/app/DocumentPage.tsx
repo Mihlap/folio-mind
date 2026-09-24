@@ -166,7 +166,7 @@ export function DocumentPage() {
   const handleSelectVersion = useCallback(
     (versionId: string) => {
       const version = versions.find((v) => v.id === versionId);
-      if (version && !isDocumentVersionSelectable(version)) return;
+      if (!version || !isDocumentVersionSelectable(version)) return;
       setSelectedVersionId(versionId);
     },
     [versions],
