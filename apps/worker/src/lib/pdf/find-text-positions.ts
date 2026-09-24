@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { collectEmbeddedFontBytes, type PdfTextStyle } from './pdf-edit-fonts.js';
+import { textItemBox, textSubstringBox } from './pdf-text-bounds.js';
 import { buildMatchedLines, type MatchedLine } from './pdf-text-lines.js';
 const require = createRequire(import.meta.url);
 const pdfjsPkgDir = dirname(require.resolve('pdfjs-dist/package.json'));
@@ -26,6 +27,15 @@ export type TextItem = {
   fontSize: number;
   fontName: string;
   fontFamily: string;
+  ascent?: number;
+  descent?: number;
+  fontAscent?: number;
+  fontDescent?: number;
+  fontWidth?: number;
+  fontBoundingBoxAscent?: number;
+  fontBoundingBoxDescent?: number;
+  fontSubstitution?: string;
+  fontVariationSettings?: string;
   hasEOL: boolean;
 };
 export type TextMatch = {
@@ -194,13 +204,8 @@ function fontSizeFromTransform(transform: number[]): number {
   return Math.hypot(transform[0] ?? 0, transform[1] ?? 0);
 }
 function itemBox(item: TextItem): TextBoxPosition {
-  const h = item.height || item.fontSize || 10;
-  return {
-    x: item.x,
-    y: item.y - h * 0.15,
-    width: item.width,
-    height: h * 1.3,
-  };
+  const box = textItemBox(item);
+  return { x: box.x, y: box.y, width: box.width, height: box.height };
 }
 function unionBoxes(a: TextBoxPosition, b: TextBoxPosition): TextBoxPosition {
   const x1 = Math.min(a.x, b.x);
@@ -224,37 +229,30 @@ function styleFromItems(items: TextItem[]): PdfTextStyle {
   if (items.length === 0) {
     return { fontSize: 12, fontName: '', fontFamily: 'sans-serif', lineHeight: 14 };
   }
-  let totalChars = 0;
-  let fontSizeSum = 0;
-  const fontWeights = new Map<string, { chars: number; family: string }>();
-  let maxHeight = 0;
-  for (const item of items) {
-    const chars = Math.max(item.str.length, 1);
-    totalChars += chars;
-    fontSizeSum += item.fontSize * chars;
-    maxHeight = Math.max(maxHeight, item.height || item.fontSize);
-    const prev = fontWeights.get(item.fontName) ?? { chars: 0, family: item.fontFamily };
-    fontWeights.set(item.fontName, {
-      chars: prev.chars + chars,
-      family: item.fontFamily || prev.family,
-    });
-  }
-  let fontName = items[0]!.fontName;
-  let fontFamily = items[0]!.fontFamily;
-  let bestChars = 0;
-  for (const [name, meta] of fontWeights) {
-    if (meta.chars > bestChars) {
-      bestChars = meta.chars;
-      fontName = name;
-      fontFamily = meta.family;
-    }
-  }
-  const fontSize = Math.max(
-    6,
-    Math.min(totalChars > 0 ? fontSizeSum / totalChars : items[0]!.fontSize, 72),
+  const primary = items.reduce((best, item) =>
+    item.str.length > best.str.length ? item : best,
   );
-  const lineHeight = Math.max(maxHeight, fontSize) * 1.2;
-  return { fontSize, fontName, fontFamily, lineHeight };
+  const fontSize = Math.max(6, Math.min(primary.fontSize || primary.height || 12, 72));
+  const lineHeight = Math.max(fontSize, primary.height || fontSize) * 1.2;
+  return {
+    fontSize,
+    fontName: primary.fontName,
+    fontFamily: primary.fontFamily,
+    lineHeight,
+    ...(primary.fontSubstitution ? { fontSubstitution: primary.fontSubstitution } : {}),
+    ...(primary.fontVariationSettings
+      ? { fontVariationSettings: primary.fontVariationSettings }
+      : {}),
+    ...(primary.ascent != null ? { ascent: primary.ascent } : {}),
+    ...(primary.descent != null ? { descent: primary.descent } : {}),
+    ...(primary.fontWidth != null ? { fontWidth: primary.fontWidth } : {}),
+    ...(primary.fontBoundingBoxAscent != null
+      ? { fontBoundingBoxAscent: primary.fontBoundingBoxAscent }
+      : {}),
+    ...(primary.fontBoundingBoxDescent != null
+      ? { fontBoundingBoxDescent: primary.fontBoundingBoxDescent }
+      : {}),
+  };
 }
 function resolveMatchStyle(items: TextItem[], box: TextBoxPosition): PdfTextStyle {
   const overlapping = items.filter((item) => boxesOverlap(itemBox(item), box));
@@ -294,7 +292,7 @@ function toHighlightMatch(
     const style = resolveMatchStyle(items, box);
     return {
       x: box.x,
-      y: box.y + box.height / 1.3,
+      y: matched[0]?.y ?? box.y + box.height,
       width: box.width,
       box,
       style,
@@ -323,7 +321,7 @@ function toMatchFromLineBoxes(
     const style = resolveMatchStyle(items, box);
     return {
       x: box.x,
-      y: box.y + box.height / 1.3,
+      y: matched[0]?.y ?? box.y + box.height,
       width: box.width,
       box,
       style,
@@ -350,7 +348,7 @@ function toMatch(
     lines = [
       {
         x: box.x,
-        y: box.y + box.height / 1.3,
+        y: matched[0]?.y ?? box.y + box.height,
         width: box.width,
         box,
         style,
@@ -366,10 +364,23 @@ function toMatch(
     lines,
   };
 }
+type PdfTextStyleRecord = {
+  fontFamily?: string;
+  ascent?: number;
+  descent?: number;
+  fontSubstitution?: string;
+  fontVariationSettings?: string;
+  fontBoundingBoxAscent?: number;
+  fontBoundingBoxDescent?: number;
+  fontAscent?: number;
+  fontDescent?: number;
+  fontWidth?: number;
+};
+
 async function collectPageTextItems(page: {
   getTextContent: () => Promise<{
     items: Array<Record<string, unknown>>;
-    styles: Record<string, { fontFamily?: string }>;
+    styles: Record<string, PdfTextStyleRecord>;
   }>;
 }): Promise<TextItem[]> {
   const content = await page.getTextContent();
@@ -378,9 +389,8 @@ async function collectPageTextItems(page: {
     if (typeof raw.str !== 'string' || !raw.str) continue;
     const transform = Array.isArray(raw.transform) ? (raw.transform as number[]) : [];
     const fontName = typeof raw.fontName === 'string' ? raw.fontName : '';
-    const fontFamily = fontName
-      ? (content.styles[fontName]?.fontFamily ?? 'sans-serif')
-      : 'sans-serif';
+    const style = fontName ? content.styles[fontName] : undefined;
+    const fontFamily = style?.fontFamily ?? 'sans-serif';
     const fontSize = fontSizeFromTransform(transform);
     const height = typeof raw.height === 'number' ? raw.height : fontSize;
     const width = typeof raw.width === 'number' ? raw.width : 0;
@@ -393,6 +403,21 @@ async function collectPageTextItems(page: {
       fontSize: fontSize > 0 ? fontSize : height > 0 ? height : 12,
       fontName,
       fontFamily,
+      ...(style?.ascent != null ? { ascent: style.ascent } : {}),
+      ...(style?.descent != null ? { descent: style.descent } : {}),
+      ...(style?.fontSubstitution ? { fontSubstitution: style.fontSubstitution } : {}),
+      ...(style?.fontVariationSettings
+        ? { fontVariationSettings: style.fontVariationSettings }
+        : {}),
+      ...(style?.fontBoundingBoxAscent != null
+        ? { fontBoundingBoxAscent: style.fontBoundingBoxAscent }
+        : {}),
+      ...(style?.fontBoundingBoxDescent != null
+        ? { fontBoundingBoxDescent: style.fontBoundingBoxDescent }
+        : {}),
+      ...(style?.fontAscent != null ? { fontAscent: style.fontAscent } : {}),
+      ...(style?.fontDescent != null ? { fontDescent: style.fontDescent } : {}),
+      ...(style?.fontWidth != null ? { fontWidth: style.fontWidth } : {}),
       hasEOL: Boolean(raw.hasEOL),
     });
   }
@@ -540,13 +565,9 @@ function searchSingleItemsRegex(items: TextItem[], re: RegExp): TextBoxPosition[
     if (!haystack) continue;
     const match = re.exec(haystack);
     if (!match) continue;
-    const charWidth = item.width / Math.max(haystack.length, 1);
-    results.push({
-      x: item.x + match.index * charWidth,
-      y: item.y - (item.height || item.fontSize || 10) * 0.15,
-      width: match[0].length * charWidth,
-      height: (item.height || item.fontSize || 10) * 1.3,
-    });
+    results.push(
+      textSubstringBox(item, match.index, match[0].length, haystack.length),
+    );
   }
   return results;
 }
@@ -558,13 +579,7 @@ function searchSingleItems(items: TextItem[], needle: string): TextBoxPosition[]
     if (!haystack) continue;
     const idx = haystack.indexOf(needle);
     if (idx === -1) continue;
-    const charWidth = item.width / Math.max(haystack.length, 1);
-    results.push({
-      x: item.x + idx * charWidth,
-      y: item.y - (item.height || item.fontSize || 10) * 0.15,
-      width: needle.length * charWidth,
-      height: (item.height || item.fontSize || 10) * 1.3,
-    });
+    results.push(textSubstringBox(item, idx, needle.length, haystack.length));
   }
   return results;
 }

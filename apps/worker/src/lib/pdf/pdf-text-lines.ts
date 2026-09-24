@@ -1,5 +1,6 @@
 import type { TextItem } from './find-text-positions.js';
 import type { PdfTextStyle } from './pdf-edit-fonts.js';
+import { textItemBox } from './pdf-text-bounds.js';
 export type MatchedLine = {
   x: number;
   y: number;
@@ -13,13 +14,7 @@ function norm(str: string): string {
   return str.replace(/\s+/g, ' ').trim();
 }
 function itemBox(item: TextItem): { x: number; y: number; width: number; height: number } {
-  const h = item.height || item.fontSize || 10;
-  return {
-    x: item.x,
-    y: item.y - h * 0.15,
-    width: item.width,
-    height: h * 1.3,
-  };
+  return textItemBox(item);
 }
 function unionBoxes(boxes: Array<{ x: number; y: number; width: number; height: number }>): {
   x: number;
@@ -37,37 +32,29 @@ function styleFromItems(items: TextItem[]): PdfTextStyle {
   if (items.length === 0) {
     return { fontSize: 12, fontName: '', fontFamily: 'sans-serif', lineHeight: 14 };
   }
-  let totalChars = 0;
-  let sizeSum = 0;
-  const fontWeights = new Map<string, { chars: number; family: string }>();
-  let maxHeight = 0;
-  for (const item of items) {
-    const chars = Math.max(item.str.length, 1);
-    const size = item.height > 0 ? item.height : item.fontSize;
-    totalChars += chars;
-    sizeSum += size * chars;
-    maxHeight = Math.max(maxHeight, item.height || item.fontSize);
-    const prev = fontWeights.get(item.fontName) ?? { chars: 0, family: item.fontFamily };
-    fontWeights.set(item.fontName, {
-      chars: prev.chars + chars,
-      family: item.fontFamily || prev.family,
-    });
-  }
-  let fontName = items[0]!.fontName;
-  let fontFamily = items[0]!.fontFamily;
-  let bestChars = 0;
-  for (const [name, meta] of fontWeights) {
-    if (meta.chars > bestChars) {
-      bestChars = meta.chars;
-      fontName = name;
-      fontFamily = meta.family;
-    }
-  }
-  const fontSize = Math.max(
-    6,
-    Math.min(totalChars > 0 ? sizeSum / totalChars : items[0]!.height || items[0]!.fontSize, 72),
+  const primary = items.reduce((best, item) =>
+    item.str.length > best.str.length ? item : best,
   );
-  return { fontSize, fontName, fontFamily, lineHeight: Math.max(maxHeight, fontSize) * 1.15 };
+  const fontSize = Math.max(6, Math.min(primary.fontSize || primary.height || 12, 72));
+  return {
+    fontSize,
+    fontName: primary.fontName,
+    fontFamily: primary.fontFamily,
+    lineHeight: Math.max(fontSize, primary.height || fontSize) * 1.15,
+    ...(primary.fontSubstitution ? { fontSubstitution: primary.fontSubstitution } : {}),
+    ...(primary.fontVariationSettings
+      ? { fontVariationSettings: primary.fontVariationSettings }
+      : {}),
+    ...(primary.ascent != null ? { ascent: primary.ascent } : {}),
+    ...(primary.descent != null ? { descent: primary.descent } : {}),
+    ...(primary.fontWidth != null ? { fontWidth: primary.fontWidth } : {}),
+    ...(primary.fontBoundingBoxAscent != null
+      ? { fontBoundingBoxAscent: primary.fontBoundingBoxAscent }
+      : {}),
+    ...(primary.fontBoundingBoxDescent != null
+      ? { fontBoundingBoxDescent: primary.fontBoundingBoxDescent }
+      : {}),
+  };
 }
 export function groupItemsByLine(items: TextItem[]): TextItem[][] {
   if (items.length === 0) return [];

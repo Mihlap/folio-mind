@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { StandardFonts } from 'pdf-lib';
 import type { PDFDocument, PDFFont } from 'pdf-lib';
 import type { TextItem } from './find-text-positions.js';
 const require = createRequire(import.meta.url);
@@ -10,6 +11,13 @@ export type PdfTextStyle = {
   fontName: string;
   fontFamily: string;
   lineHeight: number;
+  ascent?: number;
+  descent?: number;
+  fontWidth?: number;
+  fontBoundingBoxAscent?: number;
+  fontBoundingBoxDescent?: number;
+  fontSubstitution?: string;
+  fontVariationSettings?: string;
 };
 function isSerifFamily(fontFamily: string): boolean {
   const f = fontFamily.toLowerCase();
@@ -28,7 +36,7 @@ export function fontSizeFromTextItems(items: TextItem[]): number {
   let chars = 0;
   for (const item of items) {
     const c = Math.max(item.str.length, 1);
-    const size = item.height > 0 ? item.height : item.fontSize > 0 ? item.fontSize : 12;
+    const size = item.fontSize > 0 ? item.fontSize : item.height > 0 ? item.height : 12;
     weighted += size * c;
     chars += c;
   }
@@ -71,8 +79,50 @@ export function pickEmbeddedFontBytes(
   return null;
 }
 
+export function pickStandardFont(style: PdfTextStyle): StandardFonts | null {
+  const raw = `${style.fontName} ${style.fontFamily} ${style.fontSubstitution ?? ''} ${style.fontVariationSettings ?? ''}`.toLowerCase();
+  if (!raw.trim()) return null;
+  const bold = /bold|black|semibold|demi|heavy|\b[789]00\b/.test(raw);
+  const italic = /italic|oblique|slanted/.test(raw);
+  const mono = /courier|consol|monaco|liberation mono|dejavu sans mono/.test(raw);
+  const serif =
+    !mono &&
+    /times|georgia|cambria|garamond|book antiqua|palatino|bookman|liberation serif/.test(raw) &&
+    !/sans/.test(raw);
+  const sans =
+    !mono &&
+    !serif &&
+    /arial|helv|calibri|segoe|roboto|inter|verdana|tahoma|trebuchet|liberation sans/.test(raw);
+  if (mono) {
+    if (bold && italic) return StandardFonts.CourierBoldOblique;
+    if (bold) return StandardFonts.CourierBold;
+    if (italic) return StandardFonts.CourierOblique;
+    return StandardFonts.Courier;
+  }
+  if (serif) {
+    if (bold && italic) return StandardFonts.TimesRomanBoldItalic;
+    if (bold) return StandardFonts.TimesRomanBold;
+    if (italic) return StandardFonts.TimesRomanItalic;
+    return StandardFonts.TimesRoman;
+  }
+  if (sans) {
+    if (bold && italic) return StandardFonts.HelveticaBoldOblique;
+    if (bold) return StandardFonts.HelveticaBold;
+    if (italic) return StandardFonts.HelveticaOblique;
+    return StandardFonts.Helvetica;
+  }
+  return null;
+}
+
+function canEncodeWithStandardFont(text: string): boolean {
+  for (const char of text) {
+    if ((char.codePointAt(0) ?? 0) > 0xff) return false;
+  }
+  return true;
+}
+
 export function calibrateFontSize(item: TextItem, font: PDFFont): number {
-  const base = item.height > 0 ? item.height : item.fontSize > 0 ? item.fontSize : 12;
+  const base = item.fontSize > 0 ? item.fontSize : item.height > 0 ? item.height : 12;
   const text = item.str.trim();
   if (!text || item.width <= 0) return base;
   let low = base * 0.75;
@@ -87,6 +137,7 @@ export function calibrateFontSize(item: TextItem, font: PDFFont): number {
 }
 export class PdfEditFontCache {
   private readonly embedded = new Map<string, PDFFont>();
+  private readonly standard = new Map<string, PDFFont>();
   private serif: PDFFont | null = null;
   private sans: PDFFont | null = null;
   private async embedNamedFont(
@@ -100,14 +151,29 @@ export class PdfEditFontCache {
     this.embedded.set(fontName, font);
     return font;
   }
+  private async embedStandardFont(
+    pdfDoc: PDFDocument,
+    standardFont: StandardFonts,
+  ): Promise<PDFFont> {
+    const cached = this.standard.get(standardFont);
+    if (cached) return cached;
+    const font = await pdfDoc.embedFont(standardFont);
+    this.standard.set(standardFont, font);
+    return font;
+  }
   async resolve(
     pdfDoc: PDFDocument,
     style: PdfTextStyle,
     fontBytesByName: Map<string, Uint8Array>,
+    sampleText?: string,
   ): Promise<PDFFont> {
     const picked = pickEmbeddedFontBytes(style, fontBytesByName);
     if (picked) {
       return this.embedNamedFont(pdfDoc, picked.fontName, picked.bytes);
+    }
+    const standardFont = pickStandardFont(style);
+    if (standardFont && sampleText != null && canEncodeWithStandardFont(sampleText)) {
+      return this.embedStandardFont(pdfDoc, standardFont);
     }
     const fallbackKey = isSerifFamily(style.fontFamily) ? 'fallback-serif' : 'fallback-sans';
     if (fallbackKey === 'fallback-serif') {
