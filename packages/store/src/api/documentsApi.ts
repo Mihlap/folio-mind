@@ -88,6 +88,7 @@ export const documentsApi = baseApi.injectEndpoints({
           hasAppliedDocx: boolean;
           textSource: string | null;
           visionOcrStatus: string | null;
+          failureDetails: Record<string, unknown> | null;
         }>;
       },
       string

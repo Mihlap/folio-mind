@@ -214,4 +214,5 @@ export const versionListItemSchema = z.object({
   hasAppliedDocx: z.boolean(),
   textSource: z.string().nullable(),
   visionOcrStatus: z.string().nullable(),
+  failureDetails: z.record(z.unknown()).nullable(),
 });

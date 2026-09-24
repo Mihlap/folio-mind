@@ -10,6 +10,7 @@ export {
   exportBookletZipKey,
   exportPagesZipKey,
   preConvertedDocxKey,
+  preConvertedOcrDocxKey,
   preConvertedDocxRiskKey,
   appliedDocxKey,
   previewPageKey,

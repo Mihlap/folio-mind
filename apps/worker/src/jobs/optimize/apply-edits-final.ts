@@ -6,9 +6,11 @@ import { convertDocxToPdf, isGotenbergConfigured } from '../../lib/convert/goten
 import { resolveDocxForEdits } from '../../lib/convert/resolve-docx.js';
 import { applyEditsToDocx, type DocxEditResult } from '../../lib/docx/apply-edits.js';
 import { applyEditsViaPdfOverlay, applyEditsViaPdfOverlayBuffer } from '../../lib/pdf/apply-edits-pdf-overlay.js';
+import { inspectPdfTextLayer, type PdfTextLayerReport } from '../../lib/pdf/find-text-positions.js';
 import { getPrisma } from '../../lib/infra/prisma.js';
 import { resolveS3Key } from '@folio-mind/pdf-contracts';
-import { deleteObjectByKey, isWorkerS3Configured, putObjectBuffer } from '../../lib/storage/s3.js';
+import { deleteObjectByKey, isWorkerS3Configured, putObjectBuffer, tryGetObjectBuffer } from '../../lib/storage/s3.js';
+import { classifyJobFailure, type JobFailureCategory } from '../../lib/job-failure.js';
 import {
   failOptimizeOperation,
   finalizeOptimizeVersion,
@@ -94,7 +96,61 @@ type DocxPipelineResult = {
   docxSource: string;
   method: 'docx' | 'docx-converted';
   editResults: DocxEditResult[];
+  ocrUsed?: boolean;
 };
+
+type ApplyFailureDetails = {
+  retryable: boolean;
+  category: JobFailureCategory;
+  message: string;
+  failedEdits: Array<{ page: number; originalText: string; suggestion: string }>;
+  pdf: { textLayer: boolean; pageCount: number; pagesWithoutText: number[] } | null;
+  docx: { source: string; ocrUsed: boolean } | null;
+  ocrTried: boolean;
+};
+
+function buildTextNotFoundFailureDetails(params: {
+  edits: Edit[];
+  hasUserDocx: boolean;
+  docxSource: string | undefined;
+  ocrTried: boolean;
+  pdfTextLayer: PdfTextLayerReport | null;
+}): ApplyFailureDetails {
+  const { edits, hasUserDocx, docxSource, ocrTried, pdfTextLayer } = params;
+  let message: string;
+  if (hasUserDocx) {
+    message =
+      'Не удалось собрать PDF: Word не отдал файл, а текст правок не найден в PDF. Проверьте поле «было».';
+  } else if (pdfTextLayer && !pdfTextLayer.hasTextLayer) {
+    message =
+      'Правки не применились: в PDF нет текстового слоя (документ отсканирован или текст встроен как изображение), а исходный DOCX не загружен. Загрузите исходный DOCX или исправьте поле «было».';
+  } else if (ocrTried) {
+    message =
+      'Правки не применились: текст «было» не найден ни в PDF, ни в DOCX (включая автоматический распознавание текста OCR). Проверьте точность поля «было» на странице правки или загрузите исходный DOCX.';
+  } else {
+    message =
+      'Правки не применились: текст «было» не найден ни в PDF, ни в конвертированном DOCX. Проверьте точность поля «было» на странице правки или загрузите исходный DOCX.';
+  }
+  return {
+    retryable: false,
+    category: 'edit-text-not-found',
+    message,
+    failedEdits: edits.map((edit) => ({
+      page: edit.page,
+      originalText: edit.originalText,
+      suggestion: edit.suggestion,
+    })),
+    pdf: pdfTextLayer
+      ? {
+          textLayer: pdfTextLayer.hasTextLayer,
+          pageCount: pdfTextLayer.pageCount,
+          pagesWithoutText: pdfTextLayer.pagesWithoutText,
+        }
+      : null,
+    docx: docxSource ? { source: docxSource, ocrUsed: ocrTried } : null,
+    ocrTried,
+  };
+}
 
 async function completeWithPdf(params: {
   env: WorkerEnv;
@@ -244,15 +300,18 @@ function methodLabel(method: ApplyMethod): string {
   }
 }
 
-async function runDocxPipeline(params: {
-  documentId: string;
-  rootVersionId: string;
-  editSourceVersionId: string;
-  sourceS3Key: string;
-  targetVersionId: string;
-  userSourceDocxKey: string | null;
-  edits: Edit[];
-}): Promise<DocxPipelineResult | null> {
+async function runDocxPipelineOnce(
+  params: {
+    documentId: string;
+    rootVersionId: string;
+    editSourceVersionId: string;
+    sourceS3Key: string;
+    targetVersionId: string;
+    userSourceDocxKey: string | null;
+    edits: Edit[];
+  },
+  forceOcr: boolean,
+): Promise<DocxPipelineResult | null> {
   try {
     const pageHints = await loadPageTextHints(params.documentId, params.editSourceVersionId);
     const { buffer, source: docxSourceKind } = await resolveDocxForEdits({
@@ -260,6 +319,7 @@ async function runDocxPipeline(params: {
       rootVersionId: params.rootVersionId,
       sourcePdfS3Key: params.sourceS3Key,
       userSourceDocxKey: params.userSourceDocxKey,
+      forceOcr,
     });
     const { modifiedDocx, applied, failed, ambiguous, results } = await applyEditsToDocx(
       buffer,
@@ -282,6 +342,7 @@ async function runDocxPipeline(params: {
         failed,
         editCount: params.edits.length,
         docxSource: docxSourceKind,
+        forceOcr,
       });
       return null;
     }
@@ -307,6 +368,7 @@ async function runDocxPipeline(params: {
       docxSource: docxSourceKind,
       method: docxSourceKind === 'user' ? 'docx' : 'docx-converted',
       editResults: results,
+      ocrUsed: forceOcr,
     };
   } catch (err) {
     console.warn(
@@ -315,6 +377,27 @@ async function runDocxPipeline(params: {
     );
     return null;
   }
+}
+
+async function runDocxPipeline(
+  params: {
+    documentId: string;
+    rootVersionId: string;
+    editSourceVersionId: string;
+    sourceS3Key: string;
+    targetVersionId: string;
+    userSourceDocxKey: string | null;
+    edits: Edit[];
+  },
+  options?: { allowOcrRetry?: boolean },
+): Promise<DocxPipelineResult | null> {
+  const first = await runDocxPipelineOnce(params, false);
+  if (first) return first;
+  if (options?.allowOcrRetry && !params.userSourceDocxKey) {
+    const ocr = await runDocxPipelineOnce(params, true);
+    if (ocr) return ocr;
+  }
+  return null;
 }
 
 export async function processApplyEditsFinalJob(
@@ -351,6 +434,8 @@ export async function processApplyEditsFinalJob(
   const overlaySourceS3Key = editSourceS3Key ?? sourceS3Key;
   const prisma = getPrisma();
   await prisma.job.update({ where: { id: operationJobId }, data: { status: 'processing' } });
+  let edits: Edit[] = [];
+  let docxPipeline: DocxPipelineResult | null = null;
   try {
     if (!isWorkerS3Configured()) {
       throw new Error('S3 не настроен в worker');
@@ -379,7 +464,7 @@ export async function processApplyEditsFinalJob(
         orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
       }),
     ]);
-    const edits: Edit[] = [];
+    edits = [];
     const linkedSuggestionIds = new Set<string>();
     for (const ai of aiAccepted) {
       linkedSuggestionIds.add(ai.id);
@@ -456,15 +541,18 @@ export async function processApplyEditsFinalJob(
       }
     }
 
-    const docxPipeline = await runDocxPipeline({
-      documentId,
-      rootVersionId: resolvedRootVersionId,
-      editSourceVersionId: resolvedEditVersionId,
-      sourceS3Key,
-      targetVersionId,
-      userSourceDocxKey: docxUserKey ?? null,
-      edits,
-    });
+    docxPipeline = await runDocxPipeline(
+      {
+        documentId,
+        rootVersionId: resolvedRootVersionId,
+        editSourceVersionId: resolvedEditVersionId,
+        sourceS3Key,
+        targetVersionId,
+        userSourceDocxKey: docxUserKey ?? null,
+        edits,
+      },
+      { allowOcrRetry: true },
+    );
 
     if (docxPipeline) {
       if (!isGotenbergConfigured(env.GOTENBERG_URL)) {
@@ -547,11 +635,36 @@ export async function processApplyEditsFinalJob(
     });
     const overlay = await applyEditsViaPdfOverlay(overlaySourceS3Key, overlayEdits);
     if (overlay.applied === 0) {
-      throw new Error(
-        hasUserDocx
-          ? 'Не удалось собрать PDF: Word не отдал файл, а текст правок не найден в PDF. Проверьте поле «было».'
-          : 'Не удалось найти текст правок в PDF. Убедитесь, что в PDF есть текстовый слой, или загрузите исходный DOCX.',
-      );
+      let textLayerReport: PdfTextLayerReport | null = null;
+      try {
+        const pdfBytes = await tryGetObjectBuffer(overlaySourceS3Key);
+        if (pdfBytes) {
+          textLayerReport = await inspectPdfTextLayer(pdfBytes);
+        }
+      } catch {
+        textLayerReport = null;
+      }
+      const details = buildTextNotFoundFailureDetails({
+        edits,
+        hasUserDocx,
+        docxSource: docxPipeline?.docxSource,
+        ocrTried: docxPipeline?.ocrUsed ?? false,
+        pdfTextLayer: textLayerReport,
+      });
+      console.warn('[apply-edits-final] применено 0 правок, фиксируем детали ошибки', {
+        documentId,
+        message: details.message,
+        pdf: details.pdf,
+        docx: details.docx,
+      });
+      await failOptimizeOperation({
+        operationJobId,
+        targetVersionId,
+        error: details.message,
+        payload: { documentId, editSourceVersionId: resolvedEditVersionId },
+        failureDetails: details,
+      });
+      return;
     }
     await completeWithPdf({
       env,
@@ -585,18 +698,36 @@ export async function processApplyEditsFinalJob(
       return;
     }
     const message = err instanceof Error ? err.message : 'Apply edits final failed';
-    console.error('[apply-edits-final] failed:', message);
+    const classification = classifyJobFailure(err);
+    console.error('[apply-edits-final] failed:', message, {
+      category: classification.category,
+      retryable: classification.retryable,
+    });
     try {
       await deleteObjectByKey(targetS3Key);
     } catch {
       // Cleanup is best-effort; keep the original job failure visible.
     }
+    const failureDetails: ApplyFailureDetails = {
+      retryable: classification.retryable,
+      category: classification.category,
+      message,
+      failedEdits: edits.map((edit) => ({
+        page: edit.page,
+        originalText: edit.originalText,
+        suggestion: edit.suggestion,
+      })),
+      pdf: null,
+      docx: docxPipeline ? { source: docxPipeline.docxSource, ocrUsed: docxPipeline.ocrUsed ?? false } : null,
+      ocrTried: docxPipeline?.ocrUsed ?? false,
+    };
     try {
       await failOptimizeOperation({
         operationJobId,
         targetVersionId,
         error: message,
         payload: { documentId, editSourceVersionId: resolvedEditVersionId },
+        failureDetails,
       });
     } catch {
       // Preserve the original error if the failure marker cannot be written.

@@ -323,6 +323,7 @@ model DocumentVersion {
   textSource           String?
 
   visionOcrStatus      String?
+  failureDetails       Json?
   createdAt  DateTime @default(now())
   chunks     DocumentChunk[]
 

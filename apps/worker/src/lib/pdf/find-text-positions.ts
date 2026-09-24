@@ -649,6 +649,46 @@ export async function findTextPositions(
     await pdf.destroy();
   }
 }
+export type PdfTextLayerReport = {
+  hasTextLayer: boolean;
+  pageCount: number;
+  pagesWithText: number[];
+  pagesWithoutText: number[];
+  totalChars: number;
+};
+export async function inspectPdfTextLayer(buffer: Buffer): Promise<PdfTextLayerReport> {
+  const task = getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    disableFontFace: true,
+    standardFontDataUrl,
+    verbosity: VerbosityLevel.ERRORS,
+  });
+  const pdf = await task.promise;
+  try {
+    const pageCount = pdf.numPages;
+    const pagesWithText: number[] = [];
+    const pagesWithoutText: number[] = [];
+    let totalChars = 0;
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const items = await collectPageTextItems(page);
+      const chars = items.reduce((sum, item) => sum + item.str.length, 0);
+      totalChars += chars;
+      if (chars > 20) pagesWithText.push(pageNumber);
+      else pagesWithoutText.push(pageNumber);
+    }
+    return {
+      hasTextLayer: totalChars > 40,
+      pageCount,
+      pagesWithText,
+      pagesWithoutText,
+      totalChars,
+    };
+  } finally {
+    await pdf.destroy();
+  }
+}
 export async function findAllTextPositions(
   buffer: Buffer,
   edits: Array<{

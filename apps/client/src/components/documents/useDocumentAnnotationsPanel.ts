@@ -87,6 +87,10 @@ export function useDocumentAnnotationsPanel({
   const [applyEditResults, setApplyEditResults] = useState<
     Array<{ page: number; originalText: string; suggestion: string; status: string }>
   >([]);
+  const [applyFailedEdits, setApplyFailedEdits] = useState<
+    Array<{ page?: number; originalText?: string; suggestion?: string }>
+  >([]);
+  const [applyFailureRetryable, setApplyFailureRetryable] = useState(false);
   const [pendingApplyVersionId, setPendingApplyVersionId] = useState<string | null>(null);
   const [conflictEdit, setConflictEdit] = useState<{
     after: string;
@@ -122,6 +126,8 @@ export function useDocumentAnnotationsPanel({
     setPollExportHighlight(false);
     setApplyHint(null);
     setApplyEditResults([]);
+    setApplyFailedEdits([]);
+    setApplyFailureRetryable(false);
     setConflictEdit(null);
   }, [versionId]);
 
@@ -189,11 +195,27 @@ export function useDocumentAnnotationsPanel({
     }
     if (applyJob.status === 'failed') {
       setPollApply(false);
+      const payload = applyJob.payload as Record<string, unknown> | null;
+      const rawError = toUserErrorMessage(
+        payload && 'error' in payload ? payload.error : null,
+        'Не удалось собрать PDF с правками',
+      );
+      const details =
+        payload && typeof payload.failureDetails === 'object' && payload.failureDetails
+          ? (payload.failureDetails as Record<string, unknown>)
+          : null;
+      const failedEdits = Array.isArray(details?.failedEdits)
+        ? (details!.failedEdits as Array<{ page?: number; originalText?: string; suggestion?: string }>)
+        : [];
+      const detailMessage = typeof details?.message === 'string' ? details.message : null;
+      setApplyFailedEdits(failedEdits);
+      setApplyFailureRetryable(details?.retryable === true);
       setApplyHint(
-        toUserErrorMessage(
-          applyJob.payload && 'error' in applyJob.payload ? applyJob.payload.error : null,
-          'Не удалось собрать PDF с правками',
-        ),
+        detailMessage
+          ? failedEdits.length > 0
+            ? `${detailMessage} Неприменённых правок: ${failedEdits.length}.`
+            : detailMessage
+          : rawError,
       );
     }
   }, [applyJob, refetchDocument]);
@@ -500,6 +522,8 @@ export function useDocumentAnnotationsPanel({
     applyHint,
     applyJob,
     applyEditResults,
+    applyFailedEdits,
+    applyFailureRetryable,
     applyConfidenceLevel,
     applyConfidenceScore,
     applyConfidenceSummary,

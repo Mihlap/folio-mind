@@ -208,6 +208,7 @@ export function DocumentPage() {
     pdfReady,
     pdfProcessing,
     pdfViewerKey,
+    pdfErrorRetryable,
     onPdfDocumentLoad,
     onPdfDocumentLoadError,
     reloadPdf,
@@ -215,6 +216,7 @@ export function DocumentPage() {
     documentId: doc?.id,
     versionId: activeVersion?.id,
     versionStatus: activeVersion?.status,
+    versionFailureDetails: activeVersion?.failureDetails,
     token,
   });
   const upload = useDocumentVersionUpload(doc?.id ?? '', (versionId) => {
@@ -974,14 +976,21 @@ export function DocumentPage() {
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3">
                   {pdfError && !pdfProcessing && (
                     <div className="rounded-lg bg-red-50 p-4 text-center text-sm text-red-700">
-                      <p>{pdfError}</p>
-                      <button
-                        type="button"
-                        className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
-                        onClick={() => reloadPdf()}
-                      >
-                        Повторить
-                      </button>
+                      <p className="break-words">{pdfError}</p>
+                      {pdfErrorRetryable || activeVersion?.status !== 'failed' ? (
+                        <button
+                          type="button"
+                          className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                          onClick={() => reloadPdf()}
+                        >
+                          Повторить
+                        </button>
+                      ) : (
+                        <p className="mt-2 text-xs text-red-500">
+                          Исправьте поле «Было» неприменённой правки и нажмите «Применить правки»
+                          ещё раз, либо загрузите исходный DOCX.
+                        </p>
+                      )}
                     </div>
                   )}
                   {(pdfLoading || pdfProcessing) && !pdfReadyForUi && !pdfError && (

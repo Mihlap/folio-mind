@@ -25,6 +25,8 @@ export function DocumentEditsApplyActions() {
     applyHint,
     applyJob,
     applyEditResults,
+    applyFailedEdits,
+    applyFailureRetryable,
     applyConfidenceLevel,
     applyConfidenceScore,
     applyConfidenceSummary,
@@ -123,6 +125,28 @@ export function DocumentEditsApplyActions() {
       {applyHint && (
         <div className="space-y-1">
           <p className="break-words text-xs leading-snug text-folio-700">{applyHint}</p>
+          {applyJob?.status === 'failed' && applyFailedEdits.length > 0 && (
+            <ul className="max-h-32 space-y-0.5 overflow-y-auto rounded border border-red-100 bg-red-50/60 p-1.5 text-[10px]">
+              {applyFailedEdits.map((item, index) => (
+                <li key={index} className="text-red-700">
+                  {typeof item.page === 'number' ? `стр. ${item.page}: ` : ''}
+                  <span className="text-slate-600">
+                    «{(item.originalText ?? '').slice(0, 56)}
+                    {(item.originalText ?? '').length > 56 ? '…' : ''}»
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {applyJob?.status === 'failed' && applyFailureRetryable && (
+            <button
+              type="button"
+              onClick={() => void handleApplyFinal()}
+              className="cursor-pointer rounded-md bg-folio-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-folio-700"
+            >
+              Повторить
+            </button>
+          )}
           {applyConfidenceLevel && applyJob?.status === 'completed' && (
             <DocumentVersionConfidenceBadge
               level={applyConfidenceLevel}

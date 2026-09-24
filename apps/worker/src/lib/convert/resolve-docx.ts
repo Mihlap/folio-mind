@@ -2,6 +2,7 @@ import {
   isDocxBuffer,
   isUserUploadedSourceDocxKey,
   preConvertedDocxKey,
+  preConvertedOcrDocxKey,
 } from '@folio-mind/pdf-contracts';
 import { convertPdfToDocx, isPdfToDocxConfigured } from './pdf-to-docx.js';
 import { storeDocxLayoutRisk } from './docx-layout-risk.js';
@@ -9,7 +10,8 @@ import { getObjectBuffer, objectExists, putObjectBuffer } from '../storage/s3.js
 export type ResolvedDocx = {
   buffer: Buffer;
   s3Key: string;
-  source: 'user' | 'cache' | 'converted';
+  source: 'user' | 'cache' | 'converted' | 'converted-ocr';
+  ocrUsed?: boolean;
 };
 export async function resolveDocxForEdits(params: {
   documentId: string;
@@ -17,9 +19,16 @@ export async function resolveDocxForEdits(params: {
   sourcePdfS3Key: string;
   userSourceDocxKey?: string | null;
   legacyProcessingDocxKey?: string | null;
+  forceOcr?: boolean;
 }): Promise<ResolvedDocx> {
-  const { documentId, rootVersionId, sourcePdfS3Key, userSourceDocxKey, legacyProcessingDocxKey } =
-    params;
+  const {
+    documentId,
+    rootVersionId,
+    sourcePdfS3Key,
+    userSourceDocxKey,
+    legacyProcessingDocxKey,
+    forceOcr,
+  } = params;
   if (userSourceDocxKey && isUserUploadedSourceDocxKey(userSourceDocxKey)) {
     const buffer = await getObjectBuffer(userSourceDocxKey);
     if (!isDocxBuffer(buffer)) {
@@ -27,14 +36,21 @@ export async function resolveDocxForEdits(params: {
     }
     return { buffer, s3Key: userSourceDocxKey, source: 'user' };
   }
-  const cachedKey = preConvertedDocxKey(documentId, rootVersionId);
+  const cachedKey = forceOcr
+    ? preConvertedOcrDocxKey(documentId, rootVersionId)
+    : preConvertedDocxKey(documentId, rootVersionId);
   if (await objectExists(cachedKey)) {
     const buffer = await getObjectBuffer(cachedKey);
     if (isDocxBuffer(buffer)) {
-      return { buffer, s3Key: cachedKey, source: 'cache' };
+      return {
+        buffer,
+        s3Key: cachedKey,
+        source: forceOcr ? 'converted-ocr' : 'cache',
+        ocrUsed: forceOcr,
+      };
     }
   }
-  if (legacyProcessingDocxKey?.includes('/processing/')) {
+  if (!forceOcr && legacyProcessingDocxKey?.includes('/processing/')) {
     const buffer = await getObjectBuffer(legacyProcessingDocxKey);
     if (isDocxBuffer(buffer)) {
       return { buffer, s3Key: legacyProcessingDocxKey, source: 'cache' };
@@ -46,7 +62,7 @@ export async function resolveDocxForEdits(params: {
     );
   }
   const pdfBuffer = await getObjectBuffer(sourcePdfS3Key);
-  const docxBuffer = await convertPdfToDocx(pdfBuffer);
+  const docxBuffer = await convertPdfToDocx(pdfBuffer, { forceOcr });
   await putObjectBuffer({
     key: cachedKey,
     body: docxBuffer,
@@ -57,5 +73,10 @@ export async function resolveDocxForEdits(params: {
   } catch (err) {
     console.warn('[docx-layout-risk] failed to store layout risk', err);
   }
-  return { buffer: docxBuffer, s3Key: cachedKey, source: 'converted' };
+  return {
+    buffer: docxBuffer,
+    s3Key: cachedKey,
+    source: forceOcr ? 'converted-ocr' : 'converted',
+    ocrUsed: forceOcr,
+  };
 }

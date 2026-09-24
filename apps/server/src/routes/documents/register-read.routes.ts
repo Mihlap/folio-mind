@@ -184,6 +184,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
             sourceDocxKey: string | null;
             textSource?: string | null;
             visionOcrStatus?: string | null;
+            failureDetails?: unknown;
           }) => ({
             id: v.id,
             version: v.version,
@@ -203,6 +204,7 @@ export const registerReadRoutes: FastifyPluginAsync<{
             hasAppliedDocx: appliedDocxVersionIds.has(v.id),
             textSource: v.textSource ?? null,
             visionOcrStatus: v.visionOcrStatus ?? null,
+            failureDetails: toRecord(v.failureDetails),
           }),
         ),
       };

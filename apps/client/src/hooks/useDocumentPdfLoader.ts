@@ -9,6 +9,7 @@ type UseDocumentPdfLoaderParams = {
   documentId: string | undefined;
   versionId: string | undefined;
   versionStatus: string | undefined;
+  versionFailureDetails?: Record<string, unknown> | null;
   token: string | null;
 };
 
@@ -55,10 +56,32 @@ function isVersionProcessing(status: string | undefined): boolean {
   return status === 'processing';
 }
 
+function versionFailureInfo(
+  details: Record<string, unknown> | null | undefined,
+): { message: string; retryable: boolean } {
+  if (details && typeof details === 'object') {
+    const raw = typeof details.message === 'string' ? details.message.trim() : '';
+    const failedCount = Array.isArray(details.failedEdits) ? details.failedEdits.length : 0;
+    const retryable = details.retryable === true;
+    const message = raw
+      ? failedCount > 0
+        ? `${raw} Неприменённых правок: ${failedCount}.`
+        : raw
+      : 'Версия не обработана. Примените правки ещё раз или удалите версию.';
+    return { message, retryable };
+  }
+  return {
+    message:
+      'Версия не обработана — повторите «Применить правки» или удалите версию. Если ошибка повторяется, проверьте точность поля «было».',
+    retryable: false,
+  };
+}
+
 export function useDocumentPdfLoader({
   documentId,
   versionId,
   versionStatus,
+  versionFailureDetails,
   token,
 }: UseDocumentPdfLoaderParams) {
   const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
@@ -67,6 +90,7 @@ export function useDocumentPdfLoader({
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [pdfSourceKey, setPdfSourceKey] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfErrorRetryable, setPdfErrorRetryable] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfLoadStage, setPdfLoadStage] = useState<PdfLoadStage>('idle');
   const [pdfViewerKey, setPdfViewerKey] = useState(0);
@@ -95,6 +119,7 @@ export function useDocumentPdfLoader({
       setPdfLoading(true);
       setPdfLoadStage('s3-proxy');
       setPdfError(null);
+      setPdfErrorRetryable(false);
 
       try {
         const bytes = await loadDocumentPdfBytes({
@@ -121,6 +146,7 @@ export function useDocumentPdfLoader({
         }
         setPdfLoadStage('error');
         setPdfError('Не удалось загрузить документ. Нажмите «Повторить» или обновите страницу.');
+        setPdfErrorRetryable(false);
         setPdfLoading(false);
       }
     },
@@ -145,9 +171,9 @@ export function useDocumentPdfLoader({
       setPdfUrl(null);
       setPdfData(null);
       setPdfSourceKey(null);
-      setPdfError(
-        'Версия не обработана — повторите «Применить правки» или удалите версию. Если ошибка повторяется, проверьте текстовый слой PDF и точность поля «было».',
-      );
+      const failInfo = versionFailureInfo(versionFailureDetails);
+      setPdfError(failInfo.message);
+      setPdfErrorRetryable(failInfo.retryable);
       setPdfLoadStage('error');
       setPdfLoading(false);
       return;
@@ -167,11 +193,13 @@ export function useDocumentPdfLoader({
       setPdfData(null);
       setPdfLoadStage('error');
       setPdfError(message);
+      setPdfErrorRetryable(false);
       setPdfLoading(false);
     };
 
     setPdfSourceKey(`${documentId}/${versionId}`);
     setPdfError(null);
+    setPdfErrorRetryable(false);
 
     const cached = getCachedPdfBytes(documentId, versionId);
     if (cached) {
@@ -228,7 +256,7 @@ export function useDocumentPdfLoader({
       clearTimeout(presignedTimer);
       clearTimeout(bytesTimer);
     };
-  }, [documentId, versionId, versionStatus, token, fetchDownloadUrl, reloadToken, loadPdfBytes, markProcessingWait]);
+  }, [documentId, versionId, versionStatus, versionFailureDetails, token, fetchDownloadUrl, reloadToken, loadPdfBytes, markProcessingWait]);
 
   const onPdfDocumentLoad = useCallback(() => {
     presignedLoadedRef.current = true;
@@ -286,6 +314,7 @@ export function useDocumentPdfLoader({
     pdfReady,
     pdfProcessing,
     pdfViewerKey,
+    pdfErrorRetryable,
     onPdfDocumentLoad,
     onPdfDocumentLoadError,
     resetPdf,

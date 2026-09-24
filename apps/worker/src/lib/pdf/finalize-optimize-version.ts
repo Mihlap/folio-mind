@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { WorkerJobPayload } from '../config/job-types.js';
 import type { WorkerEnv } from '../config/env.js';
 import { getPrisma } from '../infra/prisma.js';
@@ -90,17 +91,25 @@ export async function failOptimizeOperation(params: {
   targetVersionId: string;
   error: string;
   payload?: Record<string, unknown>;
+  failureDetails?: Prisma.InputJsonValue;
 }): Promise<void> {
   const prisma = getPrisma();
   await prisma.documentVersion.update({
     where: { id: params.targetVersionId },
-    data: { status: 'failed' },
+    data: {
+      status: 'failed',
+      ...(params.failureDetails ? { failureDetails: params.failureDetails } : {}),
+    },
   });
   await prisma.job.update({
     where: { id: params.operationJobId },
     data: {
       status: 'failed',
-      payload: { ...(params.payload ?? {}), error: params.error },
+      payload: {
+        ...(params.payload ?? {}),
+        error: params.error,
+        ...(params.failureDetails ? { failureDetails: params.failureDetails } : {}),
+      },
     },
   });
 }

@@ -43,9 +43,9 @@ function formatPdfToDocxError(err: unknown, pdfBytes: number): string {
   return `PDF→DOCX failed: ${err instanceof Error ? err.message : String(err)}. ${hint}`;
 }
 
-export async function convertPdfToDocx(pdfBuffer: Buffer): Promise<Buffer> {
+export async function convertPdfToDocx(pdfBuffer: Buffer, options?: { forceOcr?: boolean }): Promise<Buffer> {
   const baseUrl = getPdfToDocxUrl().replace(/\/$/, '');
-  const url = `${baseUrl}/convert/pdf-to-docx`;
+  const url = `${baseUrl}/convert/pdf-to-docx${options?.forceOcr ? '?force_ocr=1' : ''}`;
   const formData = new FormData();
   formData.append('file', new Blob([pdfBuffer], { type: 'application/pdf' }), 'document.pdf');
 
