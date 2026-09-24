@@ -36,7 +36,7 @@ export function fontSizeFromTextItems(items: TextItem[]): number {
   let chars = 0;
   for (const item of items) {
     const c = Math.max(item.str.length, 1);
-    const size = item.fontSize > 0 ? item.fontSize : item.height > 0 ? item.height : 12;
+    const size = item.height > 0 ? item.height : item.fontSize > 0 ? item.fontSize : 12;
     weighted += size * c;
     chars += c;
   }
@@ -122,7 +122,7 @@ function canEncodeWithStandardFont(text: string): boolean {
 }
 
 export function calibrateFontSize(item: TextItem, font: PDFFont): number {
-  const base = item.fontSize > 0 ? item.fontSize : item.height > 0 ? item.height : 12;
+  const base = item.height > 0 ? item.height : item.fontSize > 0 ? item.fontSize : 12;
   const text = item.str.trim();
   if (!text || item.width <= 0) return base;
   let low = base * 0.75;

@@ -35,7 +35,7 @@ function styleFromItems(items: TextItem[]): PdfTextStyle {
   const primary = items.reduce((best, item) =>
     item.str.length > best.str.length ? item : best,
   );
-  const fontSize = Math.max(6, Math.min(primary.fontSize || primary.height || 12, 72));
+  const fontSize = Math.max(6, Math.min(primary.height || primary.fontSize || 12, 72));
   return {
     fontSize,
     fontName: primary.fontName,

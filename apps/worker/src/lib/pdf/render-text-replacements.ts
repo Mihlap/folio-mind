@@ -29,6 +29,17 @@ function lineEraseRegion(line: TextMatch['lines'][number]): Box {
   return region;
 }
 
+function isSubstringMatch(match: TextMatch): boolean {
+  const line = match.lines[0];
+  if (!line) return false;
+  const exact = match.box;
+  const lineBox = line.box;
+  if (exact.width <= 0 || exact.height <= 0 || lineBox.width <= 0) return false;
+  const coversLeft = exact.x - lineBox.x <= 0.5;
+  const coversRight = lineBox.x + lineBox.width - (exact.x + exact.width) <= 0.5;
+  return !coversLeft || !coversRight;
+}
+
 export function eraseBoxesForEdit(match: TextMatch, pageItems: TextItem[]): Box[] {
   const baselines = pageItems.map((item) => item.y);
   const lines = match.lines.length > 0 ? match.lines : [];
@@ -52,6 +63,28 @@ export function eraseBoxesForEdit(match: TextMatch, pageItems: TextItem[]): Box[
     if (clamped.width > 0 && clamped.height > 0) boxes.push(clamped);
   }
   return boxes;
+}
+
+export function eraseBoxesForSubstring(match: TextMatch, pageItems: TextItem[]): Box[] {
+  const line = match.lines[0];
+  if (!line) return [];
+  const exact = match.box;
+  if (exact.width <= 0 || exact.height <= 0) return [];
+  const baselines = pageItems.map((item) => item.y);
+  const padded: Box = {
+    x: Math.max(0, exact.x - 0.5),
+    y: exact.y,
+    width: exact.width + 1,
+    height: exact.height,
+  };
+  const baseline = line.items[0]?.y ?? line.y ?? exact.y + exact.height;
+  const clamped = clampBoxToNeighborLines(
+    padded,
+    baseline,
+    baselines,
+    Math.max(1, line.style.lineHeight * 0.5),
+  );
+  return clamped.width > 0 && clamped.height > 0 ? [clamped] : [];
 }
 
 async function drawExpandedSuggestionLines(
@@ -240,6 +273,44 @@ async function drawFullSuggestionBlock(
   }));
 }
 
+async function drawSubstringReplacement(
+  fontCache: PdfEditFontCache,
+  pdfDoc: PDFDocument,
+  match: TextMatch,
+  suggestion: string,
+  fontBytesByName: Map<string, Uint8Array>,
+  pageWidth: number,
+  pageHeight: number,
+): Promise<LineDraw[]> {
+  const text = suggestion.trim();
+  if (!text) return [];
+  const line = match.lines[0]!;
+  const { font, fontSize } = await resolveLayoutLineMetrics(
+    fontCache,
+    pdfDoc,
+    line,
+    fontBytesByName,
+    text,
+  );
+  const fitted = fitReplacementOnPage({
+    font,
+    text,
+    baseFontSize: fontSize,
+    startX: match.box.x,
+    startY: line.y,
+    pageWidth,
+    pageHeight,
+  });
+  if (fitted.lines.length === 0) return [];
+  return fitted.lines.map((fittedLine) => ({
+    x: fittedLine.x,
+    y: fittedLine.y,
+    text: fittedLine.text,
+    fontSize: fittedLine.fontSize,
+    font,
+  }));
+}
+
 async function buildLineDraws(
   fontCache: PdfEditFontCache,
   pdfDoc: PDFDocument,
@@ -252,6 +323,17 @@ async function buildLineDraws(
   pageHeight: number,
 ): Promise<LineDraw[]> {
   const layoutLines = match.lines;
+  if (isSubstringMatch(match)) {
+    return drawSubstringReplacement(
+      fontCache,
+      pdfDoc,
+      match,
+      suggestion,
+      fontBytesByName,
+      pageWidth,
+      pageHeight,
+    );
+  }
   if (layoutLines.length === 0) {
     const text = suggestion.trim();
     if (!text) return [];
@@ -408,7 +490,10 @@ export async function renderTextReplacements(
     );
     if (draws.length === 0) continue;
 
-    for (const box of eraseBoxesForEdit(match, pageItems)) {
+    const eraseBoxes = isSubstringMatch(match)
+      ? eraseBoxesForSubstring(match, pageItems)
+      : eraseBoxesForEdit(match, pageItems);
+    for (const box of eraseBoxes) {
       drawErase(page, box);
     }
 

@@ -53,7 +53,7 @@ function resolveDescent(item: PdfTextBoundsItem, fontSize: number): number {
 }
 
 export function textItemBox(item: PdfTextBoundsItem): PdfTextBox {
-  const fontSize = positive(item.fontSize) ?? positive(item.height) ?? 12;
+  const fontSize = positive(item.height) ?? positive(item.fontSize) ?? 12;
   const ascent = resolveAscent(item, fontSize);
   const descent = resolveDescent(item, fontSize);
   const top = item.y + ascent;

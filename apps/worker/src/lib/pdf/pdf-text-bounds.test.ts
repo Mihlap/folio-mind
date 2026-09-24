@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TextItem, TextMatch } from './find-text-positions.js';
-import { eraseBoxesForEdit } from './render-text-replacements.js';
+import { eraseBoxesForEdit, eraseBoxesForSubstring } from './render-text-replacements.js';
 import { clampBoxToNeighborLines, textItemBox, textSubstringBox } from './pdf-text-bounds.js';
 
 function item(partial: Partial<TextItem> & { str: string; x: number; y: number }): TextItem {
@@ -35,11 +35,10 @@ function matchFor(items: TextItem[]): TextMatch {
 }
 
 describe('pdf-text-bounds', () => {
-  it('uses the original transform font size instead of a scaled glyph height', () => {
-    const box = textItemBox(item({ str: 'Текст', x: 40, y: 700, fontSize: 18, height: 18, ascent: 0.75, descent: -0.25 }));
-    expect(box.height).toBeCloseTo(18, 5);
-    expect(box.y).toBeCloseTo(695.5, 5);
-    expect(box.y + box.height).toBeCloseTo(713.5, 5);
+  it('sizes boxes by the visual glyph height so horizontally scaled text is not undersized', () => {
+    const box = textItemBox(item({ str: 'Текст', x: 40, y: 700, fontSize: 8, height: 16, ascent: 0.75, descent: -0.25 }));
+    expect(box.height).toBeCloseTo(16, 5);
+    expect(box.y + box.height).toBeCloseTo(712, 5);
   });
 
   it('computes a substring box inside a single PDF item', () => {
@@ -98,5 +97,28 @@ describe('pdf-text-bounds', () => {
     const previousBox = textItemBox(previous);
     expect(boxes).toHaveLength(1);
     expect(boxes[0]!.y + boxes[0]!.height).toBeLessThanOrEqual(previousBox.y);
+  });
+
+  it('erases only the matched phrase, not the whole line, for a substring edit', () => {
+    const source = item({ str: 'ЧАСТИ, ИСПОЛНИТЕЛЬ И ЗАКАЗЧИК', x: 40, y: 700, fontSize: 12 });
+    const exact = textSubstringBox(source, 7, 11, source.str.length);
+    const line = matchFor([source]);
+    const substringMatch: TextMatch = { ...line, box: exact };
+    expect(exact.width).toBeLessThan(textItemBox(source).width);
+
+    const boxes = eraseBoxesForSubstring(substringMatch, [source]);
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]!.x).toBeCloseTo(exact.x - 0.5, 5);
+    expect(boxes[0]!.width).toBeGreaterThanOrEqual(exact.width - 1);
+    expect(boxes[0]!.width).toBeLessThan(textItemBox(source).width * 0.7);
+    expect(boxes[0]!.x + boxes[0]!.width).toBeLessThan(40 + textItemBox(source).width - 40);
+  });
+
+  it('erases the whole item box when the whole item text is matched', () => {
+    const source = item({ str: 'ИСПОЛНИТЕЛЬ', x: 40, y: 700, fontSize: 12 });
+    const boxes = eraseBoxesForEdit(matchFor([source]), [source]);
+    const itemRegion = textItemBox(source);
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]!.width).toBeGreaterThanOrEqual(itemRegion.width - 1);
   });
 });

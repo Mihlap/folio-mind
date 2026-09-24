@@ -76,7 +76,7 @@ export function DocumentEditsApplyActions() {
             </>
           }
         >
-          {applyingFinal ? 'Применение…' : 'Применить правки'}
+          {applyingFinal || pollApply ? 'Сборка версии…' : 'Применить правки'}
         </FeatureHelpActionButton>
         <FeatureHelpActionButton
           helpTitle="DOCX с подсветкой правок"

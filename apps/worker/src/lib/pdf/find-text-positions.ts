@@ -193,11 +193,22 @@ function findSpanInReadingOrder(items: TextItem[], searchText: string): TextBoxP
   const { plain, segments } = buildReadingPlain(sorted);
   const span = findPlainSpanForNeedle(plain, searchText);
   if (!span) return null;
-  const spanItems = segments
+  const overlapItems = segments
     .filter((segment) => segment.plainEnd > span.start && segment.plainStart < span.end)
     .map((segment) => segment.item);
-  if (spanItems.length === 0) return null;
-  return unionManyBoxes(spanItems.map(itemBox));
+  if (overlapItems.length === 0) return null;
+  const exactBoxes: TextBoxPosition[] = [];
+  for (const segment of segments) {
+    if (segment.plainEnd <= span.start || segment.plainStart >= span.end) continue;
+    const item = segment.item;
+    const itemLen = item.str.length;
+    const subStart = Math.max(0, span.start - segment.plainStart);
+    const subEnd = Math.min(itemLen, span.end - segment.plainStart);
+    if (subEnd <= subStart) continue;
+    exactBoxes.push(textSubstringBox(item, subStart, subEnd - subStart, itemLen));
+  }
+  if (exactBoxes.length === 0) return null;
+  return unionManyBoxes(exactBoxes);
 }
 function fontSizeFromTransform(transform: number[]): number {
   if (transform.length < 2) return 0;
@@ -232,7 +243,7 @@ function styleFromItems(items: TextItem[]): PdfTextStyle {
   const primary = items.reduce((best, item) =>
     item.str.length > best.str.length ? item : best,
   );
-  const fontSize = Math.max(6, Math.min(primary.fontSize || primary.height || 12, 72));
+  const fontSize = Math.max(6, Math.min(primary.height || primary.fontSize || 12, 72));
   const lineHeight = Math.max(fontSize, primary.height || fontSize) * 1.2;
   return {
     fontSize,
@@ -357,9 +368,8 @@ function toMatch(
       },
     ];
   }
-  const fullBox = lines.length > 0 ? unionManyBoxes(lines.map((line) => line.box)) : box;
   return {
-    box: fullBox,
+    box,
     style: lines[0]?.style ?? resolveMatchStyle(items, box),
     lines,
   };
