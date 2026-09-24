@@ -212,16 +212,14 @@ export function ExpandableMarkdownEditField({
                 onClick={() => void pasteFromClipboard()}
                 title={pasted ? 'Вставлено' : 'Вставить из буфера'}
                 aria-label={pasted ? 'Вставлено ✓' : 'Вставить'}
-                className="mr-auto cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-500 hover:bg-folio-50 hover:text-folio-700 md:px-3"
+                className="mr-auto cursor-pointer rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-folio-50 hover:text-folio-700"
               >
                 {pasted ? (
-                  <CheckIcon className="h-[18px] w-[18px] text-emerald-600" />
+                  <CheckIcon className="h-[18px] w-[18px] text-emerald-600 md:hidden" />
                 ) : (
-                  <PasteIcon className="h-[18px] w-[18px]" />
+                  <PasteIcon className="h-[18px] w-[18px] md:hidden" />
                 )}
-                <span className="ml-1.5 hidden md:inline">
-                  {pasted ? 'Вставлено ✓' : 'Вставить'}
-                </span>
+                <span className="hidden md:inline">{pasted ? 'Вставлено ✓' : 'Вставить'}</span>
               </button>
               <button
                 type="button"
@@ -232,24 +230,24 @@ export function ExpandableMarkdownEditField({
                 }}
                 title="Очистить"
                 aria-label="Очистить"
-                className="cursor-pointer rounded-lg px-2 py-2 text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 md:px-3"
+                className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600"
               >
-                <TrashIcon className="h-[18px] w-[18px]" />
-                <span className="ml-1.5 hidden md:inline">Очистить</span>
+                <TrashIcon className="h-[18px] w-[18px] md:hidden" />
+                <span className="hidden md:inline">Очистить</span>
               </button>
               <button
                 type="button"
                 onClick={() => setShowPreview((v) => !v)}
                 title={showPreview ? 'Скрыть превью' : 'Показать превью'}
                 aria-label={showPreview ? 'Скрыть превью' : 'Показать превью'}
-                className="cursor-pointer rounded-lg border border-slate-200 px-2 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 md:px-3"
+                className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
                 {showPreview ? (
-                  <EyeOffIcon className="h-[18px] w-[18px]" />
+                  <EyeOffIcon className="h-[18px] w-[18px] md:hidden" />
                 ) : (
-                  <EyeIcon className="h-[18px] w-[18px]" />
+                  <EyeIcon className="h-[18px] w-[18px] md:hidden" />
                 )}
-                <span className="ml-1.5 hidden md:inline">
+                <span className="hidden md:inline">
                   {showPreview ? 'Скрыть превью' : 'Показать превью'}
                 </span>
               </button>
@@ -258,20 +256,20 @@ export function ExpandableMarkdownEditField({
                 onClick={() => setOpen(false)}
                 title="Отмена"
                 aria-label="Отмена"
-                className="cursor-pointer rounded-lg border border-slate-200 px-2 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 md:px-4"
+                className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
-                <CloseIcon className="h-[18px] w-[18px]" />
-                <span className="ml-1.5 hidden md:inline">Отмена</span>
+                <CloseIcon className="h-[18px] w-[18px] md:hidden" />
+                <span className="hidden md:inline">Отмена</span>
               </button>
               <button
                 type="button"
                 onClick={save}
                 title="Сохранить"
                 aria-label="Сохранить"
-                className="cursor-pointer rounded-lg bg-folio-600 px-2 py-2 text-sm font-medium text-white hover:bg-folio-700 md:px-4"
+                className="cursor-pointer rounded-lg bg-folio-600 px-3 py-2 text-sm font-medium text-white hover:bg-folio-700"
               >
-                <CheckIcon className="h-[18px] w-[18px]" />
-                <span className="ml-1.5 hidden md:inline">Сохранить</span>
+                <CheckIcon className="h-[18px] w-[18px] md:hidden" />
+                <span className="hidden md:inline">Сохранить</span>
               </button>
             </>
           }
