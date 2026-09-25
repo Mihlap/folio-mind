@@ -12,7 +12,7 @@ import {
 } from './pdf-edit-fonts.js';
 import { splitSuggestionByOriginalLines, explicitTextLines, paragraphDrawMode } from './pdf-text-lines.js';
 import { fitReplacementOnPage, fitReplacementAtLayoutLines } from './pdf-fit-replacement-text.js';
-import { clampBoxToNeighborLines, textItemBox, unionTextBoxes, type PdfTextBox } from './pdf-text-bounds.js';
+import { expandEraseBox, textItemBox, unionTextBoxes, type PdfTextBox } from './pdf-text-bounds.js';
 
 type Box = PdfTextBox;
 
@@ -55,8 +55,11 @@ function isSubstringMatch(match: TextMatch): boolean {
   return !coversLeft || !coversRight;
 }
 
+const MM_TO_PT = 72 / 25.4;
+const ERASE_PAD_TOP = 2 * MM_TO_PT;
+const ERASE_PAD_BOTTOM = 1.5 * MM_TO_PT;
+
 export function eraseBoxesForEdit(match: TextMatch, pageItems: TextItem[]): Box[] {
-  const baselines = pageItems.map((item) => item.y);
   const lines = match.lines.length > 0 ? match.lines : [];
   if (lines.length === 0) return match.box.width > 0 && match.box.height > 0 ? [match.box] : [];
   const boxes: Box[] = [];
@@ -69,11 +72,13 @@ export function eraseBoxesForEdit(match: TextMatch, pageItems: TextItem[]): Box[
       height: region.height,
     };
     const baseline = line.items[0]?.y ?? line.y;
-    const clamped = clampBoxToNeighborLines(
+    const clamped = expandEraseBox(
       padded,
       baseline,
-      baselines,
-      Math.max(1, line.style.lineHeight * 0.5),
+      line.style.fontSize,
+      pageItems,
+      ERASE_PAD_TOP,
+      ERASE_PAD_BOTTOM,
     );
     if (clamped.width > 0 && clamped.height > 0) boxes.push(clamped);
   }
@@ -85,7 +90,6 @@ export function eraseBoxesForSubstring(match: TextMatch, pageItems: TextItem[]):
   if (!line) return [];
   const exact = match.box;
   if (exact.width <= 0 || exact.height <= 0) return [];
-  const baselines = pageItems.map((item) => item.y);
   const padded: Box = {
     x: Math.max(0, exact.x - 0.5),
     y: exact.y,
@@ -93,11 +97,13 @@ export function eraseBoxesForSubstring(match: TextMatch, pageItems: TextItem[]):
     height: exact.height,
   };
   const baseline = line.items[0]?.y ?? line.y ?? exact.y + exact.height;
-  const clamped = clampBoxToNeighborLines(
+  const clamped = expandEraseBox(
     padded,
     baseline,
-    baselines,
-    Math.max(1, line.style.lineHeight * 0.5),
+    line.style.fontSize,
+    pageItems,
+    ERASE_PAD_TOP,
+    ERASE_PAD_BOTTOM,
   );
   return clamped.width > 0 && clamped.height > 0 ? [clamped] : [];
 }

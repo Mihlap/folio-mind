@@ -130,3 +130,43 @@ export function clampBoxToNeighborLines(
   const height = Math.max(Math.min(box.height, fallbackHalfGap), 0.5);
   return { x: box.x, y: baselineY - height * 0.2, width: box.width, height };
 }
+
+const NEIGHBOR_SAME_LINE_TOLERANCE = 0.6;
+const NEIGHBOR_MIN_OVERLAP = 0.3;
+const NEIGHBOR_SAFETY_GAP = 0.35;
+
+export function expandEraseBox(
+  box: PdfTextBox,
+  baselineY: number,
+  fontSize: number,
+  items: PdfTextBoundsItem[],
+  padTop: number,
+  padBottom: number,
+): PdfTextBox {
+  if (!isFiniteBox(box)) return box;
+  const left = box.x - NEIGHBOR_MIN_OVERLAP;
+  const right = box.x + box.width + NEIGHBOR_MIN_OVERLAP;
+  const reach = Math.max(fontSize * 4, 24);
+  let topLimit = Number.POSITIVE_INFINITY;
+  let bottomLimit = Number.NEGATIVE_INFINITY;
+  for (const item of items) {
+    if (!Number.isFinite(item.y) || !Number.isFinite(item.x)) continue;
+    const itemFontSize = positive(item.height) ?? positive(item.fontSize) ?? fontSize;
+    if (item.x + item.width < left || item.x > right) continue;
+    if (item.y > baselineY + reach || item.y < baselineY - reach) continue;
+    if (Math.abs(item.y - baselineY) <= NEIGHBOR_SAME_LINE_TOLERANCE) continue;
+    if (item.y > baselineY) {
+      const inkBottom = item.y + resolveDescent(item, itemFontSize);
+      if (inkBottom < topLimit) topLimit = inkBottom;
+    } else {
+      const inkTop = item.y + resolveAscent(item, itemFontSize);
+      if (inkTop > bottomLimit) bottomLimit = inkTop;
+    }
+  }
+  const desiredBottom = box.y - Math.max(padBottom, 0);
+  const desiredTop = box.y + box.height + Math.max(padTop, 0);
+  const bottom = Math.max(desiredBottom, Number.isFinite(bottomLimit) ? bottomLimit + NEIGHBOR_SAFETY_GAP : desiredBottom);
+  const top = Math.min(desiredTop, Number.isFinite(topLimit) ? topLimit - NEIGHBOR_SAFETY_GAP : desiredTop);
+  if (top - bottom <= 0.01) return box;
+  return { x: box.x, y: bottom, width: box.width, height: top - bottom };
+}

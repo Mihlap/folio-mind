@@ -99,6 +99,23 @@ describe('pdf-text-bounds', () => {
     expect(boxes[0]!.y + boxes[0]!.height).toBeLessThanOrEqual(previousBox.y);
   });
 
+  it('cleans the full cap height above a replaced uppercase word', () => {
+    const previous = item({ str: 'Строка выше', x: 40, y: 716, fontSize: 12, ascent: 0.891, descent: -0.216 });
+    const current = item({ str: 'ИСПОЛНИТЕЛЬ', x: 40, y: 700, fontSize: 9.96, height: 9.96, ascent: 0.891, descent: -0.216 });
+    const boxes = eraseBoxesForSubstring(matchFor([current]), [previous, current]);
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]!.y + boxes[0]!.height).toBeGreaterThanOrEqual(current.y + current.height * 0.891 - 0.01);
+    expect(boxes[0]!.y + boxes[0]!.height).toBeLessThan(previous.y - 0.2);
+  });
+
+  it('keeps the expanded mask above the descenders of the neighboring line', () => {
+    const previous = item({ str: 'ррр ууу', x: 40, y: 714, fontSize: 12, ascent: 0.891, descent: -0.216 });
+    const current = item({ str: 'ИСПОЛНИТЕЛЬ', x: 40, y: 700, fontSize: 9.96, height: 9.96, ascent: 0.891, descent: -0.216 });
+    const boxes = eraseBoxesForSubstring(matchFor([current]), [previous, current]);
+    const previousDescent = previous.y + previous.fontSize * -0.216;
+    expect(boxes[0]!.y + boxes[0]!.height).toBeLessThanOrEqual(previousDescent);
+  });
+
   it('erases only the matched phrase, not the whole line, for a substring edit', () => {
     const source = item({ str: 'ЧАСТИ, ИСПОЛНИТЕЛЬ И ЗАКАЗЧИК', x: 40, y: 700, fontSize: 12 });
     const exact = textSubstringBox(source, 7, 11, source.str.length);
