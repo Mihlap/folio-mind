@@ -224,12 +224,34 @@ export async function renderPdfPageRange(
   return previews;
 }
 
-export async function renderPdfPreviews(buffer: Buffer): Promise<PreviewRenderResult> {
+export type PreviewRenderCallback = (preview: {
+  page: number;
+  thumb: Buffer;
+  view: Buffer;
+}) => Promise<void> | void;
+
+export async function renderPdfPreviews(
+  buffer: Buffer,
+  onPage?: PreviewRenderCallback,
+): Promise<PreviewRenderResult> {
   const pdf = await openPdf(buffer);
   const pageCount = pdf.numPages;
-  await pdf.destroy();
   const initialPages = Math.min(pageCount, resolveInitialPages());
-  const previews = initialPages > 0 ? await renderPdfPageRange(buffer, 1, initialPages) : [];
+  const previews: Array<{ page: number; thumb: Buffer; view: Buffer }> = [];
+  if (initialPages > 0) {
+    const viewWidth = resolveViewWidth();
+    for (let pageNum = 1; pageNum <= initialPages; pageNum++) {
+      const viewCanvas = await renderPageCanvas(pdf, pageNum, viewWidth);
+      const preview = {
+        page: pageNum,
+        view: toGuestViewPng(viewCanvas),
+        thumb: downscaleToThumb(viewCanvas),
+      };
+      previews.push(preview);
+      if (onPage) await onPage(preview);
+    }
+  }
+  await pdf.destroy();
   return { pageCount, previews, initialPages };
 }
 

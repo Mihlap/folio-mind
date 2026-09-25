@@ -88,7 +88,6 @@ export async function processGeneratePreviewsJob(
       data: { status: 'ready', pageCount },
     });
     const integrity = await analyzePdfIntegrityFromBuffer(pdfBuffer);
-    const { previews, initialPages } = await renderPdfPreviews(pdfBuffer);
     const versionExistsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: versionId },
       select: { id: true },
@@ -100,7 +99,7 @@ export async function processGeneratePreviewsJob(
       });
       return;
     }
-    for (const preview of previews) {
+    const { previews, initialPages } = await renderPdfPreviews(pdfBuffer, async (preview) => {
       await putObjectBuffer({
         key: previewPageThumbKey(documentId, versionId, preview.page),
         body: preview.thumb,
@@ -111,7 +110,7 @@ export async function processGeneratePreviewsJob(
         body: preview.view,
         contentType: 'image/png',
       });
-    }
+    });
     try {
       await prisma.documentVersion.update({
         where: { id: versionId },

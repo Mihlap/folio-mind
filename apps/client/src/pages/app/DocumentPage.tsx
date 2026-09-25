@@ -656,7 +656,7 @@ export function DocumentPage() {
     },
     {
       skip: !id || !activeVersion?.id || activeVersion.status === 'pending_upload',
-      pollingInterval: pollPreviews ? 3000 : 0,
+      pollingInterval: pollPreviews ? 2000 : 0,
     },
   );
   useEffect(() => {
