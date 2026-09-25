@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { StandardFonts } from 'pdf-lib';
 import type { PDFDocument, PDFFont } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import type { TextItem } from './find-text-positions.js';
 const require = createRequire(import.meta.url);
 const FALLBACK_SERIF_PATH = require.resolve('dejavu-fonts-ttf/ttf/DejaVuSerif.ttf');
@@ -161,6 +162,44 @@ export class PdfEditFontCache {
     this.standard.set(standardFont, font);
     return font;
   }
+  private async embedFamilyFallback(pdfDoc: PDFDocument, serif: boolean): Promise<PDFFont> {
+    if (serif) {
+      if (!this.serif) {
+        this.serif = await pdfDoc.embedFont(readFileSync(FALLBACK_SERIF_PATH));
+      }
+      return this.serif;
+    }
+    if (!this.sans) {
+      this.sans = await pdfDoc.embedFont(readFileSync(FALLBACK_SANS_PATH));
+    }
+    return this.sans;
+  }
+  async resolveRunFonts(
+    pdfDoc: PDFDocument,
+    style: PdfTextStyle,
+    fontBytesByName: Map<string, Uint8Array>,
+  ): Promise<RunFonts | null> {
+    const picked = pickEmbeddedFontBytes(style, fontBytesByName);
+    if (!picked) return null;
+    const info = embeddedFontInfo(picked.bytes);
+    const hint = info.names || `${style.fontName} ${style.fontFamily} ${style.fontSubstitution ?? ''}`;
+    const fallback = await this.embedFamilyFallback(pdfDoc, hint.trim() ? info.serif : isSerifFamily(style.fontFamily));
+    let latin: PDFFont | null = null;
+    if (info.standard) {
+      try {
+        latin = await this.embedStandardFont(pdfDoc, info.standard);
+      } catch {
+        latin = null;
+      }
+    }
+    const primary = await this.embedNamedFont(pdfDoc, picked.fontName, picked.bytes);
+    return {
+      primary,
+      covers: (ch) => fontCoversChar(picked.bytes, ch),
+      fallback,
+      latin,
+    };
+  }
   async resolve(
     pdfDoc: PDFDocument,
     style: PdfTextStyle,
@@ -177,15 +216,9 @@ export class PdfEditFontCache {
     }
     const fallbackKey = isSerifFamily(style.fontFamily) ? 'fallback-serif' : 'fallback-sans';
     if (fallbackKey === 'fallback-serif') {
-      if (!this.serif) {
-        this.serif = await pdfDoc.embedFont(readFileSync(FALLBACK_SERIF_PATH));
-      }
-      return this.serif;
+      return this.embedFamilyFallback(pdfDoc, true);
     }
-    if (!this.sans) {
-      this.sans = await pdfDoc.embedFont(readFileSync(FALLBACK_SANS_PATH));
-    }
-    return this.sans;
+    return this.embedFamilyFallback(pdfDoc, false);
   }
 }
 export async function collectEmbeddedFontBytes(
@@ -200,9 +233,10 @@ export async function collectEmbeddedFontBytes(
     store: { get: (name: string) => Promise<unknown> },
     fontName: string,
   ): Promise<void> => {
-    const font = (await store.get(fontName)) as { data?: Uint8Array } | null;
-    if (font?.data instanceof Uint8Array && font.data.length > 64) {
-      out.set(fontName, font.data);
+    const font = (await store.get(fontName)) as { data?: unknown } | null;
+    const bytes = toUint8Bytes(font?.data);
+    if (bytes && bytes.length > 64) {
+      out.set(fontName, bytes);
     }
   };
   for (const fontName of fontNames) {
@@ -217,4 +251,150 @@ export async function collectEmbeddedFontBytes(
     }
   }
   return out;
+}
+function toUint8Bytes(data: unknown): Uint8Array | null {
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  return null;
+}
+const openFontGlyphCache = new WeakMap<Uint8Array, ReturnType<typeof fontkit.create>>();
+function openFontForGlyphs(bytes: Uint8Array): ReturnType<typeof fontkit.create> {
+  let font = openFontGlyphCache.get(bytes);
+  if (!font) {
+    font = fontkit.create(
+      Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    );
+    openFontGlyphCache.set(bytes, font);
+  }
+  return font;
+}
+const fontCharCoverageCache = new WeakMap<Uint8Array, Map<string, boolean>>();
+export function fontCoversChar(bytes: Uint8Array, ch: string): boolean {
+  if (!ch) return true;
+  let cache = fontCharCoverageCache.get(bytes);
+  if (!cache) {
+    cache = new Map<string, boolean>();
+    fontCharCoverageCache.set(bytes, cache);
+  }
+  const cached = cache.get(ch);
+  if (cached !== undefined) return cached;
+  let covered = false;
+  try {
+    const font = openFontForGlyphs(bytes);
+    const glyph = font.glyphForCodePoint(ch.codePointAt(0) ?? 0);
+    covered = !!glyph && glyph.id !== 0;
+  } catch {
+    covered = false;
+  }
+  cache.set(ch, covered);
+  return covered;
+}
+export function fontMissingChars(bytes: Uint8Array, text: string): Set<string> {
+  const missing = new Set<string>();
+  for (const ch of text) {
+    if (!ch) continue;
+    if (!fontCoversChar(bytes, ch)) missing.add(ch);
+  }
+  return missing;
+}
+
+export type EmbeddedFontInfo = { names: string; serif: boolean; standard: StandardFonts | null };
+const embeddedFontInfoCache = new WeakMap<Uint8Array, EmbeddedFontInfo>();
+export function embeddedFontInfo(bytes: Uint8Array): EmbeddedFontInfo {
+  const cached = embeddedFontInfoCache.get(bytes);
+  if (cached) return cached;
+  let names = '';
+  try {
+    const font = openFontForGlyphs(bytes);
+    names = [font.postscriptName, font.familyName, font.subfamilyName]
+      .filter((name): name is string => typeof name === 'string' && name.length > 0)
+      .join(' ');
+  } catch {
+    names = '';
+  }
+  const style: PdfTextStyle = {
+    fontSize: 12,
+    fontName: names,
+    fontFamily: names,
+    lineHeight: 14,
+  };
+  const info: EmbeddedFontInfo = {
+    names,
+    serif: names ? isSerifFamily(names) : false,
+    standard: names ? pickStandardFont(style) : null,
+  };
+  embeddedFontInfoCache.set(bytes, info);
+  return info;
+}
+
+export type RunFonts = {
+  primary: PDFFont;
+  covers: (ch: string) => boolean;
+  fallback: PDFFont;
+  latin: PDFFont | null;
+};
+
+export type TextRun = { text: string; font: PDFFont; latin: boolean };
+
+function isLatinCandidate(ch: string): boolean {
+  const cp = ch.codePointAt(0) ?? 0;
+  return cp >= 0x20 && cp <= 0xff && !(cp >= 0x7f && cp <= 0x9f);
+}
+
+export function buildTextRuns(text: string, runs: RunFonts): TextRun[] {
+  if (!text) return [];
+  if (!runs.latin) {
+    const segments: TextRun[] = [];
+    let current = '';
+    let covered = true;
+    for (const ch of text) {
+      const chCovered = runs.covers(ch);
+      if (current && chCovered !== covered) {
+        segments.push({ text: current, font: covered ? runs.primary : runs.fallback, latin: false });
+        current = '';
+      }
+      covered = chCovered;
+      current += ch;
+    }
+    if (current) segments.push({ text: current, font: covered ? runs.primary : runs.fallback, latin: false });
+    return segments;
+  }
+  const segments: TextRun[] = [];
+  let current = '';
+  let font: PDFFont | null = null;
+  let latin = false;
+  for (const ch of text) {
+    const chCovered = runs.covers(ch);
+    const chFont = chCovered ? runs.primary : isLatinCandidate(ch) ? runs.latin! : runs.fallback;
+    const chLatin = !chCovered && chFont === runs.latin;
+    if (current && chFont !== font) {
+      segments.push({ text: current, font: font ?? runs.primary, latin });
+      current = '';
+    }
+    font = chFont;
+    latin = chLatin;
+    current += ch;
+  }
+  if (current) segments.push({ text: current, font: font ?? runs.primary, latin });
+  return segments;
+}
+
+function runWidth(run: TextRun, size: number, runs: RunFonts): number {
+  try {
+    return run.font.widthOfTextAtSize(run.text, size);
+  } catch {
+    if (run.font === runs.fallback) return 0;
+    return runs.fallback.widthOfTextAtSize(run.text, size);
+  }
+}
+
+export function measureTextRunsWidth(text: string, runs: RunFonts, size: number): number {
+  let total = 0;
+  for (const run of buildTextRuns(text, runs)) {
+    total += runWidth(run, size, runs);
+  }
+  return total;
 }

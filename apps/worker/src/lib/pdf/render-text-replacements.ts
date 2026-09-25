@@ -1,7 +1,15 @@
-import type { PDFDocument } from 'pdf-lib';
+import type { PDFDocument, PDFFont, PDFPage } from 'pdf-lib';
 import { rgb } from 'pdf-lib';
 import { editPositionKey, type TextItem, type TextMatch } from './find-text-positions.js';
-import { calibrateFontSize, fontSizeFromTextItems, pickEmbeddedFontBytes, PdfEditFontCache } from './pdf-edit-fonts.js';
+import {
+  buildTextRuns,
+  calibrateFontSize,
+  fontSizeFromTextItems,
+  measureTextRunsWidth,
+  pickEmbeddedFontBytes,
+  PdfEditFontCache,
+  type RunFonts,
+} from './pdf-edit-fonts.js';
 import { splitSuggestionByOriginalLines, explicitTextLines, paragraphDrawMode } from './pdf-text-lines.js';
 import { fitReplacementOnPage, fitReplacementAtLayoutLines } from './pdf-fit-replacement-text.js';
 import { clampBoxToNeighborLines, textItemBox, unionTextBoxes, type PdfTextBox } from './pdf-text-bounds.js';
@@ -14,7 +22,14 @@ type LineDraw = {
   text: string;
   fontSize: number;
   font: Awaited<ReturnType<PdfEditFontCache['resolve']>>;
+  runs?: RunFonts;
 };
+
+function measuringFont(runs: RunFonts): PDFFont {
+  return {
+    widthOfTextAtSize: (text: string, size: number) => measureTextRunsWidth(text, runs, size),
+  } as unknown as PDFFont;
+}
 
 function unionBoxes(a: Box, b: Box): Box {
   return unionTextBoxes(a, b);
@@ -112,7 +127,7 @@ async function drawExpandedSuggestionLines(
     const layoutLine = layoutLines[i];
     const text = suggestionLines[i]!;
     const line = layoutLine ?? lastLayout;
-    const { font, fontSize } = await resolveLayoutLineMetrics(
+    const { font, fontSize, runs } = await resolveLayoutLineMetrics(
       fontCache,
       pdfDoc,
       line,
@@ -121,7 +136,7 @@ async function drawExpandedSuggestionLines(
     );
     const startY = layoutLine ? layoutLine.y : belowY - belowLineHeight;
     const fitted = fitReplacementOnPage({
-      font,
+      font: runs ? measuringFont(runs) : font,
       text,
       baseFontSize: fontSize,
       startX: layoutLine?.x ?? lastLayout.x,
@@ -137,6 +152,7 @@ async function drawExpandedSuggestionLines(
         text: fittedLine.text,
         fontSize: fittedLine.fontSize,
         font,
+        runs: runs ?? undefined,
       });
     }
     belowY = fitted.lines[fitted.lines.length - 1]!.y;
@@ -166,17 +182,22 @@ async function resolveLayoutLineMetrics(
   line: TextMatch['lines'][number],
   fontBytesByName: Map<string, Uint8Array>,
   sampleText: string,
-): Promise<{ font: Awaited<ReturnType<PdfEditFontCache['resolve']>>; fontSize: number }> {
+): Promise<{
+  font: Awaited<ReturnType<PdfEditFontCache['resolve']>>;
+  fontSize: number;
+  runs: RunFonts | null;
+}> {
   const font = await fontCache.resolve(pdfDoc, line.style, fontBytesByName, sampleText);
-  if (pickEmbeddedFontBytes(line.style, fontBytesByName)) {
-    return { font, fontSize: fontSizeFromTextItems(line.items) };
+  const runs = await fontCache.resolveRunFonts(pdfDoc, line.style, fontBytesByName);
+  if (runs) {
+    return { font, fontSize: fontSizeFromTextItems(line.items), runs };
   }
   const sizes = line.items.map((item) => calibrateFontSize(item, font));
   const fontSize =
     sizes.length > 0
       ? sizes.reduce((sum, size) => sum + size, 0) / sizes.length
       : line.style.fontSize;
-  return { font, fontSize };
+  return { font, fontSize, runs: null };
 }
 
 async function drawParagraphAtLayoutLines(
@@ -199,8 +220,9 @@ async function drawParagraphAtLayoutLines(
   const wrapMetrics = lineMetrics[0]!;
   const baseFontSize =
     lineMetrics.reduce((sum, metrics) => sum + metrics.fontSize, 0) / lineMetrics.length;
+  const wrapRuns = wrapMetrics.runs;
   const fitted = fitReplacementAtLayoutLines({
-    font: wrapMetrics.font,
+    font: wrapRuns ? measuringFont(wrapRuns) : wrapMetrics.font,
     text: suggestion.trim(),
     baseFontSize,
     layoutLines,
@@ -216,6 +238,7 @@ async function drawParagraphAtLayoutLines(
       text: line.text,
       fontSize: metrics.fontSize,
       font: metrics.font,
+      runs: metrics.runs ?? undefined,
     };
   });
 }
@@ -247,7 +270,7 @@ async function drawFullSuggestionBlock(
     );
   }
   const firstLine = layoutLines[0]!;
-  const { font, fontSize } = await resolveLayoutLineMetrics(
+  const { font, fontSize, runs } = await resolveLayoutLineMetrics(
     fontCache,
     pdfDoc,
     firstLine,
@@ -255,7 +278,7 @@ async function drawFullSuggestionBlock(
     suggestion.trim(),
   );
   const fitted = fitReplacementOnPage({
-    font,
+    font: runs ? measuringFont(runs) : font,
     text: suggestion.trim(),
     baseFontSize: fontSize,
     startX: firstLine.x,
@@ -270,6 +293,7 @@ async function drawFullSuggestionBlock(
     text: line.text,
     fontSize: line.fontSize,
     font,
+    runs: runs ?? undefined,
   }));
 }
 
@@ -285,7 +309,7 @@ async function drawSubstringReplacement(
   const text = suggestion.trim();
   if (!text) return [];
   const line = match.lines[0]!;
-  const { font, fontSize } = await resolveLayoutLineMetrics(
+  const { font, fontSize, runs } = await resolveLayoutLineMetrics(
     fontCache,
     pdfDoc,
     line,
@@ -293,7 +317,7 @@ async function drawSubstringReplacement(
     text,
   );
   const fitted = fitReplacementOnPage({
-    font,
+    font: runs ? measuringFont(runs) : font,
     text,
     baseFontSize: fontSize,
     startX: match.box.x,
@@ -308,6 +332,7 @@ async function drawSubstringReplacement(
     text: fittedLine.text,
     fontSize: fittedLine.fontSize,
     font,
+    runs: runs ?? undefined,
   }));
 }
 
@@ -338,15 +363,14 @@ async function buildLineDraws(
     const text = suggestion.trim();
     if (!text) return [];
     const font = await fontCache.resolve(pdfDoc, match.style, fontBytesByName, text);
-    const baseFontSize = pickEmbeddedFontBytes(match.style, fontBytesByName)
-      ? fontSizeFromTextItems(
-          match.lines.flatMap((line) => line.items).length > 0
-            ? match.lines.flatMap((line) => line.items)
-            : [],
-        )
+    const picked = pickEmbeddedFontBytes(match.style, fontBytesByName);
+    const runs = await fontCache.resolveRunFonts(pdfDoc, match.style, fontBytesByName);
+    const lineItems = match.lines.flatMap((line) => line.items);
+    const baseFontSize = picked
+      ? fontSizeFromTextItems(lineItems.length > 0 ? lineItems : [])
       : match.style.fontSize;
     const fitted = fitReplacementOnPage({
-      font,
+      font: runs ? measuringFont(runs) : font,
       text,
       baseFontSize: baseFontSize || match.style.fontSize,
       startX: match.box.x,
@@ -360,6 +384,7 @@ async function buildLineDraws(
       text: line.text,
       fontSize: line.fontSize,
       font,
+      runs: runs ?? undefined,
     }));
   }
 
@@ -409,7 +434,7 @@ async function buildLineDraws(
       });
       continue;
     }
-    const { font, fontSize } = await resolveLayoutLineMetrics(
+    const { font, fontSize, runs } = await resolveLayoutLineMetrics(
       fontCache,
       pdfDoc,
       line,
@@ -417,7 +442,7 @@ async function buildLineDraws(
       text,
     );
     const fitted = fitReplacementOnPage({
-      font,
+      font: runs ? measuringFont(runs) : font,
       text,
       baseFontSize: fontSize,
       startX: line.x,
@@ -432,6 +457,7 @@ async function buildLineDraws(
         text: fittedLine.text,
         fontSize: fittedLine.fontSize,
         font,
+        runs: runs ?? undefined,
       });
     }
   }
@@ -449,6 +475,39 @@ function drawErase(page: ReturnType<PDFDocument['getPage']>, box: Box): void {
       borderWidth: 0,
       opacity: 1,
     });
+  }
+}
+
+function drawTextWithFallbackRuns(page: PDFPage, draw: LineDraw): void {
+  const options = {
+    y: draw.y,
+    size: draw.fontSize,
+    color: rgb(0, 0, 0),
+  } as const;
+  if (!draw.runs) {
+    page.drawText(draw.text, { ...options, x: draw.x, font: draw.font });
+    return;
+  }
+  let x = draw.x;
+  for (const run of buildTextRuns(draw.text, draw.runs)) {
+    if (!run.text) continue;
+    let width = 0;
+    try {
+      page.drawText(run.text, { ...options, x, font: run.font });
+      width = run.font.widthOfTextAtSize(run.text, draw.fontSize);
+    } catch {
+      if (run.font !== draw.runs.fallback) {
+        try {
+          page.drawText(run.text, { ...options, x, font: draw.runs.fallback });
+          width = draw.runs.fallback.widthOfTextAtSize(run.text, draw.fontSize);
+        } catch {
+          width = draw.fontSize * 0.25;
+        }
+      } else {
+        width = draw.fontSize * 0.25;
+      }
+    }
+    x += width;
   }
 }
 
@@ -504,13 +563,7 @@ export async function renderTextReplacements(
     const page = pdfDoc.getPage(item.pageIndex);
     for (const draw of item.draws) {
       if (!draw.text) continue;
-      page.drawText(draw.text, {
-        x: draw.x,
-        y: draw.y,
-        size: draw.fontSize,
-        font: draw.font,
-        color: rgb(0, 0, 0),
-      });
+      drawTextWithFallbackRuns(page, draw);
     }
   }
   return applied;

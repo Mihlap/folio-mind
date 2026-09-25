@@ -45,10 +45,17 @@ async function collectPageItems(buffer: Buffer): Promise<Array<{ str: string; he
   try {
     const page = await pdf.getPage(1);
     const content = await page.getTextContent();
-    return content.items.map((entry) => ({ str: String(entry.str), height: Number(entry.height) || 0 }));
+    return content.items.map((entry) => {
+      const item = entry as { str?: string; height?: number };
+      return { str: String(item.str ?? ''), height: Number(item.height) || 0 };
+    });
   } finally {
     await pdf.destroy();
   }
+}
+
+function joinItems(items: Array<{ str: string }>): string {
+  return items.map((entry) => entry.str).join('');
 }
 
 describe('render-text-replacements integration', () => {
@@ -107,6 +114,6 @@ describe('render-text-replacements integration', () => {
     expect(applied).toBe(1);
 
     const items = await collectPageItems(Buffer.from(await doc.save()));
-    expect(items.some((entry) => entry.str.includes('Клиент обязуется оплатить'))).toBe(true);
+    expect(joinItems(items)).toContain('Клиент обязуется оплатить');
   });
 });

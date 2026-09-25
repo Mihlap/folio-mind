@@ -387,6 +387,19 @@ type PdfTextStyleRecord = {
   fontWidth?: number;
 };
 
+async function ensurePageFontsLoaded(page: {
+  getOperatorList?: (params?: Record<string, unknown>) => Promise<unknown>;
+  getTextContent: () => Promise<unknown>;
+}): Promise<void> {
+  try {
+    if (page.getOperatorList) {
+      await page.getOperatorList({ fontExtraProperties: true });
+    }
+  } catch {
+    return;
+  }
+}
+
 async function collectPageTextItems(page: {
   getTextContent: () => Promise<{
     items: Array<Record<string, unknown>>;
@@ -731,6 +744,7 @@ export async function findAllTextPositions(
     data: new Uint8Array(buffer),
     useSystemFonts: true,
     disableFontFace: true,
+    fontExtraProperties: true,
     standardFontDataUrl,
     verbosity: VerbosityLevel.ERRORS,
   });
@@ -769,6 +783,7 @@ export async function findAllTextPositions(
         positions.set(pageNumber, pageMap);
       }
       const pageFontNames = fontNamesFromItems(items);
+      await ensurePageFontsLoaded(page);
       const fontBytes = await collectEmbeddedFontBytes(page, pageFontNames);
       for (const [name, bytes] of fontBytes) {
         fontBytesByName.set(name, bytes);
