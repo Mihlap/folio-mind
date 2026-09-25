@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   toUserErrorMessage,
   useApplyAcceptedSuggestionsMutation,
@@ -16,6 +16,7 @@ import {
 import { normalizeMarkdownInput } from '@folio-mind/edit-markdown';
 import { hasUserSourceDocx } from '../../lib/documents/sourceDocx.js';
 import { isDocumentVersionSelectable } from '../../lib/documents/versionSelection.js';
+import { scanEditNotice } from './scanEditNotice.js';
 import type { ConfidenceLevel } from './DocumentVersionConfidenceBadge.js';
 
 export type EditTextInjection = {
@@ -72,6 +73,12 @@ export function useDocumentAnnotationsPanel({
   });
   const sourceVersion = docData?.versions.find((v) => v.id === versionId);
   const hasSourceDocx = hasUserSourceDocx(sourceVersion?.sourceDocxKey);
+  const visionOcrStatus = sourceVersion?.visionOcrStatus ?? null;
+  const versionTextSource = sourceVersion?.textSource ?? null;
+  const scanNotice = useMemo(
+    () => scanEditNotice({ visionOcrStatus, textSource: versionTextSource, hasSourceDocx }),
+    [visionOcrStatus, versionTextSource, hasSourceDocx],
+  );
   const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [fetchHighlightDocxUrl] = useLazyGetHighlightDocxUrlQuery();
@@ -529,6 +536,7 @@ export function useDocumentAnnotationsPanel({
     applyConfidenceScore,
     applyConfidenceSummary,
     hasSourceDocx,
+    scanNotice,
     userComments,
     acceptedEdits,
     itemRefs,
