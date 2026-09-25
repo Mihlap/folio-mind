@@ -8,7 +8,6 @@ import {
 import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
 import { DocumentAnnotationsContext } from './DocumentAnnotationsPanel.js';
-import { scanEditNoticeClassName } from './scanEditNotice.js';
 
 export function DocumentEditsApplyActions() {
   const c = useContext(DocumentAnnotationsContext);
@@ -32,7 +31,6 @@ export function DocumentEditsApplyActions() {
     applyConfidenceScore,
     applyConfidenceSummary,
     hasSourceDocx,
-    scanNotice,
     handleExportHighlightDocx,
     handleApplyFinal,
     handleDownloadPdf,
@@ -42,18 +40,8 @@ export function DocumentEditsApplyActions() {
 
   if (acceptedEdits.length === 0) return null;
 
-  const scanBlocksEdits = Boolean(scanNotice?.blocksTextEdits);
-
   return (
     <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-      {scanNotice && (
-        <div
-          className={`rounded-xl border px-3 py-2.5 ${scanEditNoticeClassName(scanNotice.level)}`}
-        >
-          <p className="text-xs font-medium">{scanNotice.title}</p>
-          <p className="mt-0.5 text-[11px] leading-relaxed opacity-90">{scanNotice.description}</p>
-        </div>
-      )}
       <div className={reportActionsColumnClass}>
         <FeatureHelpActionButton
           helpTitle="Собрать PDF с правками"
@@ -71,7 +59,7 @@ export function DocumentEditsApplyActions() {
         </FeatureHelpActionButton>
         <FeatureHelpActionButton
           helpTitle="Применить правки"
-          disabled={!versionReady || creating || applyingFinal || pollApply || scanBlocksEdits}
+          disabled={!versionReady || creating || applyingFinal || pollApply}
           onClick={() => void handleApplyFinal()}
           buttonClassName={reportActionBtnHighlight}
           helpContent={
@@ -84,11 +72,6 @@ export function DocumentEditsApplyActions() {
                 <p>При загруженном DOCX PDF и Word совпадут по тексту правок.</p>
               ) : (
                 <p>Без исходного DOCX — PDF→Word, затем новый PDF или наложение на PDF.</p>
-              )}
-              {scanNotice && (
-                <p className="text-amber-700">
-                  {scanNotice.title}: {scanNotice.description}
-                </p>
               )}
             </>
           }
@@ -104,8 +87,7 @@ export function DocumentEditsApplyActions() {
             applyingFinal ||
             exportingHighlight ||
             pollApply ||
-            pollExportHighlight ||
-            scanBlocksEdits
+            pollExportHighlight
           }
           onClick={() => void handleExportHighlightDocx()}
           buttonClassName={reportActionBtnPrimary}

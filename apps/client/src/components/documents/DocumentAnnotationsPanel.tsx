@@ -84,7 +84,6 @@ export function DocumentAnnotationsPanel({
     error,
     userComments,
     acceptedEdits,
-    scanNotice,
     itemRefs,
     deleteAnnotation,
     documentRole,
@@ -246,11 +245,6 @@ export function DocumentAnnotationsPanel({
                 >
                   Выделить текст в документе
                 </button>
-                {scanNotice?.blocksTextSelection && (
-                  <p className="mt-1.5 text-[11px] leading-snug text-amber-700">
-                    {scanNotice.title}: {scanNotice.description}
-                  </p>
-                )}
               </div>
             )}
             <ExpandableEditField
