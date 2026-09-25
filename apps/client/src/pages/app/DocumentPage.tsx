@@ -78,6 +78,7 @@ import { prepareMediaAssetFile } from '../../lib/media/prepareMediaAssetFile.js'
 import type { ToolSectionId } from '../../components/ui/ToolAccordionSection.js';
 import { resolveEffectiveDocumentRole, readUserIdFromAuthToken } from '../../lib/documents/document-ui-permissions.js';
 const INITIAL_THUMB_PAGES = 15;
+const PREVIEW_URL_REFRESH_MS = 50 * 60 * 1000;
 const RIGHT_PANEL = {
   defaultWidth: 360,
   minExpandedWidth: 280,
@@ -659,13 +660,40 @@ export function DocumentPage() {
       pollingInterval: pollPreviews ? 2000 : 0,
     },
   );
+  const [mergedPreviewPages, setMergedPreviewPages] = useState<
+    Array<{ page: number; url: string; at: number }>
+  >([]);
+  useEffect(() => {
+    setMergedPreviewPages([]);
+  }, [id, activeVersion?.id]);
+  useEffect(() => {
+    const incoming = previews?.pages;
+    if (!incoming?.length) return;
+    setMergedPreviewPages((prev) => {
+      const byPage = new Map(prev.map((item) => [item.page, item]));
+      const now = Date.now();
+      let changed = false;
+      for (const item of incoming) {
+        const existing = byPage.get(item.page);
+        if (!existing) {
+          byPage.set(item.page, { page: item.page, url: item.url, at: now });
+          changed = true;
+        } else if (now - existing.at > PREVIEW_URL_REFRESH_MS) {
+          byPage.set(item.page, { page: item.page, url: item.url, at: now });
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      return [...byPage.values()].sort((a, b) => a.page - b.page);
+    });
+  }, [previews?.pages]);
   useEffect(() => {
     setPollPreviews(
       activeVersion?.status === 'processing' ||
         previews?.status === 'partial' ||
         previews?.status === 'processing' ||
         (expectedInitialThumbs > 0 &&
-          (previews?.pages.length ?? 0) < expectedInitialThumbs &&
+          mergedPreviewPages.length < expectedInitialThumbs &&
           previews?.status !== 'unavailable' &&
           previews?.status !== 'ready'),
     );
@@ -673,7 +701,7 @@ export function DocumentPage() {
     activeVersion?.id,
     activeVersion?.status,
     expectedInitialThumbs,
-    previews?.pages.length,
+    mergedPreviewPages.length,
     previews?.status,
   ]);
 
@@ -695,14 +723,14 @@ export function DocumentPage() {
   }, [online, id, activeVersion?.id]);
 
   useEffect(() => {
-    if (!online || !id || !activeVersion?.id || !previews?.pages?.length) return;
+    if (!online || !id || !activeVersion?.id || mergedPreviewPages.length === 0) return;
     const title = doc?.title ?? 'Документ';
     void saveBookletPreviewCache({
       documentId: id,
       versionId: activeVersion.id,
       title,
-      pageCount: versionPageCount || previews.pageCount || previews.pages.length,
-      pages: previews.pages,
+      pageCount: versionPageCount || previews?.pageCount || mergedPreviewPages.length,
+      pages: mergedPreviewPages.map(({ page, url }) => ({ page, url })),
       token,
     }).catch(() => {
       /* best-effort offline cache */
@@ -714,13 +742,13 @@ export function DocumentPage() {
     doc?.title,
     versionPageCount,
     previews?.pageCount,
-    previews?.pages,
+    mergedPreviewPages,
   ]);
 
   const displayPreviewPages =
     !online && offlineCache && offlineCache.pages.length > 0
       ? offlineCache.pages.map((p) => ({ page: p.page, url: p.dataUrl }))
-      : (previews?.pages ?? []);
+      : mergedPreviewPages;
   const showOfflineBanner = !online && (offlineCache?.pages.length ?? 0) > 0;
   const handleSearchMatches = useCallback(
     (
@@ -801,7 +829,7 @@ export function DocumentPage() {
   const statusLabel = formatVersionStatusLabel(
     activeVersion?.status,
     pdfReadyForUi,
-    previews?.pages?.length ?? 0,
+    mergedPreviewPages.length,
   );
   const confidenceLevel = activeVersion?.confidenceLevel;
   const showConfidenceNotice =
@@ -917,9 +945,9 @@ export function DocumentPage() {
               (previews?.status === 'partial' ||
                 previews?.status === 'processing' ||
                 ((previews?.pageCount ?? 0) > 0 &&
-                  (previews?.pages.length ?? 0) < Math.min(previews?.pageCount ?? 0, 15))) && (
+                  mergedPreviewPages.length < Math.min(previews?.pageCount ?? 0, 15))) && (
                 <p className="mb-2 shrink-0 text-center text-xs text-slate-500">
-                  Миниатюры: {previews?.pages.length ?? 0}
+                  Миниатюры: {mergedPreviewPages.length}
                   {previews?.pageCount ? ` / ${Math.min(previews.pageCount, 15)}` : ''}
                 </p>
               )}
