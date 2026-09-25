@@ -11,6 +11,7 @@ import type { WorkerEnv } from '../../lib/config/env.js';
 import { extractTextFromPdf } from '../../lib/pdf/pdf-text.js';
 import { analyzePdfIntegrityFromBuffer } from '../../lib/pdf/pdf-integrity.js';
 import {
+  countPdfPages,
   getPreviewLimits,
   renderPdfPageRange,
   renderPdfPreviews,
@@ -81,8 +82,13 @@ export async function processGeneratePreviewsJob(
       throw new Error('S3 не настроен в worker');
     }
     const pdfBuffer = await getObjectBuffer(s3Key);
+    const pageCount = await countPdfPages(pdfBuffer);
+    await prisma.documentVersion.update({
+      where: { id: versionId },
+      data: { status: 'ready', pageCount },
+    });
     const integrity = await analyzePdfIntegrityFromBuffer(pdfBuffer);
-    const { pageCount, previews, initialPages } = await renderPdfPreviews(pdfBuffer);
+    const { previews, initialPages } = await renderPdfPreviews(pdfBuffer);
     const versionExistsBeforeUpload = await prisma.documentVersion.findUnique({
       where: { id: versionId },
       select: { id: true },
@@ -110,7 +116,6 @@ export async function processGeneratePreviewsJob(
       await prisma.documentVersion.update({
         where: { id: versionId },
         data: {
-          status: 'ready',
           pageCount,
           integrityStatus: integrity.verdict,
           integrityScore: integrity.score,
@@ -120,11 +125,7 @@ export async function processGeneratePreviewsJob(
         },
       });
     } catch (integrityErr) {
-      console.warn('[preview] integrity metadata save failed, version marked ready', integrityErr);
-      await prisma.documentVersion.update({
-        where: { id: versionId },
-        data: { status: 'ready', pageCount },
-      });
+      console.warn('[preview] integrity metadata save failed', integrityErr);
     }
     const textKey = extractedTextKey(documentId, versionId);
     await prisma.job.update({
@@ -335,10 +336,16 @@ export async function processGeneratePreviewsJob(
     const { jobId, documentId, versionId, s3Key } = data;
     if (jobId && versionId) {
       const prisma = getPrisma();
-      await prisma.documentVersion.update({
+      const current = await prisma.documentVersion.findUnique({
         where: { id: versionId },
-        data: { status: 'failed' },
+        select: { status: true },
       });
+      if (!current || current.status !== 'ready') {
+        await prisma.documentVersion.update({
+          where: { id: versionId },
+          data: { status: 'failed' },
+        });
+      }
       await prisma.job.update({
         where: { id: jobId },
         data: {
