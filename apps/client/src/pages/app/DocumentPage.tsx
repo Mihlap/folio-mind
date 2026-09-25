@@ -217,6 +217,7 @@ export function DocumentPage() {
     versionId: activeVersion?.id,
     versionStatus: activeVersion?.status,
     versionFailureDetails: activeVersion?.failureDetails,
+    versionSizeBytes: activeVersion ? Number(activeVersion.size) : null,
     token,
   });
   const upload = useDocumentVersionUpload(doc?.id ?? '', (versionId) => {

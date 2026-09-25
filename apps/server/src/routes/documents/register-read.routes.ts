@@ -495,30 +495,45 @@ export const registerReadRoutes: FastifyPluginAsync<{
       if (missing.length > 0) {
         const fromPage = Math.min(...missing);
         const toPage = Math.max(...missing);
-        const lazyJob = await app.prisma.job.create({
-          data: {
-            type: 'preview-pages',
-            status: 'queued',
-            tenantId: user.tenantId,
-            payload: {
-              documentId,
-              versionId,
-              s3Key: version.s3Key,
-              fromPage,
-              toPage,
-            },
+        const activeJobs = await app.prisma.job.findMany({
+          where: {
+            type: { in: ['preview', 'preview-pages'] },
+            status: { in: ['queued', 'processing'] },
           },
+          select: { payload: true },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
         });
-        await enqueuePreviewPagesJob(env, {
-          jobId: lazyJob.id,
-          documentId,
-          versionId,
-          tenantId: user.tenantId,
-          s3Key: version.s3Key,
-          fromPage,
-          toPage,
-          requestId: request.requestId,
+        const alreadyScheduled = activeJobs.some((job) => {
+          const payload = job.payload as { versionId?: unknown } | null;
+          return payload?.versionId === versionId;
         });
+        if (!alreadyScheduled) {
+          const lazyJob = await app.prisma.job.create({
+            data: {
+              type: 'preview-pages',
+              status: 'queued',
+              tenantId: user.tenantId,
+              payload: {
+                documentId,
+                versionId,
+                s3Key: version.s3Key,
+                fromPage,
+                toPage,
+              },
+            },
+          });
+          await enqueuePreviewPagesJob(env, {
+            jobId: lazyJob.id,
+            documentId,
+            versionId,
+            tenantId: user.tenantId,
+            s3Key: version.s3Key,
+            fromPage,
+            toPage,
+            requestId: request.requestId,
+          });
+        }
         return {
           pageCount,
           pages,

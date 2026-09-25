@@ -10,6 +10,7 @@ type UseDocumentPdfLoaderParams = {
   versionId: string | undefined;
   versionStatus: string | undefined;
   versionFailureDetails?: Record<string, unknown> | null;
+  versionSizeBytes?: number | null;
   token: string | null;
 };
 
@@ -49,8 +50,17 @@ export function pdfLoadStageLabel(stage: PdfLoadStage): string {
 }
 
 const PRESIGNED_TIMEOUT_MS = 10_000;
+const LARGE_FILE_BYTES = 8 * 1024 * 1024;
+const LARGE_FILE_PRESIGNED_TIMEOUT_MS = 60_000;
 const BYTES_TIMEOUT_MS = 32_000;
 const PROCESSING_RETRY_MS = 4_000;
+
+function presignedTimeoutMs(sizeBytes: number | null | undefined): number {
+  if (typeof sizeBytes === 'number' && sizeBytes > LARGE_FILE_BYTES) {
+    return LARGE_FILE_PRESIGNED_TIMEOUT_MS;
+  }
+  return PRESIGNED_TIMEOUT_MS;
+}
 
 function isVersionProcessing(status: string | undefined): boolean {
   return status === 'processing';
@@ -82,6 +92,7 @@ export function useDocumentPdfLoader({
   versionId,
   versionStatus,
   versionFailureDetails,
+  versionSizeBytes,
   token,
 }: UseDocumentPdfLoaderParams) {
   const [fetchDownloadUrl] = useLazyGetDownloadUrlQuery();
@@ -227,7 +238,7 @@ export function useDocumentPdfLoader({
         );
       }, BYTES_TIMEOUT_MS);
       void loadPdfBytes(generation, abortController.signal);
-    }, PRESIGNED_TIMEOUT_MS);
+    }, presignedTimeoutMs(versionSizeBytes));
 
     void fetchDownloadUrl({ documentId, versionId })
       .unwrap()
@@ -256,7 +267,7 @@ export function useDocumentPdfLoader({
       clearTimeout(presignedTimer);
       clearTimeout(bytesTimer);
     };
-  }, [documentId, versionId, versionStatus, versionFailureDetails, token, fetchDownloadUrl, reloadToken, loadPdfBytes, markProcessingWait]);
+  }, [documentId, versionId, versionStatus, versionFailureDetails, versionSizeBytes, token, fetchDownloadUrl, reloadToken, loadPdfBytes, markProcessingWait]);
 
   const onPdfDocumentLoad = useCallback(() => {
     presignedLoadedRef.current = true;
