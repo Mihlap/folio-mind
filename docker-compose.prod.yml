@@ -83,19 +83,6 @@ services:
     restart: unless-stopped
     mem_limit: 4g
 
-  nginx:
-    image: nginx:alpine
-    restart: unless-stopped
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./apps/client/dist:/usr/share/nginx/html:ro
-    depends_on:
-      - server
-
 volumes:
   postgres_data:
   redis_data:
