@@ -157,7 +157,7 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
         <button
           type="button"
           onClick={handleSendCode}
-          className="w-full text-center text-sm font-medium text-folio-600 hover:underline"
+          className="w-full cursor-pointer text-center text-sm font-medium text-folio-600 hover:underline disabled:cursor-not-allowed"
           disabled={sendingCode}
         >
           Отправить код повторно
@@ -170,7 +170,7 @@ export function PhoneAuthForm({ mode }: { mode: Mode }) {
           setCode('');
           setError(null);
         }}
-        className="w-full text-center text-sm text-slate-500 hover:underline"
+        className="w-full cursor-pointer text-center text-sm text-slate-500 hover:underline"
       >
         Сменить номер
       </button>

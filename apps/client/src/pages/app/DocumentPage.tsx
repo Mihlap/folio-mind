@@ -1064,7 +1064,7 @@ export function DocumentPage() {
                       {pdfErrorRetryable || activeVersion?.status !== 'failed' ? (
                         <button
                           type="button"
-                          className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                          className="mt-3 cursor-pointer rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
                           onClick={() => reloadPdf()}
                         >
                           Повторить

@@ -54,7 +54,7 @@ export function PasswordInput({
           type="button"
           onClick={() => setVisible((v) => !v)}
           disabled={disabled}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={visible ? 'Скрыть пароль' : 'Показать пароль'}
           aria-pressed={visible}
         >

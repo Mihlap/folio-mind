@@ -24,7 +24,7 @@ export class AppErrorBoundary extends Component<Props, State> {
         </p>
         <button
           type="button"
-          className="rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white"
+            className="cursor-pointer rounded-lg bg-folio-600 px-4 py-2 text-sm font-medium text-white hover:bg-folio-700"
           onClick={() => {
             this.setState({ error: null });
             window.location.assign('/app');

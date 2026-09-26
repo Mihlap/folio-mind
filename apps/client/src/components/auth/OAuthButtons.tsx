@@ -16,7 +16,7 @@ export function OAuthButtons() {
           <a
             key={p.id}
             href={`${apiBaseUrl}/auth/oauth/${p.id}/start`}
-            className="flex flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-folio-300 hover:bg-folio-50"
+            className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-folio-300 hover:bg-folio-50"
           >
             {p.label}
           </a>

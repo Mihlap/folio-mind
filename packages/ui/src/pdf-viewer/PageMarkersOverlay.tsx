@@ -53,7 +53,7 @@ function GuestCommentPin({
         title={marker.title}
         onClick={() => onMarkerClick?.(marker)}
         className={[
-          'pointer-events-auto absolute flex max-w-[min(14rem,42vw)] -translate-x-1/2 -translate-y-full flex-col items-center',
+          'pointer-events-auto absolute flex max-w-[min(14rem,42vw)] -translate-x-1/2 -translate-y-full cursor-pointer flex-col items-center',
           active ? 'z-20' : 'z-10',
         ].join(' ')}
         style={{ marginTop: -6 }}

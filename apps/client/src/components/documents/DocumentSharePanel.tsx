@@ -288,7 +288,7 @@ export function DocumentSharePanel({
                         type="button"
                         disabled={revoking}
                         onClick={() => void handleRevoke(link.id)}
-                        className="mt-2 text-xs font-medium text-rose-600 underline disabled:opacity-50"
+                        className="mt-2 cursor-pointer text-xs font-medium text-rose-600 underline disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Отозвать
                       </button>

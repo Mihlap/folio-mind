@@ -210,7 +210,7 @@ export function DocumentLayoutTemplatesSection({
               type="button"
               disabled={!versionReady || !selected}
               onClick={() => selected && void handleApply(selected)}
-              className="rounded border border-folio-300 bg-folio-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-folio-700 disabled:opacity-50"
+              className="cursor-pointer rounded border border-folio-300 bg-folio-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-folio-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Применить на стр. {viewerPage}
             </button>
@@ -218,7 +218,7 @@ export function DocumentLayoutTemplatesSection({
               type="button"
               disabled={!versionReady || !selected}
               onClick={() => selected && void handleApplyOnBlankPage(selected)}
-              className="rounded border border-folio-200 bg-white px-3 py-1.5 text-[11px] font-medium text-folio-700 hover:bg-folio-50 disabled:opacity-50"
+              className="cursor-pointer rounded border border-folio-200 bg-white px-3 py-1.5 text-[11px] font-medium text-folio-700 hover:bg-folio-50 disabled:cursor-not-allowed disabled:opacity-50"
               title="Добавит чистый лист в выбранное место при сохранении в PDF"
             >
               Применить на чистый лист
@@ -227,7 +227,7 @@ export function DocumentLayoutTemplatesSection({
               <button
                 type="button"
                 onClick={() => void handleDelete(selected)}
-                className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-600 hover:bg-slate-50"
+                className="cursor-pointer rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-600 hover:bg-slate-50"
               >
                 Удалить шаблон
               </button>
@@ -242,7 +242,7 @@ export function DocumentLayoutTemplatesSection({
             type="button"
             disabled={!versionReady}
             onClick={openSaveForm}
-            className="text-[11px] font-medium text-folio-700 underline-offset-2 hover:underline disabled:opacity-50"
+            className="cursor-pointer text-[11px] font-medium text-folio-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
           >
             Сохранить текущую страницу как свой шаблон…
           </button>
@@ -265,11 +265,15 @@ export function DocumentLayoutTemplatesSection({
                 type="button"
                 disabled={saving}
                 onClick={() => void handleSavePage()}
-                className="rounded border border-folio-200 bg-folio-50 px-3 py-1.5 text-[11px] font-medium text-folio-800 disabled:opacity-50"
+                className="cursor-pointer rounded border border-folio-200 bg-folio-50 px-3 py-1.5 text-[11px] font-medium text-folio-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? '…' : 'Сохранить'}
               </button>
-              <button type="button" onClick={closeSaveForm} className="text-[11px] text-slate-500 hover:text-slate-700">
+              <button
+                type="button"
+                onClick={closeSaveForm}
+                className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-700"
+              >
                 Отмена
               </button>
             </div>

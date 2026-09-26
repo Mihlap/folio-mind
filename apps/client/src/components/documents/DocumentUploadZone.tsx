@@ -280,7 +280,7 @@ export function DocumentUploadZone({
               inputRef.current?.click();
             }
           }}
-          className="w-full min-w-0 rounded-lg bg-folio-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-folio-700 disabled:opacity-50 sm:w-auto sm:min-w-[10.5rem]"
+          className="w-full min-w-0 cursor-pointer rounded-lg bg-folio-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-folio-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[10.5rem]"
         >
           {active
             ? `Загрузка ${progress}%…`
@@ -297,7 +297,7 @@ export function DocumentUploadZone({
             type="button"
             disabled={active}
             onClick={() => docxInputRef.current?.click()}
-            className={`w-full min-w-0 rounded-lg border px-5 py-2.5 text-sm font-medium disabled:opacity-50 sm:w-auto sm:min-w-[10.5rem] ${
+            className={`w-full min-w-0 cursor-pointer rounded-lg border px-5 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[10.5rem] ${
               pendingDocx
                 ? 'border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50'
                 : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'

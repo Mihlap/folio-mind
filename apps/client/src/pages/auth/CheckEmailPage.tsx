@@ -133,7 +133,7 @@ export function CheckEmailPage() {
         {' · '}
         <button
           type="button"
-          className="font-medium text-folio-600 hover:underline"
+            className="cursor-pointer font-medium text-folio-600 hover:underline"
           onClick={() => {
             clearPendingVerifyEmail();
             navigate('/register');

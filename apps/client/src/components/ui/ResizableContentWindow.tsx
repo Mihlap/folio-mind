@@ -28,7 +28,7 @@ export function ResizableContentWindow({ open, title, onClose, children }: Props
     >
       <button
         type="button"
-        className="absolute inset-0 cursor-default bg-slate-900/40"
+        className="absolute inset-0 cursor-pointer bg-slate-900/40"
         aria-label="Закрыть окно"
         onClick={onClose}
       />

@@ -36,7 +36,7 @@ export function ConfirmDangerDialog({
 
   return (
     <div
-      className="fixed-overlay-safe z-[70] flex items-center justify-center bg-slate-900/45 p-4"
+        className="fixed-overlay-safe z-[70] flex cursor-pointer items-center justify-center bg-slate-900/45 p-4"
       role="presentation"
       onClick={() => {
         if (!busy) onCancel();

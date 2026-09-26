@@ -868,7 +868,7 @@ export function GuestSharePage() {
               type="button"
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+              className="cursor-pointer rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loadingMore ? 'Загрузка…' : `Показать ещё (${loadedThrough}/${pageCount})`}
             </button>

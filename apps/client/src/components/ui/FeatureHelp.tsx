@@ -35,7 +35,7 @@ export function FeatureHelpButton({ title, children, corner = false }: FeatureHe
       </button>
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center bg-slate-900/40 p-4"
           role="presentation"
           onClick={() => setOpen(false)}
         >
@@ -105,6 +105,7 @@ export function FeatureHelpActionButton({
         type="button"
         className={[
           stretch ? 'min-w-0 flex-1' : 'min-w-0 flex-1 sm:flex-none',
+          'cursor-pointer disabled:cursor-not-allowed',
           buttonClassName,
         ].join(' ')}
         title={isDisabled ? disabledReason : props.title}
