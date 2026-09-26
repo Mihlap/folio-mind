@@ -46,8 +46,25 @@ $COMPOSE $ENV_FILE_ARGS exec -T server npx prisma migrate deploy
 echo ">> итог"
 $COMPOSE $ENV_FILE_ARGS ps --format '{{.Service}} {{.Status}}'
 
-HEALTH=$(docker exec "${COMPOSE_PROJECT_NAME:-pdf}-server-1" wget -qO- http://127.0.0.1:3001/health 2>/dev/null || echo "")
-case "$HEALTH" in
-  *'"ok"'*) echo "API health: ok" ;;
-  *) echo "ВНИМАНИЕ: не дождались ответа /health, проверьте логи: $COMPOSE $ENV_FILE_ARGS logs --tail=50 server" ;;
-esac
+# Контейнеры поднимаются не мгновенно: даём API до 60 секунд, иначе получим
+# ложную тревогу на каждом деплое.
+SERVER_ID=$($COMPOSE $ENV_FILE_ARGS ps -q server)
+echo ">> ждём готовности API (до 60с)"
+READY=0
+ATTEMPT=0
+while [ "$ATTEMPT" -lt 30 ]; do
+  if [ -n "$SERVER_ID" ] &&
+    docker exec "$SERVER_ID" wget -qO- http://127.0.0.1:3001/health 2>/dev/null | grep -q '"ok"'; then
+    READY=1
+    break
+  fi
+  ATTEMPT=$((ATTEMPT + 1))
+  sleep 2
+done
+
+if [ "$READY" = "1" ]; then
+  echo "API health: ok"
+else
+  echo "ВНИМАНИЕ: API не ответил за 60с. Смотрите логи:"
+  echo "  $COMPOSE $ENV_FILE_ARGS logs --tail=50 server"
+fi
