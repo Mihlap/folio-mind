@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes } from 'react';
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
+  radius?: 'md' | 'lg';
 };
 const variants = {
   primary:
@@ -15,9 +16,14 @@ const sizes = {
   md: 'min-h-12 px-4 text-sm',
   lg: 'min-h-12 px-6 text-base',
 };
+const radii = {
+  md: 'rounded-lg',
+  lg: 'rounded-2xl',
+};
 export function Button({
   variant = 'primary',
   size = 'md',
+  radius = 'md',
   className = '',
   children,
   ...props
@@ -25,7 +31,7 @@ export function Button({
   return (
     <button
       type="button"
-      className={`inline-flex max-w-full cursor-pointer items-center justify-center rounded-lg font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`inline-flex max-w-full cursor-pointer items-center justify-center font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${radii[radius]} ${className}`}
       {...props}
     >
       {children}

@@ -14,6 +14,9 @@ describe('App', () => {
         </MemoryRouter>
       </Provider>,
     );
-    expect(screen.getByText(/понимают контекст/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      /Весь цикл работы с PDF/i,
+    );
+    expect(screen.getAllByRole('link', { name: /создать рабочее пространство/i }).length).toBeGreaterThan(0);
   });
 });
