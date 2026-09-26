@@ -14,10 +14,12 @@
 
 ## Из чего состоит прод-стек
 
-- Web (`apps/client`) — собранная статика, отдаёт nginx внутри контейнера.
+- Web (`apps/client`) — собранная статика, отдаётся nginx внутри контейнера.
 - API (`apps/server`) — Fastify, порт 3001, Prisma.
 - Worker (`apps/worker`) — фоновые очереди BullMQ.
-- Инфраструктура поднимается сама из compose: **Postgres 16 + pgvector, Redis, MinIO, Gotenberg, pdf2docx**. Отдельно ничего ставить не надо.
+- Инфраструктура поднимается сама из compose: **Postgres 16 + pgvector, Redis, Gotenberg, pdf2docx** (собирается локально из `docker/pdf2docx`). Отдельно ничего ставить не надо.
+- **Файлы пользователей в проде лежат не в compose, а во внешнем S3** (MinIO — только для локальной разработки, см. `docker-compose.yml`). Переменные `S3_*` обязательны, иначе загрузка и превью не работают.
+- Сервис `nginx` в `docker-compose.prod.yml` — заготовка для standalone-развёртывания, **в проде я его не использую**: TLS терминирует Caddy (см. шаг 4). Перед первым `up` его нужно либо удалить, либо подложить конфиг и убрать конфликт порта 80 с сервисом `client`.
 
 ## Шаг 1. Код и переменные окружения
 
@@ -46,10 +48,16 @@ JWT_SECRET=<случайная длинная строка>
 CORS_ORIGIN=https://<домен фронта>
 FRONTEND_URL=https://<домен фронта>
 API_PUBLIC_URL=https://<домен API>
-# Дальше по желанию: S3 (если не MinIO), GigaChat / YandexGPT, SMTP.
+S3_ENDPOINT=<адрес S3>
+S3_BUCKET=folio-mind
+S3_ACCESS_KEY_ID=<ключ>
+S3_SECRET_ACCESS_KEY=<ключ>
+# Дальше по желанию: GigaChat / YandexGPT, SMTP.
 # Все переменные описаны в apps/server/.env.example
 EOF
 ```
+
+`AI_PROVIDER` и ключи провайдера нужны для ИИ-функций, включая **распознавание текста в сканах** (см. `USER_GUIDE.md`, раздел 5). Без них всё остальное работает, а чат и OCR — нет.
 
 Обратите внимание: внутри compose-сети базы доступны по именам сервисов — `postgres` и `redis`, не `localhost`.
 
@@ -66,28 +74,59 @@ client:
 
 ## Шаг 3. Сборка и запуск
 
-Все команды из `~/app`. Флаг `--env-file .env.prod` обязателен — без него compose берёт пустые `POSTGRES_*` и `REDIS_PASSWORD`, и ничего не поднимется.
+Все команды из `~/app`. Флаг `--env-file .env.prod` обязателен — без него compose берёт пустые `POSTGRES_*` и `REDIS_PASSWORD`, и ничего не поднимется (разбор последствий — в разделе «Грабли» в конце).
 
 ```bash
 cd ~/app
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 
 После первого запуска применить миграции Prisma:
 ```bash
-docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec server npx prisma migrate deploy
 ```
 
 Проверить, что всё живо:
 ```bash
-docker compose -f docker-compose.prod.yml ps
-curl http://localhost:3001/health        # {"status":"ok"...}
-curl http://localhost:3001/docs          # Swagger
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+curl http://127.0.0.1:3001/health        # {"status":"ok"...}
+curl http://127.0.0.1:3001/docs          # Swagger
+```
+
+### Проверка после каждого деплоя
+
+`up -d --build` возвращает управление раньше, чем контейнеры прогреются, поэтому проверяю так:
+
+```bash
+# 1. Все сервисы подняты, server/postgres/redis — healthy
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+
+# 2. API отвечает
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/health
+
+# 3. HTTPS отдаёт страницу
+curl -sk -o /dev/null -w '%{http_code}\n' https://<домен фронта>/login
+
+# 4. В логах нет ошибок
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=50 server worker | grep -iE 'error|unhandled'
+
+# 5. Данные на месте (ожидаемое число пользователей)
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec postgres \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "User";'
+```
+
+Отдельно после деплоя **клиента** стоит убедиться, что новая сборка действительно попала в nginx: адрес API вшивается в бандл на этапе build, и если забыть поменять `VITE_API_URL`, фронт будет ходить в `api.your-domain.com`:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec client \
+  grep -o 'https://[^"]*' /usr/share/nginx/html/assets/*.js | head
 ```
 
 ## Шаг 4. Открыть наружу
 
-У меня облачный firewall пропускает только 22/80/443, а на хосте уже стоял Caddy, поэтому я завернул всё через него и не открывал лишних портов. У вас может быть свой вариант (nginx, трафик напрямую на 80/443) — смысл тот же.
+У меня облачный firewall пропускает только 22/80/443, а на хосте 80/443 уже держал Caddy из другого проекта, поэтому TLS я не трогал — сервисы приложения просто подключил к его docker-сети и отдал на реверс-прокси. У вас может быть свой вариант (nginx, трафик напрямую на 80/443) — смысл тот же.
+
+⚠️ В `docker-compose.prod.yml` есть сервис `nginx`, который я на проде **удаляю** из файла: он занимает те же 80/443, что и Caddy, и монтирует `./nginx/nginx.conf` и `./nginx/ssl`, которых в репозитории нет. Перед первым запуском с чистого git либо удалите этот сервис, либо подготовьте под него конфиг и certs. Я иду первым путём.
 
 **Caddy + sslip.io** (для домена без своей DNS — `что-угодно.<IP>.sslip.io` резолвится в ваш IP):
 
@@ -97,40 +136,82 @@ curl http://localhost:3001/docs          # Swagger
 <домен API>    { reverse_proxy your-server-container:3001 }  # например pdf-server-1
 ```
 
-Контейнеры приложения должны быть в сети Caddy, иначе reverse_proxy не увидит их по имени:
+Контейнеры приложения должны быть в сети Caddy, иначе reverse_proxy не увидит их по имени. Сеть объявляю в compose один раз, чтобы `docker compose up` сам переподключал контейнеры, а не «руками» после каждого пересоздания:
+
+```yaml
+services:
+  server:
+    networks: [default, <сеть-caddy>]
+  client:
+    networks: [default, <сеть-caddy>]
+
+networks:
+  <сеть-caddy>:
+    external: true
+```
+
+Если сети Caddy ещё нет — создайте её один раз: `docker network create <сеть-caddy>`. Порт самого `client` на хосте я сдвинул на `8080`, чтобы не спорить с Caddy за 80:
+
+```yaml
+  client:
+    ports:
+      - '8080:80'
+```
+
+После правки compose пересоздайте контейнеры (`up -d`) и проверьте, что оба сервиса появились в обеих сетях:
 ```bash
-docker network connect <сеть-caddy> <ваш-client-контейнер>
-docker network connect <сеть-caddy> <ваш-server-контейнер>
+docker inspect pdf-client-1 --format '{{json .NetworkSettings.Networks}}'
 docker exec <контейнер-caddy> caddy reload --config /etc/caddy/Caddyfile
 ```
 
-⚠️ Важно: при любом пересоздании контейнеров (`docker compose up`) ручные `network connect` слетают — их надо выполнять заново.
+⚠️ Важно: пока сеть не прописана в compose, ручные `docker network connect` слетают при каждом `docker compose up` — контейнеры «отваливаются» от прокси и сайт перестаёт отвечать без всякой ошибки в логах приложения.
 
 ## Смена кода / обновление / рестарт
 
 ```bash
-cd ~/app && git pull
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
+cd ~/app
+git pull --ff-only
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec server npx prisma migrate deploy
 
 # рестарт одного сервиса
-docker compose -f docker-compose.prod.yml restart server
+docker compose -f docker-compose.prod.yml --env-file .env.prod restart server
 
 # остановить всё (контейнеры остаются)
-docker compose --env-file .env.prod -f docker-compose.prod.yml stop
+docker compose -f docker-compose.prod.yml --env-file .env.prod stop
 
 # остановить и удалить контейнеры (данные в volumes сохраняются)
-docker compose --env-file .env.prod -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml --env-file .env.prod down
 ```
 
+`up -d --build` пересобирает только сервисы с `build:` (server, worker, client, pdf2docx) и не трогает postgres/redis — они и не должны пересоздаваться на каждом деплое. Если в выводе вы видите `Recreated` для баз — значит, скорее всего, вы забыли `--env-file` (см. ниже).
+
+Ветку `main` я держу как прод-релизную: сначала `git push origin dev/<ветка>`, потом fast-forward в `main`, и только после этого `git pull` на сервере.
+
 ## На что я потратил время (чтобы вы не наступали на те же грабли)
+
+**⚠️ Самая дорогая грабля — запуск compose без `--env-file`.** Без него переменные `${POSTGRES_PASSWORD}` и `${REDIS_PASSWORD` подставляются пустыми, compose считает конфигурацию изменившейся и **пересоздаёт контейнеры postgres и redis** с пустым паролем. Симптомы:
+
+- `server`/`worker` падают в цикл рестартов: `password authentication failed` / `ECONNREFUSED`;
+- `ps` показывает `postgres (unhealthy)`, хотя volume на месте.
+
+Чинится без потери данных: в `.env.prod` возвращаем правильный пароль (в `.env` он должен совпадать с тем, что реально настроен в кластере) и перезапускаем:
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+```
+Данные лежат в volume `pdf_postgres_data` и переживают пересоздание контейнера. Убедиться, что всё на месте:
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec postgres \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "User";'
+```
 
 **Рантайм TS-пакетов.** Общие `packages/*` отдают исходники (`"exports": "./src/index.ts"`). Поэтому:
 - server/worker запускаются через `tsx`: `node --no-warnings --import tsx dist/index.js`;
 - в Dockerfile-ах в runner копируется **полное дерево node_modules со ссылками pnpm как есть** (и `/app/node_modules`, и `apps/*/node_modules`, и `/app/packages`) — дереференсить `cp -rL` нельзя, иначе у `tsx` пропадает `esbuild` из соседнего `.pnpm`;
 - у builder обязательно должен быть **повторный** `pnpm install --frozen-lockfile` после `COPY . .` — только так pnpm создаёт `node_modules` внутри каждого `packages/*` (иначе кросс-импорты `@folio-mind/*` и их зависимости не находятся).
 
-Всё это уже зашито в `apps/server/Dockerfile`, `apps/worker/Dockerfile` и `apps/client/Dockerfile` — просто не «упрощайте» их.
+В `apps/server/Dockerfile` и `apps/worker/Dockerfile` это уже зашито. В `apps/client/Dockerfile` тот же порядок обязателен: `COPY . .` идёт **до** копирования `node_modules` и повторного `pnpm install`, иначе сборка клиента падает на резолве пакетов. Просто не «упрощайте» эти файлы.
 
 **Ужимание образов.** Пробовал сделать server/worker легче (они ~1.4–1.5 GB из-за полного node_modules + Ghostscript/QPDF): `node --experimental-strip-types` не дружит с `.js`-суффиксами в импортах TS-пакетов, а `pnpm prune --production` в монорепе не чистит dev-дерево. В итоге оставил рабочий вариант. Если хотите освободить диск — `docker builder prune -f`.
 
@@ -145,6 +226,19 @@ test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3001/health']
 sed -i 's/^[[:space:]]*//' .env.prod apps/server/.env.prod
 ```
 
+**Бэкап.** Всё состояние — в трёх местах: volume `pdf_postgres_data` (документы, версии, пользователи, журнал аудита), бакет S3 (сами файлы) и `.env.prod` / `apps/server/.env.prod`. Дамп базы снимается так:
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T postgres \
+  pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > ~/backups/folio-$(date +%F).sql.gz
+```
+
 ---
 
-Если что-то не поднимается — загляните в логи: `docker compose -f docker-compose.prod.yml logs -f server` (или `worker`). Там обычно сразу видно, чего не хватает (чаще всего — env или миграции).
+## Шпаргалка: деплой одной командой
+
+```bash
+cd /root/pdf && git pull --ff-only && \
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+Если что-то не поднимается — загляните в логи: `docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f server` (или `worker`). Там обычно сразу видно, чего не хватает (чаще всего — env, миграции или сеть Caddy).

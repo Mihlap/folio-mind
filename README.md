@@ -19,7 +19,7 @@ Folio Mind закрывает цепочку «загрузил → посмот
 
 ИИ **предлагает и черновит**; критические действия (публикация, отправка, применение правок) — **только по явному действию** пользователя с записью в журнал аудита.
 
-Как пользоваться: [USER_GUIDE.md](./USER_GUIDE.md). Указатель техдокументов: [docs/README.md](./docs/README.md).
+Как пользоваться: [USER_GUIDE.md](./USER_GUIDE.md). Как развернуть: [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
 
@@ -27,6 +27,7 @@ Folio Mind закрывает цепочку «загрузил → посмот
 
 - **Документы и версии** — проекты (папки объектов), история `v1…vN`, единый статус документа «черновик / на согласовании / утверждено», сравнение версий.
 - **Просмотр** — PDF.js в браузере: масштаб, поиск, миниатюры, режим презентации.
+- **Сканы без текстового слоя** — РазУм сам находит «мёртвые» PDF, предлагает **распознать текст** (OCR) и показывает прогресс; после распознавания включаются поиск и ИИ. Можно и принудительно: галочка при загрузке или кнопка **«Распознать текст»** на странице документа.
 - **Макет буклета** — изображения и фигуры поверх PDF, crop, сетка, шаблоны бюро, медиатека организации.
 - **Операции с PDF** — сжатие (пресеты), вырезка, объединение, перестановка и дублирование страниц.
 - **Согласование с заказчиком** — гостевая ссылка (TTL, пароль), watermark, метки «ОК / нужны правки», комментарии на странице, ответ при «Решено», опционально email гостю.
@@ -60,11 +61,15 @@ folio-mind/
 ├── apps/worker/     # фоновые очереди
 ├── apps/mobile/     # Capacitor — Android/PWA
 ├── packages/        # ui, store, pdf-contracts, api-client, ai-contracts, ai-providers, ...
-├── docs/            # auth, SSE, public API, фикстуры
-└── tools/           # smoke-тесты, скрипты установки GS, webview-инструменты
+├── docker/pdf2docx/ # образ конвертера DOCX → PDF
+├── tools/           # smoke-тесты, скрипты установки GS, webview-инструменты
+├── docker-compose.yml       # локальная разработка (включая MinIO)
+└── docker-compose.prod.yml  # прод: Postgres, Redis, Gotenberg, pdf2docx
 ```
 
-Лицензии PDF-стека: [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md).
+Служебная документация (auth, SSE, публичный API) лежит вне репозитория в `docs/` и намеренно не публикуется — папка в `.gitignore`. Всё, что нужно для старта и деплоя, есть в трёх файлах: этот README, [USER_GUIDE.md](./USER_GUIDE.md) и [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+Лицензии PDF-стека используют GPL/LGPL/MPL — перед коммерческим использованием сверьтесь с условиями.
 
 ---
 
@@ -112,7 +117,7 @@ pnpm dev
 
 ### Первый вход
 
-Зарегистрируйте пользователя через UI или API (см. [docs/AUTH.md](./docs/AUTH.md)). Для ИИ укажите `AI_PROVIDER` и ключи провайдера в `apps/server/.env` и `apps/worker/.env`.
+Зарегистрируйте пользователя через UI или API. Для ИИ укажите `AI_PROVIDER` и ключи провайдера в `apps/server/.env` и `apps/worker/.env` — без них не будут работать чат, проверка правок и **распознавание текста в сканах**. Прод требует внешний S3: ключи `S3_*` в `apps/server/.env.prod`.
 
 ---
 
@@ -147,17 +152,24 @@ powershell -File .\tools\install-ghostscript.ps1
 | Команда | Описание |
 |---------|----------|
 | `pnpm dev` | API + Web + Worker |
+| `pnpm dev:client` / `pnpm dev:server` | Только клиент или только API |
 | `pnpm build` | Сборка всех пакетов |
 | `pnpm test` | Тесты |
 | `pnpm lint` | ESLint |
 | `pnpm typecheck` | TypeScript |
+| `pnpm format` | Prettier по исходникам |
 | `pnpm db:migrate` | Prisma migrate dev |
 | `pnpm db:push` | Prisma db push (быстрый dev) |
+| `pnpm db:generate` | Перегенерация клиента Prisma |
 | `pnpm db:regen-migration` | Пересобрать единую init-миграцию из schema |
 | `pnpm smoke:phase1` | Smoke: upload, viewer, ИИ |
 | `pnpm smoke:phase2` | Smoke: операции PDF, правки |
 | `pnpm smoke:phase3` | Smoke: apply-edits (PDF overlay) |
+| `pnpm smoke:phase3:docx` | Smoke: apply-edits через DOCX |
+| `pnpm smoke:phase3:pdf2docx` | Smoke: конвертация DOCX → PDF |
 | `pnpm smoke:rag` | Smoke: RAG-чат по регламентам |
+| `pnpm mobile:sync` | Синхронизация PWA в `apps/mobile` |
+| `pnpm mobile:open:android` | Открыть проект Android Studio |
 | `pnpm mobile:apk:debug` | Сборка Android APK (Capacitor) |
 
 ---
@@ -166,16 +178,11 @@ powershell -File .\tools\install-ghostscript.ps1
 
 | Файл | Содержание |
 |------|------------|
-| [USER_GUIDE.md](./USER_GUIDE.md) | Инструкция для пользователя РазУм |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Развёртывание на хостинге (пошагово, от автора) |
-| [docs/AUTH.md](./docs/AUTH.md) | Регистрация, OAuth, SMS |
-| [docs/PASSWORD_RESET.md](./docs/PASSWORD_RESET.md) | Восстановление пароля |
-| [docs/SSE.md](./docs/SSE.md) | Live-обновления документа (SSE, Redis) |
-| [docs/PDF_LICENSES.md](./docs/PDF_LICENSES.md) | Лицензии PDF-стека |
-| [docs/api/](./docs/api/) | Публичный API (v1) и вебхуки |
-| [docs/legal/](./docs/legal/) | Privacy, DPA (черновики) |
+| [USER_GUIDE.md](./USER_GUIDE.md) | Инструкция для пользователя: разделы, документы, сканы и OCR, согласование, ИИ, настройки |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Развёртывание на VPS: env, compose, Caddy, бэкапы, грабли |
+| [apps/mobile/README.md](./apps/mobile/README.md) | Сборка Android APK и PWA-обёртки |
 
-Полный указатель: [docs/README.md](./docs/README.md).
+Описание REST API доступно в Swagger по адресу `/docs` у работающего API.
 
 ---
 
