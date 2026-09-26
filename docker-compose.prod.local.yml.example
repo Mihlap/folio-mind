@@ -1,0 +1,31 @@
+# Шаблон локальных правок прод-compose для конкретного хоста.
+#
+# Зачем: docker-compose.prod.yml в репозитории не содержит ничего
+# привязанного к вашему серверу. Всё, что уникально для хоста (сеть
+# внешнего обратного прокси, его имя), живёт здесь и НЕ коммитится.
+# Скопируйте файл рядом с docker-compose.prod.yml:
+#
+#   cp docker-compose.prod.local.yml.example docker-compose.prod.local.yml
+#
+# и подставьте имя своей сети. Дальше деплой одной командой:
+#
+#   tools/deploy-prod.sh
+#
+# Сеть должна существовать: docker network create <имя>.
+# Список сетей: docker network ls
+
+services:
+  client:
+    networks:
+      - default
+      - proxy
+
+  server:
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: замените-на-имя-вашей-сети

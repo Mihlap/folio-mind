@@ -56,3 +56,7 @@ apps/mobile/ios
 /docs/
 /PROJECT_PLAN.md
 /DEPLOY_NOTES.md
+
+# Host-specific compose override (network of the external reverse proxy).
+# Template lives in the repo as docker-compose.prod.local.yml.example
+/docker-compose.prod.local.yml

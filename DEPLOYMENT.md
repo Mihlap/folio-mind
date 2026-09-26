@@ -29,15 +29,19 @@ git clone <ваш репозиторий> ~/app && cd ~/app
 
 Два файла, которых нет в git (обязательно создать):
 
-`~/app/.env.prod` — для compose (параметры Postgres/Redis):
+`~/app/.env.prod` — для compose (параметры Postgres/Redis и сборки клиента):
 ```bash
 cat > .env.prod <<'EOF'
 POSTGRES_USER=folio
 POSTGRES_PASSWORD=<пароль>
 POSTGRES_DB=folio_mind
 REDIS_PASSWORD=<пароль>
+VITE_API_URL=https://<домен API>
+CLIENT_PORT=8080
 EOF
 ```
+
+`VITE_API_URL` **обязателен**: адрес API вшивается в бандл клиента на этапе сборки. Если переменной нет, compose оборвёт деплой с понятной ошибкой — это лучше, чем тихо собрать фронт на `http://localhost:3001` (именно так ведёт себя код, когда переменная пустая). `CLIENT_PORT` — порт на хосте, на котором виден клиент; если его владеет обратный прокси, поставьте не 80 (см. шаг 4).
 
 `~/app/apps/server/.env.prod` — всё для сервера и воркера. Готовый шаблон:
 ```bash
@@ -61,34 +65,49 @@ EOF
 
 Обратите внимание: внутри compose-сети базы доступны по именам сервисов — `postgres` и `redis`, не `localhost`.
 
-## Шаг 2. Правка docker-compose.prod.yml
+## Шаг 2. Локальный override для своего хоста
 
-Клиент при сборке получает адрес API как build-arg — он **вшивается в бандл**, и поменять его потом просто перезапуском нельзя:
+`docker-compose.prod.yml` в репозитории **не содержит ничего, привязанного к конкретному серверу**: ни портов, ни адресов, ни имён сетей. Всё, что уникально для хоста, лежит в `.env.prod` и в untracked-файле `docker-compose.prod.local.yml`.
 
-```yaml
-client:
-  build:
-    args:
-      VITE_API_URL: https://<домен API>
-```
+Это сделано намеренно. Раньше правки хоста вносились прямо в `docker-compose.prod.yml`, и это ломало деплой: файл менялся и в git, и на сервере, поэтому `git pull` отказывался выполняться («local changes would be overwritten»). Сейчас репозиторий можно обновлять на сервере без страха, а специфику хоста видно целиком в одном маленьком файле.
 
-## Шаг 3. Сборка и запуск
-
-Все команды из `~/app`. Флаг `--env-file .env.prod` обязателен — без него compose берёт пустые `POSTGRES_*` и `REDIS_PASSWORD`, и ничего не поднимется (разбор последствий — в разделе «Грабли» в конце).
+Создайте его из шаблона, только если у вас внешний обратный прокси (Caddy/traefik в другом проекте), которому нужен доступ к контейнерам по имени:
 
 ```bash
 cd ~/app
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+cp docker-compose.prod.local.yml.example docker-compose.prod.local.yml
+# подставьте имя своей сети в поле name
+docker network create <имя-сети>   # если сети ещё нет
 ```
 
-После первого запуска применить миграции Prisma:
+Файл уже в `.gitignore` — случайно закоммитить его нельзя. Если прокси у вас свой и на отдельном хосте, override не нужен вообще: деплой пойдёт в standalone-режиме.
+
+## Шаг 3. Сборка и запуск
+
+Раньше деплой был набором команд, и в них регулярно терялся `--env-file`. Теперь есть одна точка входа, которая делает всё сама и падает с внятной ошибкой, если чего-то не хватает:
+
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec server npx prisma migrate deploy
+cd ~/app
+tools/deploy-prod.sh
+```
+
+Скрипт проверяет наличие обоих env-файлов и непустой `VITE_API_URL`, подставляет `--env-file .env.prod`, добавляет override, если он есть, выполняет `git pull --ff-only`, `up -d --build`, миграции и печатает статус. Код уже доставлен на сервер другим способом — с флагом `--no-pull`.
+
+Если всё-таки хотите команды руками, флаг `--env-file .env.prod` обязателен — без него compose берёт пустые `POSTGRES_*` и `REDIS_PASSWORD` (разбор последствий — в разделе «Грабли» в конце):
+
+```bash
+cd ~/app
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod up -d --build
+```
+
+После первого запуска применить миграции Prisma (скрипт `tools/deploy-prod.sh` делает это сам):
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T server npx prisma migrate deploy
 ```
 
 Проверить, что всё живо:
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod ps
 curl http://127.0.0.1:3001/health        # {"status":"ok"...}
 curl http://127.0.0.1:3001/docs          # Swagger
 ```
@@ -99,7 +118,7 @@ curl http://127.0.0.1:3001/docs          # Swagger
 
 ```bash
 # 1. Все сервисы подняты, server/postgres/redis — healthy
-docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod ps
 
 # 2. API отвечает
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/health
@@ -108,17 +127,17 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/health
 curl -sk -o /dev/null -w '%{http_code}\n' https://<домен фронта>/login
 
 # 4. В логах нет ошибок
-docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=50 server worker | grep -iE 'error|unhandled'
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod logs --tail=50 server worker | grep -iE 'error|unhandled'
 
 # 5. Данные на месте (ожидаемое число пользователей)
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec postgres \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T postgres \
   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "User";'
 ```
 
-Отдельно после деплоя **клиента** стоит убедиться, что новая сборка действительно попала в nginx: адрес API вшивается в бандл на этапе build, и если забыть поменять `VITE_API_URL`, фронт будет ходить в `api.your-domain.com`:
+Отдельно после деплоя **клиента** стоит убедиться, что новая сборка действительно попала в nginx: адрес API вшивается в бандл на этапе build, и если в `.env.prod` останется чужой домен, фронт будет ходить не туда:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec client \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec client \
   grep -o 'https://[^"]*' /usr/share/nginx/html/assets/*.js | head
 ```
 
@@ -126,7 +145,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod exec client \
 
 У меня облачный firewall пропускает только 22/80/443, а на хосте 80/443 уже держал Caddy из другого проекта, поэтому TLS я не трогал — сервисы приложения просто подключил к его docker-сети и отдал на реверс-прокси. У вас может быть свой вариант (nginx, трафик напрямую на 80/443) — смысл тот же.
 
-⚠️ В `docker-compose.prod.yml` есть сервис `nginx`, который я на проде **удаляю** из файла: он занимает те же 80/443, что и Caddy, и монтирует `./nginx/nginx.conf` и `./nginx/ssl`, которых в репозитории нет. Перед первым запуском с чистого git либо удалите этот сервис, либо подготовьте под него конфиг и certs. Я иду первым путём.
+Сервиса `nginx` в `docker-compose.prod.yml` больше нет: он занимал те же 80/443, что и Caddy, и монтировал `./nginx/nginx.conf` и `./nginx/ssl`, которых в репозитории не было — подняться он не мог. Статику по-прежнему отдаёт nginx **внутри образа клиента** (`apps/client/Dockerfile` → `FROM nginx:alpine`), это другое и это работает.
 
 **Caddy + sslip.io** (для домена без своей DNS — `что-угодно.<IP>.sslip.io` резолвится в ваш IP):
 
@@ -136,57 +155,64 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod exec client \
 <домен API>    { reverse_proxy your-server-container:3001 }  # например pdf-server-1
 ```
 
-Контейнеры приложения должны быть в сети Caddy, иначе reverse_proxy не увидит их по имени. Сеть объявляю в compose один раз, чтобы `docker compose up` сам переподключал контейнеры, а не «руками» после каждого пересоздания:
+Контейнеры приложения должны быть в сети Caddy, иначе reverse_proxy не увидит их по имени. Сеть прописывается **не в репозитории, а в локальном override** (шаг 2) — так обновление `git pull` никогда не конфликтует с настройками хоста:
 
 ```yaml
+# docker-compose.prod.local.yml
 services:
-  server:
-    networks: [default, <сеть-caddy>]
   client:
-    networks: [default, <сеть-caddy>]
+    networks: [default, proxy]
+  server:
+    networks: [default, proxy]
 
 networks:
-  <сеть-caddy>:
+  proxy:
     external: true
+    name: <сеть-caddy>
 ```
 
-Если сети Caddy ещё нет — создайте её один раз: `docker network create <сеть-caddy>`. Порт самого `client` на хосте я сдвинул на `8080`, чтобы не спорить с Caddy за 80:
+Если сети Caddy ещё нет — создайте её один раз: `docker network create <сеть-caddy>`.
 
-```yaml
-  client:
-    ports:
-      - '8080:80'
-```
+Порт `client` на хосте задаётся переменной `CLIENT_PORT` в `.env.prod` (у меня `8080`, чтобы не спорить с Caddy за 80) — сам compose трогать не нужно.
 
-После правки compose пересоздайте контейнеры (`up -d`) и проверьте, что оба сервиса появились в обеих сетях:
+После первого деплоя проверьте, что оба сервиса оказались в обеих сетях:
 ```bash
-docker inspect pdf-client-1 --format '{{json .NetworkSettings.Networks}}'
+docker inspect pdf-client-1 --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+docker inspect pdf-server-1 --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
 docker exec <контейнер-caddy> caddy reload --config /etc/caddy/Caddyfile
 ```
 
-⚠️ Важно: пока сеть не прописана в compose, ручные `docker network connect` слетают при каждом `docker compose up` — контейнеры «отваливаются» от прокси и сайт перестаёт отвечать без всякой ошибки в логах приложения.
+⚠️ Важно: если сеть не прописана в override, контейнеры «отваливаются» от прокси при каждом пересоздании — сайт перестаёт отвечать без всякой ошибки в логах приложения. Пустой вывод `docker inspect` — верный признак.
 
 ## Смена кода / обновление / рестарт
+
+Обычный деплой — одна команда:
+
+```bash
+cd ~/app && tools/deploy-prod.sh
+```
+
+Подробно (те же шаги, что делает скрипт):
 
 ```bash
 cd ~/app
 git pull --ff-only
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec server npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T server npx prisma migrate deploy
 
 # рестарт одного сервиса
-docker compose -f docker-compose.prod.yml --env-file .env.prod restart server
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod restart server
 
 # остановить всё (контейнеры остаются)
-docker compose -f docker-compose.prod.yml --env-file .env.prod stop
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod stop
 
 # остановить и удалить контейнеры (данные в volumes сохраняются)
-docker compose -f docker-compose.prod.yml --env-file .env.prod down
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod down
 ```
 
 `up -d --build` пересобирает только сервисы с `build:` (server, worker, client, pdf2docx) и не трогает postgres/redis — они и не должны пересоздаваться на каждом деплое. Если в выводе вы видите `Recreated` для баз — значит, скорее всего, вы забыли `--env-file` (см. ниже).
 
-Ветку `main` я держу как прод-релизную: сначала `git push origin dev/<ветка>`, потом fast-forward в `main`, и только после этого `git pull` на сервере.
+Ветку `main` я держу как прод-релизную: сначала `git push origin dev/<ветка>`, потом fast-forward в `main`, и только после этого деплой на сервере. Пока на сервере лежат правки в `docker-compose.prod.yml`, любой `git pull` будет отказываться выполняться — именно поэтому настройки хоста вынесены в untracked-override.
 
 ## На что я потратил время (чтобы вы не наступали на те же грабли)
 
@@ -195,14 +221,14 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod down
 - `server`/`worker` падают в цикл рестартов: `password authentication failed` / `ECONNREFUSED`;
 - `ps` показывает `postgres (unhealthy)`, хотя volume на месте.
 
-Чинится без потери данных: в `.env.prod` возвращаем правильный пароль (в `.env` он должен совпадать с тем, что реально настроен в кластере) и перезапускаем:
+Чинится без потери данных: в `.env.prod` возвращаем правильный пароль (в `.env` он должен совпадать с тем, что реально настроен в кластере) и перезапускаем. **С override-файлом обязательно** — без него контейнеры потеряют сеть обратного прокси и сайт ляжет:
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
-docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod ps
 ```
 Данные лежат в volume `pdf_postgres_data` и переживают пересоздание контейнера. Убедиться, что всё на месте:
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec postgres \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T postgres \
   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "User";'
 ```
 
@@ -228,7 +254,7 @@ sed -i 's/^[[:space:]]*//' .env.prod apps/server/.env.prod
 
 **Бэкап.** Всё состояние — в трёх местах: volume `pdf_postgres_data` (документы, версии, пользователи, журнал аудита), бакет S3 (сами файлы) и `.env.prod` / `apps/server/.env.prod`. Дамп базы снимается так:
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T postgres \
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T postgres \
   pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > ~/backups/folio-$(date +%F).sql.gz
 ```
 
@@ -237,8 +263,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T postgres 
 ## Шпаргалка: деплой одной командой
 
 ```bash
-cd /root/pdf && git pull --ff-only && \
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+cd ~/app && tools/deploy-prod.sh
 ```
 
-Если что-то не поднимается — загляните в логи: `docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f server` (или `worker`). Там обычно сразу видно, чего не хватает (чаще всего — env, миграции или сеть Caddy).
+Если что-то не поднимается — загляните в логи: `docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod logs -f server` (или `worker`). Там обычно сразу видно, чего не хватает (чаще всего — env, миграции или сеть Caddy).
