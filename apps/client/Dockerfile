@@ -10,10 +10,11 @@ RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
+COPY . .
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/client/node_modules ./apps/client/node_modules
-COPY --from=deps /app/packages/*/node_modules ./packages/node_modules
-COPY . .
+COPY --from=deps /app/packages/. ./packages/
+RUN pnpm install --frozen-lockfile
 ARG VITE_API_URL
 RUN pnpm --filter @folio-mind/client build
 
