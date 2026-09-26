@@ -31,6 +31,7 @@ type PreviewJobPayload = WorkerJobPayload & {
   versionId?: string;
   tenantId?: string;
   s3Key?: string;
+  forceOcr?: boolean;
 };
 type PreviewPagesJobPayload = PreviewJobPayload & {
   fromPage?: number;
@@ -173,11 +174,14 @@ export async function processGeneratePreviewsJob(
           extracted.pages?.length > 0
             ? extracted.pages
             : parseExtractedTextJson(JSON.stringify(textPayload)).pages;
-        const scanLikely = needsVisionOcr({
-          text: extracted.text,
-          pages,
-          pageCount,
-        });
+        const forceOcr = data.forceOcr === true;
+        const scanLikely =
+          forceOcr ||
+          needsVisionOcr({
+            text: extracted.text,
+            pages,
+            pageCount,
+          });
 
         let visionOcrStatus: string = 'not_needed';
         let visionOcrJobId: string | null = null;
@@ -197,6 +201,7 @@ export async function processGeneratePreviewsJob(
                 s3Key,
                 pageCount,
                 provider: env.AI_PROVIDER,
+                force: forceOcr,
               });
             } catch (ocrEnqueueErr) {
               console.warn('[preview] vision-ocr enqueue failed', ocrEnqueueErr);

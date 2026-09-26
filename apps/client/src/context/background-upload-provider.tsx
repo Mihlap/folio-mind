@@ -27,6 +27,7 @@ import { useAppDispatch, useAppSelector } from '../hooks/index.js';
 import { uploadFileLabel } from '../lib/uploads/uploadStage.js';
 import {
   BackgroundUploadContext,
+  type UploadOptions,
   type VersionUploadSuccess,
 } from './background-upload-context-value.js';
 
@@ -105,6 +106,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
       },
       docxFile: File | undefined,
       onProgress: (percent: number) => void,
+      options?: UploadOptions,
     ) => {
       await uploadPdfVersion({
         documentId,
@@ -114,6 +116,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
         completeUpload: (args) => completeUpload(args).unwrap(),
         fallbackProxyUpload: (args) => uploadVersionFile(args).unwrap(),
         onProgress,
+        ...(options?.forceOcr ? { forceOcr: true } : {}),
       });
       if (docxFile && created.docxUploadUrl && created.docxS3Key) {
         await uploadSourceDocx({
@@ -131,7 +134,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   );
 
   const uploadFromDashboard = useCallback(
-    (pdfFile: File, docxFile?: File, projectId?: string) => {
+    (pdfFile: File, docxFile?: File, projectId?: string, options?: UploadOptions) => {
       void runUpload({
         kind: 'dashboard',
         fileLabel: uploadFileLabel(pdfFile.name, docxFile?.name),
@@ -153,6 +156,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
             created,
             docxFile,
             onProgress,
+            options,
           );
         },
       });
@@ -196,7 +200,11 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
   );
 
   const uploadNewDocument = useCallback(
-    (pdfFile: File, onCreated?: (documentId: string) => void) => {
+    (
+      pdfFile: File,
+      onCreated?: (documentId: string) => void,
+      options?: UploadOptions,
+    ) => {
       void runUpload({
         kind: 'new-document',
         fileLabel: pdfFile.name,
@@ -215,6 +223,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
             created,
             undefined,
             onProgress,
+            options,
           );
           onCreated?.(created.document.id);
         },
@@ -229,6 +238,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
       pdfFile: File,
       docxFile?: File,
       onSuccess?: (result: VersionUploadSuccess) => void,
+      options?: UploadOptions,
     ) => {
       void runUpload({
         kind: 'version',
@@ -250,6 +260,7 @@ export function BackgroundUploadProvider({ children }: { children: ReactNode }) 
             created,
             docxFile,
             onProgress,
+            options,
           );
           onSuccess?.({ documentId, versionId: created.versionId });
         },

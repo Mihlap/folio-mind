@@ -237,12 +237,13 @@ export const documentsApi = baseApi.injectEndpoints({
         documentId: string;
         versionId: string;
         sha256?: string;
+        forceOcr?: boolean;
       }
     >({
-      query: ({ documentId, versionId, sha256 }) => ({
+      query: ({ documentId, versionId, sha256, forceOcr }) => ({
         url: `/documents/${documentId}/versions/${versionId}/complete`,
         method: 'POST',
-        body: { sha256 },
+        body: { sha256, ...(forceOcr ? { forceOcr: true } : {}) },
       }),
       invalidatesTags: (_r, _e, { documentId }) => [
         { type: 'Documents', id: 'LIST' },
@@ -259,15 +260,18 @@ export const documentsApi = baseApi.injectEndpoints({
         documentId: string;
         versionId: string;
         file: File;
+        forceOcr?: boolean;
       }
     >({
-      async queryFn({ documentId, versionId, file }, { getState }) {
+      async queryFn({ documentId, versionId, file, forceOcr }, { getState }) {
         const token = (getState() as RootState).auth.token;
         const formData = new FormData();
         formData.append('file', file);
         try {
           const res = await fetch(
-            `${apiBaseUrl}/documents/${documentId}/versions/${versionId}/upload`,
+            `${apiBaseUrl}/documents/${documentId}/versions/${versionId}/upload${
+              forceOcr ? '?forceOcr=true' : ''
+            }`,
             {
               method: 'POST',
               headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -362,6 +366,37 @@ export const documentsApi = baseApi.injectEndpoints({
           ...(to !== undefined ? { to } : {}),
         },
       }),
+    }),
+    getVersionOcr: build.query<
+      {
+        status: string;
+        jobId: string | null;
+        pagesDone: number;
+        pagesTotal: number;
+        textSource: string | null;
+        error: string | null;
+      },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/ocr`,
+      }),
+      providesTags: (_r, _e, { documentId }) => [{ type: 'Documents', id: documentId }],
+    }),
+    runVersionOcr: build.mutation<
+      {
+        jobId: string;
+        versionId: string;
+        status: string;
+        alreadyRunning: boolean;
+      },
+      { documentId: string; versionId: string }
+    >({
+      query: ({ documentId, versionId }) => ({
+        url: `/documents/${documentId}/versions/${versionId}/ocr`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, { documentId }) => [{ type: 'Documents', id: documentId }],
     }),
     getDownloadUrl: build.query<
       {
@@ -819,6 +854,8 @@ export const {
   useGetVersionIntegrityQuery,
   useCompareVersionIntegrityQuery,
   useGetVersionPreviewsQuery,
+  useGetVersionOcrQuery,
+  useRunVersionOcrMutation,
   useSplitPagesMutation,
   useRearrangePagesMutation,
   useMergeVersionsMutation,

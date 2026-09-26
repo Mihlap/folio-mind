@@ -4,12 +4,22 @@ export type UploadPdfVersionArgs = {
   versionId: string;
   file: File;
   uploadUrl: string;
-  completeUpload: (args: { documentId: string; versionId: string }) => Promise<{
+  forceOcr?: boolean;
+  completeUpload: (args: {
+    documentId: string;
+    versionId: string;
+    forceOcr?: boolean;
+  }) => Promise<{
     versionId: string;
     status: string;
     jobId: string;
   }>;
-  fallbackProxyUpload: (args: { documentId: string; versionId: string; file: File }) => Promise<{
+  fallbackProxyUpload: (args: {
+    documentId: string;
+    versionId: string;
+    file: File;
+    forceOcr?: boolean;
+  }) => Promise<{
     versionId: string;
     status: string;
     jobId: string;
@@ -63,6 +73,7 @@ export async function uploadPdfVersion(args: UploadPdfVersionArgs): Promise<{
       documentId: args.documentId,
       versionId: args.versionId,
       file: args.file,
+      forceOcr: args.forceOcr,
     });
     args.onProgress?.(100);
     return { ...result, via: 'proxy' };
@@ -73,6 +84,7 @@ export async function uploadPdfVersion(args: UploadPdfVersionArgs): Promise<{
       const result = await args.completeUpload({
         documentId: args.documentId,
         versionId: args.versionId,
+        forceOcr: args.forceOcr,
       });
       return { ...result, via: 'presigned' };
     } catch {

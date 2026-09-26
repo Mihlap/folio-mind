@@ -52,10 +52,16 @@ export {
   type PageText,
 } from './extracted-text.js';
 export {
+  TEXTLESS_SCAN_CONVERT_REASON,
+  TEXTLESS_SCAN_EDIT_REASON,
+  TEXTLESS_SCAN_REASON,
   VISION_OCR_MAX_PAGES,
   VISION_OCR_MIN_CHARS_PER_PAGE,
   VISION_OCR_MIN_TOTAL_CHARS,
   buildExtractedTextPayload,
+  isTextlessScanVersion,
+  isVisionOcrInProgressStatus,
+  isPdfTextLayerUnavailable,
   isVisionOcrStatus,
   needsVisionOcr,
   type VisionOcrStatus,

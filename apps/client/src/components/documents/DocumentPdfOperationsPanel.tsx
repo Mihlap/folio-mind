@@ -22,6 +22,7 @@ import {
 } from '@folio-mind/store';
 import type { OperationSaveMode } from './OperationSaveModeSelect.js';
 import { estimateOptimizeSize, formatFileSize, formatOptimizeSizeRange } from '@folio-mind/store';
+import { isPdfTextLayerUnavailable } from '@folio-mind/store';
 import type { DocumentVersionItem } from './DocumentVersionsPanel.js';
 import { FeatureHelpActionButton, FeatureHelpButton } from '../ui/FeatureHelp.js';
 import { reportActionBtnPrimary, reportActionsColumnClass } from '../ui/FeatureHelp.styles.js';
@@ -219,6 +220,10 @@ export function DocumentPdfOperationsPanel({
 }: Props) {
   const accessRole = normalizeDocumentRole(documentRole);
   const canEdit = roleHasCapability(accessRole, 'edit');
+  const textlessScan = isPdfTextLayerUnavailable({
+    textSource: activeVersion?.textSource,
+    visionOcrStatus: activeVersion?.visionOcrStatus,
+  });
   const canComment = roleHasCapability(accessRole, 'comment');
   const restrictionHint = ROLE_RESTRICTION_HINT[accessRole];
   const [expanded, setExpanded] = useState(embedded);
@@ -1395,7 +1400,7 @@ export function DocumentPdfOperationsPanel({
                 pageCount={effectivePageCount}
                 onGoToPage={onGoToPage}
               /> */}
-                  <DocumentEditsApplyActions />
+                  <DocumentEditsApplyActions textlessScan={textlessScan} />
                 </ToolAccordionSection>
               </div>
             </>

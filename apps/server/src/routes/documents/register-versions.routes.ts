@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   UPLOAD_NETWORK_ERROR_MESSAGE,
   isUserUploadedSourceDocxKey,
+  isVisionOcrInProgressStatus,
 } from '@folio-mind/pdf-contracts';
 import { findDocumentForUser, getAuthUser } from '../../lib/documents/document-access.js';
 import type { Env } from '../../lib/config/env.js';
@@ -15,7 +16,7 @@ import {
   s3ObjectExists,
 } from '../../lib/storage/s3.js';
 import { buildOriginalKey, finalizeDocumentUpload, hashBuffer } from './helpers.js';
-import { enqueueImportFromDocxJob } from '../../lib/queue/queue.js';
+import { enqueueImportFromDocxJob, enqueueVisionOcrJob } from '../../lib/queue/queue.js';
 import { publishVersionCreatedDocumentEvent } from '../../lib/events/document-events-bus.js';
 import { errorBody, MAX_UPLOAD_BYTES, uploadRateLimit } from './schemas.js';
 export const registerVersionsRoutes: FastifyPluginAsync<{
@@ -330,6 +331,7 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
         }),
         body: z.object({
           sha256: z.string().optional(),
+          forceOcr: z.boolean().optional(),
         }),
         response: {
           200: z.object({
@@ -370,6 +372,7 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
           versionId,
           version,
           sha256: request.body.sha256,
+          forceOcr: request.body.forceOcr,
           requestId: request.requestId,
         });
       } catch (err) {
@@ -387,6 +390,11 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
         params: z.object({
           documentId: z.string(),
           versionId: z.string(),
+        }),
+        querystring: z.object({
+          forceOcr: z
+            .union([z.literal('true'), z.literal('1'), z.literal('false'), z.literal('0')])
+            .optional(),
         }),
         response: {
           200: z.object({
@@ -444,6 +452,7 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
           versionId,
           version,
           sha256: hashBuffer(buffer),
+          forceOcr: request.query.forceOcr === 'true' || request.query.forceOcr === '1',
           requestId: request.requestId,
         });
       } catch (err) {
@@ -625,6 +634,172 @@ export const registerVersionsRoutes: FastifyPluginAsync<{
         versionId,
         status: 'processing',
       });
+    },
+  );
+  r.post(
+    '/documents/:documentId/versions/:versionId/ocr',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        response: {
+          202: z.object({
+            jobId: z.string(),
+            versionId: z.string(),
+            status: z.string(),
+            alreadyRunning: z.boolean(),
+          }),
+          400: errorBody,
+          404: errorBody,
+          409: errorBody,
+          503: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(503).send({ error: 'S3 is not configured' });
+      }
+      if (env.AI_PROVIDER !== 'gigachat') {
+        return reply.code(400).send({
+          error: 'Распознавание сканов доступно только при провайдере GigaChat',
+        });
+      }
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+      if (version.status === 'pending_upload') {
+        return reply.code(400).send({ error: 'Файл ещё загружается' });
+      }
+      if (!version.s3Key || version.s3Key === 'pending') {
+        return reply.code(400).send({ error: 'У версии нет файла в хранилище' });
+      }
+      if (isVisionOcrInProgressStatus(version.visionOcrStatus)) {
+        return reply.code(409).send({ error: 'Распознавание уже выполняется' });
+      }
+      const activeOcrJob = await app.prisma.job.findFirst({
+        where: {
+          type: 'vision-ocr',
+          status: { in: ['queued', 'processing'] },
+          payload: { path: ['versionId'], equals: versionId },
+        },
+        select: { id: true },
+      });
+      if (activeOcrJob) {
+        return reply.code(409).send({ error: 'Распознавание уже выполняется' });
+      }
+      const pageCount = version.pageCount ?? 0;
+      const job = await app.prisma.job.create({
+        data: {
+          type: 'vision-ocr',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: {
+            documentId,
+            versionId,
+            s3Key: version.s3Key,
+            pageCount,
+            provider: env.AI_PROVIDER,
+            force: true,
+            manual: true,
+          },
+        },
+      });
+      await app.prisma.documentVersion.update({
+        where: { id: versionId },
+        data: { visionOcrStatus: 'queued' },
+      });
+      await enqueueVisionOcrJob(env, {
+        jobId: job.id,
+        documentId,
+        versionId,
+        tenantId: user.tenantId,
+        s3Key: version.s3Key,
+        pageCount,
+        provider: env.AI_PROVIDER,
+        force: true,
+        requestId: request.requestId,
+      });
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'document.version_ocr',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId,
+          meta: { versionId, pageCount },
+        },
+      });
+      return reply.status(202).send({
+        jobId: job.id,
+        versionId,
+        status: 'queued',
+        alreadyRunning: false,
+      });
+    },
+  );
+  r.get(
+    '/documents/:documentId/versions/:versionId/ocr',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        params: z.object({
+          documentId: z.string(),
+          versionId: z.string(),
+        }),
+        response: {
+          200: z.object({
+            status: z.string(),
+            jobId: z.string().nullable(),
+            pagesDone: z.number().int(),
+            pagesTotal: z.number().int(),
+            textSource: z.string().nullable(),
+            error: z.string().nullable(),
+          }),
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const { documentId, versionId } = request.params;
+      const document = await findDocumentForUser(app.prisma, documentId, user, { capability: 'edit' });
+      if (!document) {
+        return reply.code(404).send({ error: 'Document not found' });
+      }
+      const version = document.versions.find((v: { id: string }) => v.id === versionId);
+      if (!version) {
+        return reply.code(404).send({ error: 'Version not found' });
+      }
+      const versionJobs = await app.prisma.job.findMany({
+        where: { type: 'vision-ocr', payload: { path: ['versionId'], equals: versionId } },
+        select: { id: true, status: true, payload: true, updatedAt: true },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+      });
+      const latest = versionJobs[0];
+      const latestPayload = (latest?.payload ?? {}) as Record<string, unknown>;
+      const error =
+        latest?.status === 'failed' && typeof latestPayload.error === 'string'
+          ? latestPayload.error
+          : null;
+      return {
+        status: version.visionOcrStatus ?? 'not_needed',
+        jobId: latest?.id ?? null,
+        pagesDone: typeof latestPayload.ocrPagesDone === 'number' ? latestPayload.ocrPagesDone : 0,
+        pagesTotal: typeof latestPayload.ocrPagesTotal === 'number' ? latestPayload.ocrPagesTotal : 0,
+        textSource: version.textSource,
+        error,
+      };
     },
   );
 };

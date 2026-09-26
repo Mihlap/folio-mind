@@ -86,6 +86,7 @@ export async function enqueuePreviewJob(
     versionId: string;
     tenantId: string;
     s3Key: string;
+    forceOcr?: boolean;
     requestId?: string;
   },
 ): Promise<void> {
@@ -462,4 +463,21 @@ export async function enqueueMergeVersionsJob(
 ): Promise<void> {
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('merge-versions', payload, { jobId: payload.jobId });
+}
+export async function enqueueVisionOcrJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    documentId: string;
+    versionId: string;
+    tenantId: string;
+    s3Key: string;
+    pageCount: number;
+    provider: 'gigachat' | 'yandex';
+    force: boolean;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { previewQueue } = getQueues(env);
+  await previewQueue.add('vision-ocr', payload, { jobId: payload.jobId });
 }

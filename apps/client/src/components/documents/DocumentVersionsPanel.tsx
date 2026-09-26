@@ -47,6 +47,8 @@ export type DocumentVersionItem = {
   confidenceSummary?: string | null;
   sourceDocxKey?: string | null;
   hasAppliedDocx?: boolean;
+  textSource?: string | null;
+  visionOcrStatus?: string | null;
 };
 type Props = {
   documentId: string;
@@ -69,6 +71,7 @@ export function DocumentVersionsPanel({
   const uploadProgress = uploading ? uploadState.progress : null;
   const showUploadDone = uploading && uploadState.showDone;
   const [error, setError] = useState<string | null>(null);
+  const [forceOcr, setForceOcr] = useState(false);
   const [deleteVersion, { isLoading: deletingVersion }] = useDeleteDocumentVersionMutation();
   const [fetchDocxUrl] = useLazyGetSourceDocxUrlQuery();
   const [pendingDelete, setPendingDelete] = useState<{
@@ -84,9 +87,15 @@ export function DocumentVersionsPanel({
       return;
     }
     setError(null);
-    uploadDocumentVersion(documentId, file, undefined, ({ versionId }) => {
-      onSelectVersion(versionId);
-    });
+    uploadDocumentVersion(
+      documentId,
+      file,
+      undefined,
+      ({ versionId }) => {
+        onSelectVersion(versionId);
+      },
+      { forceOcr },
+    );
     if (inputRef.current) inputRef.current.value = '';
   }
   function handleSelectVersion(versionId: string) {
@@ -152,6 +161,19 @@ export function DocumentVersionsPanel({
               : 'Новая версия PDF'}
           </button>
         </div>
+
+        <label className="mt-2 flex cursor-pointer items-start gap-2 text-left">
+          <input
+            type="checkbox"
+            checked={forceOcr}
+            onChange={(e) => setForceOcr(e.target.checked)}
+            disabled={uploading}
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-folio-600"
+          />
+          <span className="text-[11px] leading-snug text-slate-500">
+            Распознать текст после загрузки (для сканов)
+          </span>
+        </label>
       </div>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}

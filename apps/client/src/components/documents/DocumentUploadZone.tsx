@@ -20,6 +20,7 @@ export function DocumentUploadZone({
   const docxInputRef = useRef<HTMLInputElement>(null);
   const [pendingPdf, setPendingPdf] = useState<File | null>(null);
   const [pendingDocx, setPendingDocx] = useState<File | null>(null);
+  const [forceOcr, setForceOcr] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const uploadState = useAppSelector((s) => s.backgroundUpload);
   const { uploadFromDashboard, uploadFromDocxOnly } = useBackgroundUpload();
@@ -44,9 +45,9 @@ export function DocumentUploadZone({
       }
       setLocalError(null);
       clearPending();
-      uploadFromDashboard(pdfFile, docxFile, projectId);
+      uploadFromDashboard(pdfFile, docxFile, projectId, { forceOcr });
     },
-    [projectId, clearPending, uploadFromDashboard],
+    [projectId, clearPending, uploadFromDashboard, forceOcr],
   );
 
   const attachPdf = useCallback(
@@ -215,9 +216,28 @@ export function DocumentUploadZone({
         </div>
       )}
 
+      {(pendingPdf || pendingDocx) && !active && (
+        <label className="mx-auto mt-4 flex max-w-lg cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-left sm:px-4">
+          <input
+            type="checkbox"
+            checked={forceOcr}
+            onChange={(e) => setForceOcr(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-folio-600"
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-slate-700">
+              Распознать текст после загрузки
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+              Для сканов без текстового слоя. По умолчанию распознавание включается автоматически,
+              когда текст не найден — галочка нужна, если сработала эвристика неверно.
+            </span>
+          </span>
+        </label>
+      )}
+
       <input
-        ref={inputRef}
-        type="file"
+        ref={inputRef}        type="file"
         accept="application/pdf,.pdf"
         className="hidden"
         onChange={(e) => {

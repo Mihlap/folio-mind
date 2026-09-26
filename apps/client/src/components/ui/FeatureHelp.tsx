@@ -77,18 +77,20 @@ type FeatureHelpActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   helpTitle: string;
   helpContent: ReactNode;
   buttonClassName?: string;
-
   stretch?: boolean;
+  disabledReason?: string;
 };
 export function FeatureHelpActionButton({
   helpTitle,
   helpContent,
   buttonClassName = reportActionBtnPrimary,
   stretch = false,
+  disabledReason,
   children,
   className,
   ...props
 }: FeatureHelpActionButtonProps) {
+  const isDisabled = Boolean(props.disabled);
   return (
     <div
       className={[
@@ -105,6 +107,7 @@ export function FeatureHelpActionButton({
           stretch ? 'min-w-0 flex-1' : 'min-w-0 flex-1 sm:flex-none',
           buttonClassName,
         ].join(' ')}
+        title={isDisabled ? disabledReason : props.title}
         {...props}
       >
         {children}
@@ -112,6 +115,9 @@ export function FeatureHelpActionButton({
       <FeatureHelpButton title={helpTitle} corner>
         {helpContent}
       </FeatureHelpButton>
+      {isDisabled && disabledReason && (
+        <p className="w-full text-[10px] leading-snug text-amber-700">{disabledReason}</p>
+      )}
     </div>
   );
 }

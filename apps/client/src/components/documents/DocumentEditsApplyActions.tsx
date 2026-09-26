@@ -1,4 +1,5 @@
 import { useContext } from 'react';
+import { TEXTLESS_SCAN_CONVERT_REASON, TEXTLESS_SCAN_EDIT_REASON } from '@folio-mind/store';
 import { FeatureHelpActionButton } from '../ui/FeatureHelp.js';
 import {
   reportActionBtnHighlight,
@@ -9,7 +10,7 @@ import { DownloadIcon } from '../ui/icons/DownloadIcon.js';
 import { DocumentVersionConfidenceBadge } from './DocumentVersionConfidenceBadge.js';
 import { DocumentAnnotationsContext } from './DocumentAnnotationsPanel.js';
 
-export function DocumentEditsApplyActions() {
+export function DocumentEditsApplyActions({ textlessScan = false }: { textlessScan?: boolean }) {
   const c = useContext(DocumentAnnotationsContext);
   if (!c) return null;
 
@@ -59,7 +60,12 @@ export function DocumentEditsApplyActions() {
         </FeatureHelpActionButton>
         <FeatureHelpActionButton
           helpTitle="Применить правки"
-          disabled={!versionReady || creating || applyingFinal || pollApply}
+          disabled={
+            !versionReady || creating || applyingFinal || pollApply || (textlessScan && !hasSourceDocx)
+          }
+          disabledReason={
+            textlessScan && !hasSourceDocx ? TEXTLESS_SCAN_EDIT_REASON : undefined
+          }
           onClick={() => void handleApplyFinal()}
           buttonClassName={reportActionBtnHighlight}
           helpContent={
@@ -87,8 +93,10 @@ export function DocumentEditsApplyActions() {
             applyingFinal ||
             exportingHighlight ||
             pollApply ||
-            pollExportHighlight
+            pollExportHighlight ||
+            textlessScan
           }
+          disabledReason={textlessScan ? TEXTLESS_SCAN_CONVERT_REASON : undefined}
           onClick={() => void handleExportHighlightDocx()}
           buttonClassName={reportActionBtnPrimary}
           helpContent={

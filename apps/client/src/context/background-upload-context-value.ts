@@ -6,6 +6,10 @@ export type VersionUploadSuccess = {
   versionId: string;
 };
 
+export type UploadOptions = {
+  forceOcr?: boolean;
+};
+
 export type BackgroundUploadContextValue = {
   active: boolean;
   progress: number;
@@ -13,14 +17,24 @@ export type BackgroundUploadContextValue = {
   showDone: boolean;
   error: string | null;
   clearError: () => void;
-  uploadFromDashboard: (pdfFile: File, docxFile?: File, projectId?: string) => void;
+  uploadFromDashboard: (
+    pdfFile: File,
+    docxFile?: File,
+    projectId?: string,
+    options?: UploadOptions,
+  ) => void;
   uploadFromDocxOnly: (docxFile: File, projectId?: string) => void;
-  uploadNewDocument: (pdfFile: File, onCreated?: (documentId: string) => void) => void;
+  uploadNewDocument: (
+    pdfFile: File,
+    onCreated?: (documentId: string) => void,
+    options?: UploadOptions,
+  ) => void;
   uploadDocumentVersion: (
     documentId: string,
     pdfFile: File,
     docxFile?: File,
     onSuccess?: (result: VersionUploadSuccess) => void,
+    options?: UploadOptions,
   ) => void;
   uploadDocumentVersionFromDocx: (
     documentId: string,

@@ -19,6 +19,8 @@ type PdfViewerToolbarProps = {
   onLayoutModeChange?: (enabled: boolean) => void;
   onPresentationStart?: () => void;
   presentationDisabled?: boolean;
+  searchDisabled?: boolean;
+  searchDisabledReason?: string;
 };
 export function PdfViewerToolbar({
   displayMode,
@@ -39,6 +41,8 @@ export function PdfViewerToolbar({
   onLayoutModeChange,
   onPresentationStart,
   presentationDisabled = false,
+  searchDisabled = false,
+  searchDisabledReason,
 }: PdfViewerToolbarProps) {
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -99,8 +103,12 @@ export function PdfViewerToolbar({
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Поиск по тексту…"
-          className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-folio-400"
+          placeholder={searchDisabled ? 'Поиск по тексту недоступен' : 'Поиск по тексту…'}
+          disabled={searchDisabled}
+          title={searchDisabled ? searchDisabledReason : undefined}
+          className={`w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-folio-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 ${
+            searchDisabled ? 'disabled:border-slate-100' : ''
+          }`}
         />
         {searchQuery && (
           <>

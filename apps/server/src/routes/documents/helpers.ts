@@ -21,13 +21,14 @@ export async function finalizeDocumentUpload(params: {
     sourceDocxKey?: string | null;
   };
   sha256?: string;
+  forceOcr?: boolean;
   requestId?: string;
 }): Promise<{
   versionId: string;
   status: string;
   jobId: string;
 }> {
-  const { prisma, env, user, documentId, versionId, version, sha256, requestId } = params;
+  const { prisma, env, user, documentId, versionId, version, sha256, forceOcr, requestId } = params;
   if (!version.s3Key || version.s3Key === 'pending') {
     throw new Error('Версия не привязана к файлу в хранилище');
   }
@@ -39,7 +40,7 @@ export async function finalizeDocumentUpload(params: {
       type: 'preview',
       status: 'queued',
       tenantId: user.tenantId,
-      payload: { documentId, versionId, s3Key: version.s3Key },
+      payload: { documentId, versionId, s3Key: version.s3Key, forceOcr: forceOcr === true },
     },
   });
   await prisma.documentVersion.update({
@@ -55,6 +56,7 @@ export async function finalizeDocumentUpload(params: {
     versionId,
     tenantId: user.tenantId,
     s3Key: version.s3Key,
+    forceOcr: forceOcr === true,
     requestId,
   });
   if (!isUserUploadedSourceDocxKey(version.sourceDocxKey)) {

@@ -5,11 +5,13 @@ import {
   useDeleteAnnotationMutation,
   useUpdateAnnotationMutation,
   useGetDocumentQuery,
+  useGetVersionOcrQuery,
   useGetVersionPreviewsQuery,
   useListAnnotationsQuery,
   useListGuestCommentsQuery,
   useListPageReviewMarksQuery,
   useListShareLinksQuery,
+  useRunVersionOcrMutation,
   fetchMediaAssetDataUrl,
   useUploadMediaAssetMutation,
   clearSearch,
@@ -23,6 +25,9 @@ import {
   zoomIn,
   zoomOut,
   roleHasCapability,
+  TEXTLESS_SCAN_REASON,
+  isPdfTextLayerUnavailable,
+  isVisionOcrInProgressStatus,
 } from '@folio-mind/store';
 import { DocumentMobileSheet } from '../../components/documents/DocumentMobileSheet.js';
 import { DocumentThumbnailStrip } from '../../components/documents/DocumentThumbnailStrip.js';
@@ -174,6 +179,44 @@ export function DocumentPage() {
   );
   const activeVersion = versions.find((v) => v.id === selectedVersionId) ?? latest;
   const versionReady = Boolean(activeVersion && activeVersion.status !== 'pending_upload');
+  const noTextLayer = isPdfTextLayerUnavailable({
+    textSource: activeVersion?.textSource,
+    visionOcrStatus: activeVersion?.visionOcrStatus,
+  });
+  const [runOcr, runOcrState] = useRunVersionOcrMutation();
+  const { data: ocrState } = useGetVersionOcrQuery(
+    { documentId: id!, versionId: activeVersion?.id ?? '' },
+    {
+      skip: !id || !activeVersion?.id || activeVersion.status === 'pending_upload',
+      pollingInterval: isVisionOcrInProgressStatus(activeVersion?.visionOcrStatus) ? 3000 : 0,
+    },
+  );
+  const ocrInProgress =
+    isVisionOcrInProgressStatus(activeVersion?.visionOcrStatus) ||
+    isVisionOcrInProgressStatus(ocrState?.status);
+  const canRunOcr = canEditDocument && versionReady && activeVersion?.status !== 'failed';
+  const runOcrUnavailableReason = !canEditDocument
+    ? 'Распознавание вручную недоступно: нужны права на редактирование.'
+    : activeVersion?.status === 'failed'
+      ? 'Версия не обработана: сначала дождитесь успешной загрузки файла.'
+      : null;
+  const ocrStatusFromApi = ocrState?.status ?? null;
+  const versionOcrStatus = activeVersion?.visionOcrStatus ?? null;
+  useEffect(() => {
+    if (!ocrStatusFromApi) return;
+    if (ocrStatusFromApi !== versionOcrStatus) void refetchDocument();
+  }, [ocrStatusFromApi, versionOcrStatus, refetchDocument]);
+  const handleRunOcr = useCallback(() => {
+    if (!id || !activeVersion?.id || ocrInProgress || runOcrState.isLoading) return;
+    void runOcr({ documentId: id, versionId: activeVersion.id })
+      .unwrap()
+      .then(() => {
+        void refetchDocument();
+      })
+      .catch(() => {
+        /* banner shows the failure state */
+      });
+  }, [id, activeVersion?.id, ocrInProgress, runOcrState.isLoading, runOcr, refetchDocument]);
   const layoutPageCount = pdfNumPages > 0 ? pdfNumPages : (activeVersion?.pageCount ?? 0);
   useEffect(() => {
     setPresentationOpen(false);
@@ -932,6 +975,16 @@ export function DocumentPage() {
                     ? undefined
                     : () => dismissVisionOcrBanner(activeVersion!.id)
                 }
+                onRunOcr={canRunOcr ? handleRunOcr : undefined}
+                canRunOcr={canRunOcr}
+                runOcrUnavailableReason={runOcrUnavailableReason}
+                ocrRunning={ocrInProgress || runOcrState.isLoading}
+                ocrProgress={
+                  ocrState
+                    ? { pagesDone: ocrState.pagesDone, pagesTotal: ocrState.pagesTotal }
+                    : null
+                }
+                ocrError={ocrState?.error ?? null}
               />
             )}
             {showOfflineBanner && offlineCache && (
@@ -983,6 +1036,8 @@ export function DocumentPage() {
                       onPrevMatch={() => dispatch(prevSearchMatch())}
                       onNextMatch={() => dispatch(nextSearchMatch())}
                       onClearSearch={() => dispatch(clearSearch())}
+                      searchDisabled={noTextLayer}
+                      searchDisabledReason={TEXTLESS_SCAN_REASON}
                       layoutMode={canEditDocument && layout.enabled}
                       onLayoutModeChange={
                         canEditDocument

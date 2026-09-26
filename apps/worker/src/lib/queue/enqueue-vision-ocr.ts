@@ -29,9 +29,11 @@ export async function enqueueVisionOcrJob(params: {
   s3Key: string;
   pageCount: number;
   provider?: AIProviderName;
+  force?: boolean;
   requestId?: string;
 }): Promise<string> {
-  const { env, documentId, versionId, tenantId, s3Key, pageCount, provider, requestId } = params;
+  const { env, documentId, versionId, tenantId, s3Key, pageCount, provider, force, requestId } =
+    params;
   const prisma = getPrisma();
   const job = await prisma.job.create({
     data: {
@@ -44,6 +46,7 @@ export async function enqueueVisionOcrJob(params: {
         s3Key,
         pageCount,
         provider: provider ?? env.AI_PROVIDER,
+        force: force === true,
       },
     },
   });
@@ -57,6 +60,7 @@ export async function enqueueVisionOcrJob(params: {
       s3Key,
       pageCount,
       provider: provider ?? env.AI_PROVIDER,
+      force: force === true,
       requestId,
     },
     { jobId: job.id },
