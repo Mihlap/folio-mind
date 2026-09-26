@@ -1,70 +1,61 @@
 #!/bin/sh
-# Прод-деплой folio-mind. Единственная правильная точка входа на сервере:
-# сама тянет код, сама подставляет env-файлы и локальный override, сама
-# проверяет результат. Ручной `docker compose up` без --env.prod приводит
-# к пересозданию Postgres/Redis с пустым паролем, поэтому не делайте так.
-#
-#   tools/deploy-prod.sh            # обычный деплой
-#   tools/deploy-prod.sh --no-pull  # без git pull (когда код уже доставлен)
 set -eu
 
 cd "$(dirname "$0")/.."
-REPO_DIR=$(pwd)
-COMPOSE="docker compose -f docker-compose.prod.yml"
-ENV_FILE_ARGS="--env-file .env.prod"
 
-[ -f .env.prod ] || { echo "НЕТ .env.prod в $REPO_DIR - деплой остановлен"; exit 1; }
-[ -f apps/server/.env.prod ] || {
-  echo "НЕТ apps/server/.env.prod - деплой остановлен"; exit 1;
+fail() {
+  echo "СТОП: $1" >&2
+  exit 1
 }
 
-# Пустой VITE_API_URL тихо соберёт клиент на http://localhost:3001,
-# поэтому проверяем до сборки, а не после.
-if ! grep -qE '^[[:space:]]*VITE_API_URL=https?://[^[:space:]]+' .env.prod; then
-  echo "В .env.prod нет корректного VITE_API_URL (нужен https://... ) - деплой остановлен"
-  exit 1
-fi
+[ -f .env.prod ] || fail "нет .env.prod в $(pwd)"
+[ -f apps/server/.env.prod ] || fail "нет apps/server/.env.prod"
+
+grep -qE '^[[:space:]]*VITE_API_URL=https?://[^[:space:]]+' .env.prod ||
+  fail "в .env.prod нет корректного VITE_API_URL (нужен http://... или https://...)"
 
 if [ -f docker-compose.prod.local.yml ]; then
-  COMPOSE="$COMPOSE -f docker-compose.prod.local.yml"
-  echo "Использую локальный override: docker-compose.prod.local.yml"
+  LOCAL_OVERRIDE=yes
 else
-  echo "Локального override нет - деплой в standalone-режиме (порты 80/443 должны быть свободны)"
+  LOCAL_OVERRIDE=no
+  echo "локального override нет: standalone-режим, порты 80/443 должны быть свободны"
 fi
 
+compose() {
+  if [ "$LOCAL_OVERRIDE" = yes ]; then
+    docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml \
+      --env-file .env.prod "$@"
+  else
+    docker compose -f docker-compose.prod.yml --env-file .env.prod "$@"
+  fi
+}
+
 if [ "${1:-}" != "--no-pull" ]; then
-  echo ">> git pull"
+  echo ">> git pull --ff-only"
   git pull --ff-only
 fi
 
 echo ">> docker compose up -d --build"
-$COMPOSE $ENV_FILE_ARGS up -d --build
+compose up -d --build
 
 echo ">> prisma migrate deploy"
-$COMPOSE $ENV_FILE_ARGS exec -T server npx prisma migrate deploy
+compose exec -T server npx prisma migrate deploy
 
 echo ">> итог"
-$COMPOSE $ENV_FILE_ARGS ps --format '{{.Service}} {{.Status}}'
+compose ps --format '{{.Service}} {{.Status}}'
 
-# Контейнеры поднимаются не мгновенно: даём API до 60 секунд, иначе получим
-# ложную тревогу на каждом деплое.
-SERVER_ID=$($COMPOSE $ENV_FILE_ARGS ps -q server)
 echo ">> ждём готовности API (до 60с)"
-READY=0
-ATTEMPT=0
-while [ "$ATTEMPT" -lt 30 ]; do
-  if [ -n "$SERVER_ID" ] &&
-    docker exec "$SERVER_ID" wget -qO- http://127.0.0.1:3001/health 2>/dev/null | grep -q '"ok"'; then
-    READY=1
-    break
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+  if compose exec -T server wget -qO- http://127.0.0.1:3001/health 2>/dev/null |
+    grep -q '"ok"'; then
+    echo "API health: ok"
+    exit 0
   fi
-  ATTEMPT=$((ATTEMPT + 1))
+  attempt=$((attempt + 1))
   sleep 2
 done
 
-if [ "$READY" = "1" ]; then
-  echo "API health: ok"
-else
-  echo "ВНИМАНИЕ: API не ответил за 60с. Смотрите логи:"
-  echo "  $COMPOSE $ENV_FILE_ARGS logs --tail=50 server"
-fi
+echo "ВНИМАНИЕ: API не ответил за 60с, смотрите логи:" >&2
+compose logs --tail=50 server >&2
+exit 1

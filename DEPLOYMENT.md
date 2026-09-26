@@ -1,6 +1,6 @@
 # Как развернуть folio-mind на хостинге
 
-Это инструкция, по которой я сам разворачивал проект на VPS — пишу её от первого лица, чтобы следующему было проще. Всё ниже работает и у меня на сервере: один раз настроил, дальше только `up -d --build`. Конкретные адреса не привязываю — вместо них ставьте свои (`<IP сервера>`, `<домен фронта>`, `<домен API>`).
+Это инструкция, по которой я сам разворачивал проект на VPS — пишу её от первого лица, чтобы следующему было проще. Всё ниже работает и у меня на сервере: один раз настроил, дальше только `tools/deploy-prod.sh`. Конкретные адреса не привязываю — вместо них ставьте свои (`<IP сервера>`, `<домен фронта>`, `<домен API>`).
 
 ## Что понадобится
 
@@ -19,7 +19,7 @@
 - Worker (`apps/worker`) — фоновые очереди BullMQ.
 - Инфраструктура поднимается сама из compose: **Postgres 16 + pgvector, Redis, Gotenberg, pdf2docx** (собирается локально из `docker/pdf2docx`). Отдельно ничего ставить не надо.
 - **Файлы пользователей в проде лежат не в compose, а во внешнем S3** (MinIO — только для локальной разработки, см. `docker-compose.yml`). Переменные `S3_*` обязательны, иначе загрузка и превью не работают.
-- Сервис `nginx` в `docker-compose.prod.yml` — заготовка для standalone-развёртывания, **в проде я его не использую**: TLS терминирует Caddy (см. шаг 4). Перед первым `up` его нужно либо удалить, либо подложить конфиг и убрать конфликт порта 80 с сервисом `client`.
+- Статику отдаёт nginx **внутри контейнера клиента** (`apps/client/Dockerfile` → `FROM nginx:alpine`). Отдельного сервиса `nginx` в compose нет: он занимал те же 80/443, что и внешний обратный прокси, и монтировал конфиги, которых в репозитории не было.
 
 ## Шаг 1. Код и переменные окружения
 
@@ -93,7 +93,7 @@ tools/deploy-prod.sh
 
 Скрипт проверяет наличие обоих env-файлов и непустой `VITE_API_URL`, подставляет `--env-file .env.prod`, добавляет override, если он есть, выполняет `git pull --ff-only`, `up -d --build`, миграции и печатает статус. Код уже доставлен на сервер другим способом — с флагом `--no-pull`.
 
-Если всё-таки хотите команды руками, флаг `--env-file .env.prod` обязателен — без него compose берёт пустые `POSTGRES_*` и `REDIS_PASSWORD` (разбор последствий — в разделе «Грабли» в конце):
+Если всё-таки хотите команды руками, флаг `--env-file .env.prod` обязателен — без него compose берёт пустые `POSTGRES_*` и `REDIS_PASSWORD` (разбор последствий — в разделе «Грабли» в конце). Второй `-f` добавляйте только если у вас есть `docker-compose.prod.local.yml`:
 
 ```bash
 cd ~/app
@@ -131,8 +131,10 @@ docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env
 
 # 5. Данные на месте (ожидаемое число пользователей)
 docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "User";'
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"User\";"'
 ```
+
+Про `sh -c`: переменные `$POSTGRES_USER` и `$POSTGRES_DB` раскрываются **внутри** контейнера, где они есть в окружении. Без обёртки их раскроет оболочка хоста, где этих переменных нет, и `psql` получит пустые аргументы.
 
 Отдельно после деплоя **клиента** стоит убедиться, что новая сборка действительно попала в nginx: адрес API вшивается в бандл на этапе build, и если в `.env.prod` останется чужой домен, фронт будет ходить не туда:
 
@@ -177,10 +179,15 @@ networks:
 
 После первого деплоя проверьте, что оба сервиса оказались в обеих сетях:
 ```bash
-docker inspect pdf-client-1 --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
-docker inspect pdf-server-1 --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+# имена сетей для client и server — оба должны быть в pdf_default и в сети Caddy
+for svc in client server; do
+  id=$(docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod ps -q $svc)
+  echo -n "$svc: "; docker inspect "$id" --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+done
 docker exec <контейнер-caddy> caddy reload --config /etc/caddy/Caddyfile
 ```
+
+Имена контейнеров зависят от имени каталога (`pdf-client-1` при каталоге `pdf`), поэтому надёжнее спрашивать compose, а не угадывать имя.
 
 ⚠️ Важно: если сеть не прописана в override, контейнеры «отваливаются» от прокси при каждом пересоздании — сайт перестаёт отвечать без всякой ошибки в логах приложения. Пустой вывод `docker inspect` — верный признак.
 
@@ -212,7 +219,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env
 
 `up -d --build` пересобирает только сервисы с `build:` (server, worker, client, pdf2docx) и не трогает postgres/redis — они и не должны пересоздаваться на каждом деплое. Если в выводе вы видите `Recreated` для баз — значит, скорее всего, вы забыли `--env-file` (см. ниже).
 
-Ветку `main` я держу как прод-релизную: сначала `git push origin dev/<ветка>`, потом fast-forward в `main`, и только после этого деплой на сервере. Пока на сервере лежат правки в `docker-compose.prod.yml`, любой `git pull` будет отказываться выполняться — именно поэтому настройки хоста вынесены в untracked-override.
+Ветку `main` я держу как прод-релизную: сначала `git push origin dev/<ветка>`, потом fast-forward в `main`, и только после этого деплой на сервере. Именно поэтому настройки хоста вынесены в untracked-override: пока я правил `docker-compose.prod.yml` прямо на сервере, любой `git pull` отказывался выполняться («local changes would be overwritten») и обновление зависало.
 
 ## На что я потратил время (чтобы вы не наступали на те же грабли)
 
@@ -229,7 +236,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env
 Данные лежат в volume `pdf_postgres_data` и переживают пересоздание контейнера. Убедиться, что всё на месте:
 ```bash
 docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'select count(*) from "User";'
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select count(*) from \"User\";"'
 ```
 
 **Рантайм TS-пакетов.** Общие `packages/*` отдают исходники (`"exports": "./src/index.ts"`). Поэтому:
@@ -255,7 +262,7 @@ sed -i 's/^[[:space:]]*//' .env.prod apps/server/.env.prod
 **Бэкап.** Всё состояние — в трёх местах: volume `pdf_postgres_data` (документы, версии, пользователи, журнал аудита), бакет S3 (сами файлы) и `.env.prod` / `apps/server/.env.prod`. Дамп базы снимается так:
 ```bash
 docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env-file .env.prod exec -T postgres \
-  pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > ~/backups/folio-$(date +%F).sql.gz
+  sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > ~/backups/folio-$(date +%F).sql.gz
 ```
 
 ---
