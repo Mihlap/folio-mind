@@ -14,6 +14,7 @@ import {
   type PdfSelectionPrompt,
 } from './pdf-viewer/usePdfTextSelection.js';
 import { clamp, scrollPageWithinContainer } from './pdf-viewer/utils.js';
+import { getLayoutRulerOffset } from './layout-editor/layout-utils.js';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -106,6 +107,11 @@ export function PdfViewer({
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const setScrollContainerRef = useCallback((el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    measureRef.current = el;
+  }, []);
   const pdfRef = useRef<pdfjs.PDFDocumentProxy | null>(null);
   const suppressObserverUntilRef = useRef(0);
   const lastPageUpdateSourceRef = useRef<'external' | 'observer'>('external');
@@ -139,13 +145,15 @@ export function PdfViewer({
     },
     [displayPageCount, onPageChange],
   );
+  const layoutGutterPx = layoutEnabled && showRulers ? getLayoutRulerOffset() : 0;
   const computeScale = useCallback(
     (pageWidth: number) => {
-      const fitScale = containerWidth > 0 ? ((containerWidth - 6) / pageWidth) * 0.995 : 1;
+      const availableWidth = containerWidth - 6 - layoutGutterPx;
+      const fitScale = availableWidth > 0 ? (availableWidth / pageWidth) * 0.995 : 1;
       const base = clamp(fitScale, 0.2, 2.5);
       return zoomMode === 'custom' ? clamp(base * customScale, 0.2, 2.5) : base;
     },
-    [containerWidth, zoomMode, customScale],
+    [containerWidth, zoomMode, customScale, layoutGutterPx],
   );
   const referencePageHeightPx = useMemo(() => {
     if (referencePageSizePt.width <= 0 || referencePageSizePt.height <= 0) return 0;
@@ -169,16 +177,19 @@ export function PdfViewer({
     selectionQuoteRef,
   });
   useEffect(() => {
-    const el = containerRef.current;
+    const el = measureRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const w = el.clientWidth;
-      setContainerWidth((prev) => (Math.abs(prev - w) < 8 ? prev : w));
-    });
+    const measure = () => {
+      const styles = getComputedStyle(el);
+      const paddingX = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+      const contentWidth = el.clientWidth - (Number.isFinite(paddingX) ? paddingX : 0);
+      setContainerWidth((prev) => (Math.abs(prev - contentWidth) < 1 ? prev : contentWidth));
+    };
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setContainerWidth(el.clientWidth);
+    measure();
     return () => ro.disconnect();
-  }, []);
+  }, [displayMode]);
   useEffect(() => {
     if (!pdfData && !url) return;
     let cancelled = false;
@@ -236,7 +247,16 @@ export function PdfViewer({
         pdfRef.current = null;
       }
     };
-  }, [url, pdfData, httpHeaders, onPageChange, onSearchMatches, onDocumentLoad, onDocumentLoadError, onDocumentPagesLoad]);
+  }, [
+    url,
+    pdfData,
+    httpHeaders,
+    onPageChange,
+    onSearchMatches,
+    onDocumentLoad,
+    onDocumentLoadError,
+    onDocumentPagesLoad,
+  ]);
   useEffect(() => {
     const pdf = pdfRef.current;
     if (!pdf || !pdfReady) return;
@@ -409,19 +429,22 @@ export function PdfViewer({
         <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
       ) : displayMode === 'single' ? (
         <div
-          className={`scrollbar-thin flex min-h-0 flex-1 justify-center overflow-auto rounded-lg ${surfaceClass} ${surfaceTone === 'dark' ? 'p-1' : 'p-2'}`}
+          ref={setScrollContainerRef}
+          className={`scrollbar-thin flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-lg ${surfaceClass} ${surfaceTone === 'dark' ? 'p-1' : 'p-2'}`}
         >
-          <PdfViewerPage
-            key={pageNum}
-            {...pageProps}
-            pageNumber={pageNum}
-            highlight={activeMatch?.page === pageNum}
-            selectionHighlightRects={selectionForPage(pageNum)}
-          />
+          <div className="mx-auto flex w-fit shrink-0">
+            <PdfViewerPage
+              key={pageNum}
+              {...pageProps}
+              pageNumber={pageNum}
+              highlight={activeMatch?.page === pageNum}
+              selectionHighlightRects={selectionForPage(pageNum)}
+            />
+          </div>
         </div>
       ) : (
         <div
-          ref={scrollRef}
+          ref={setScrollContainerRef}
           className={`scrollbar-thin min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-lg ${surfaceClass} ${surfaceTone === 'dark' ? 'p-1' : 'p-2'}`}
         >
           {Array.from({ length: displayPageCount }, (_, i) => i + 1).map((pageNumber) => (
@@ -432,7 +455,7 @@ export function PdfViewer({
                 else pageRefs.current.delete(pageNumber);
               }}
               data-page={pageNumber}
-              className="mb-4 flex justify-center last:mb-0"
+              className="mx-auto mb-4 flex w-fit last:mb-0"
             >
               {shouldRenderPage(pageNumber) ? (
                 <PdfViewerPage

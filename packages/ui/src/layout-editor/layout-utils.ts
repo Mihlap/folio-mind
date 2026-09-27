@@ -2,8 +2,10 @@ import type { LayoutRect } from '@folio-mind/pdf-contracts';
 
 export type LayoutResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
 
+export const LAYOUT_RULER_SIZE = 28;
+
 export function getLayoutRulerOffset(): number {
-  return 20;
+  return LAYOUT_RULER_SIZE;
 }
 
 export function resizeLayoutRect(

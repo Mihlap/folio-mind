@@ -15,6 +15,7 @@ export function PdfLayoutMarginsOverlay({ pageWidthPx, pageHeightPx, safe, bleed
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[4]" aria-hidden>
+      <div className="absolute inset-0 bg-emerald-400/5" />
       <div
         className="absolute border border-dashed border-rose-300/80"
         style={{
@@ -25,7 +26,7 @@ export function PdfLayoutMarginsOverlay({ pageWidthPx, pageHeightPx, safe, bleed
         }}
       />
       <div
-        className="absolute border border-dashed border-emerald-500/90 bg-emerald-400/5"
+        className="absolute border border-dashed border-emerald-500/90"
         style={{
           left: safePx.left,
           top: safePx.top,

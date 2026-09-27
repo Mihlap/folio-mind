@@ -1,3 +1,5 @@
+import { getLayoutRulerOffset } from './layout-utils.js';
+
 type Props = {
   pageWidthPx: number;
   pageHeightPx: number;
@@ -13,7 +15,7 @@ export function PdfLayoutRulers({
   pageWidthMm,
   pageHeightMm,
 }: Props) {
-  const rulerSize = 20;
+  const rulerSize = getLayoutRulerOffset();
   const xTicks = buildTicks(pageWidthMm, stepMm);
   const yTicks = buildTicks(pageHeightMm, stepMm);
 
@@ -32,7 +34,7 @@ export function PdfLayoutRulers({
         {xTicks.map((mm) => (
           <span
             key={`x-${mm}`}
-            className="absolute bottom-0 border-l border-slate-300 pl-0.5"
+            className="absolute bottom-0 whitespace-nowrap border-l border-slate-300 pl-0.5"
             style={{ left: `${(mm / pageWidthMm) * 100}%` }}
           >
             {mm % (stepMm * 2) === 0 ? mm : ''}
@@ -47,7 +49,7 @@ export function PdfLayoutRulers({
         {yTicks.map((mm) => (
           <span
             key={`y-${mm}`}
-            className="absolute right-0 border-t border-slate-300 pr-0.5 text-right"
+            className="absolute right-0 whitespace-nowrap border-t border-slate-300 pr-0.5 text-right"
             style={{ top: `${(mm / pageHeightMm) * 100}%` }}
           >
             {mm % (stepMm * 2) === 0 ? mm : ''}
