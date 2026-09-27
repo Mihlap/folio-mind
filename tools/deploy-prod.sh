@@ -32,7 +32,11 @@ compose() {
 
 if [ "${1:-}" != "--no-pull" ]; then
   echo ">> git pull --ff-only"
+  before=$(cksum "$0")
   git pull --ff-only
+  if [ "$before" != "$(cksum "$0")" ]; then
+    exec sh "$0" --no-pull
+  fi
 fi
 
 echo ">> docker compose up -d --build"
