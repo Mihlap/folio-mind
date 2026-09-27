@@ -40,7 +40,20 @@ if [ "${1:-}" != "--no-pull" ]; then
 fi
 
 echo ">> docker compose up -d --build"
-compose up -d --build
+attempt=1
+max_attempts=3
+while :; do
+  if compose up -d --build; then
+    break
+  fi
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo "СБОЙ: сборка не удалась после $max_attempts попыток. Логи сборки выше." >&2
+    exit 1
+  fi
+  echo "сборка не удалась, повтор $attempt из $max_attempts через 20с" >&2
+  attempt=$((attempt + 1))
+  sleep 20
+done
 
 echo ">> prisma migrate deploy"
 compose exec -T server npx prisma migrate deploy

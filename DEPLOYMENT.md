@@ -91,7 +91,7 @@ cd ~/app
 tools/deploy-prod.sh
 ```
 
-Скрипт проверяет наличие обоих env-файлов и непустой `VITE_API_URL`, подставляет `--env-file .env.prod`, добавляет override, если он есть, выполняет `git pull --ff-only`, `up -d --build`, миграции и печатает статус. Код уже доставлен на сервер другим способом — с флагом `--no-pull`.
+Скрипт проверяет наличие обоих env-файлов и непустой `VITE_API_URL`, подставляет `--env-file .env.prod`, добавляет override, если он есть, выполняет `git pull --ff-only`, `up -d --build` (с тремя попытками — см. «Скачивание движков Prisma» в граблях), миграции и печатает статус. Если `git pull` обновил сам скрипт, он перезапускается, чтобы не доработать по устаревшему коду. После старта скрипт ждёт ответа API до 60с и завершается с ненулевым кодом, если `/health` так и не ответил, — так деплой нельзя принять за успешный вслепую. Код уже доставлен на сервер другим способом — запустите с флагом `--no-pull`.
 
 Если всё-таки хотите команды руками, флаг `--env-file .env.prod` обязателен — без него compose берёт пустые `POSTGRES_*` и `REDIS_PASSWORD` (разбор последствий — в разделе «Грабли» в конце). Второй `-f` добавляйте только если у вас есть `docker-compose.prod.local.yml`:
 
@@ -245,6 +245,26 @@ docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml --env
 - у builder обязательно должен быть **повторный** `pnpm install --frozen-lockfile` после `COPY . .` — только так pnpm создаёт `node_modules` внутри каждого `packages/*` (иначе кросс-импорты `@folio-mind/*` и их зависимости не находятся).
 
 В `apps/server/Dockerfile` и `apps/worker/Dockerfile` это уже зашито. В `apps/client/Dockerfile` тот же порядок обязателен: `COPY . .` идёт **до** копирования `node_modules` и повторного `pnpm install`, иначе сборка клиента падает на резолве пакетов. Просто не «упрощайте» эти файлы.
+
+**Скачивание движков Prisma.** Во время `pnpm install` пакет `@prisma/engines` тянет бинарники с CDN Prisma, и сеть до него периодически флапает. Симптом — падение слоя `deps`, то есть `apps/server/Dockerfile:10` (`RUN pnpm install --frozen-lockfile`):
+
+```
+@prisma/engines postinstall: attemptNumber: 1, retriesLeft: 2
+@prisma/engines postinstall: Failed
+ELIFECYCLE  Command failed with exit code 1.
+```
+
+Это **не** ошибка проекта: `pnpm-lock.yaml` в порядке, код может вообще не меняться. Проверять в первую очередь нечего — смотрите на текст ошибки, а не на `git diff`. Помогают два пути:
+
+- **повтор** — `tools/deploy-prod.sh` сам делает до трёх попыток сборки с паузой 20с, этого обычно хватает;
+- **зеркало движков** — если сеть до CDN плохая постоянно. Переменная `PRISMA_ENGINES_MIRROR` читается **внутри образа**, поэтому одного значения в `.env.prod` мало: нужно пробросить его в сборку. В `deps`-слое `apps/server/Dockerfile` и `apps/worker/Dockerfile` (слой, где идёт `pnpm install --frozen-lockfile`) добавьте перед ним:
+  ```dockerfile
+  ARG PRISMA_ENGINES_MIRROR
+  ENV PRISMA_ENGINES_MIRROR=$PRISMA_ENGINES_MIRROR
+  ```
+  а в `docker-compose.prod.yml` — в `build.args` этих двух сервисов. Значение должно вести на зеркало бинарников Prisma; пустая строка означает «как обычно», так что менять compose ради этого не обязательно.
+
+Упавшая сборка безвредна: `up` падает до пересоздания контейнеров, поэтому работающий прод продолжает отвечать, пока чинится сеть. Проверить можно так же, как после любого деплоя (раздел «Проверка после каждого деплоя»).
 
 **Ужимание образов.** Пробовал сделать server/worker легче (они ~1.4–1.5 GB из-за полного node_modules + Ghostscript/QPDF): `node --experimental-strip-types` не дружит с `.js`-суффиксами в импортах TS-пакетов, а `pnpm prune --production` в монорепе не чистит dev-дерево. В итоге оставил рабочий вариант. Если хотите освободить диск — `docker builder prune -f`.
 
