@@ -1,7 +1,7 @@
 export const UPLOAD_NETWORK_ERROR_MESSAGE =
   'Слабое интернет-соединение — файл не загрузился. Повторите позже.';
 const NETWORK_HINT =
-  /слабое интернет|повторите позже|ECONNRESET|ETIMEDOUT|timeout|socket hang up|Failed to fetch|network error|S3 upload|хранилищ|недоступн|Internal Server Error/i;
+  /слабое интернет|повторите позже|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|timeout|timed out|socket hang up|Failed to fetch|network ?error|NetworkError|не дошла до сервера/i;
 export function isUploadNetworkError(err: unknown): boolean {
   if (!err) return false;
   if (typeof err === 'object' && err !== null) {

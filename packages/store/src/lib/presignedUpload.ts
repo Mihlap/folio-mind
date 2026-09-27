@@ -1,4 +1,13 @@
 import { UPLOAD_NETWORK_ERROR_MESSAGE } from './formatUploadError.js';
+function describeS3Failure(status: number, responseText: string): string {
+  const code = /<Code>([^<]+)<\/Code>/i.exec(responseText)?.[1];
+  const message = /<Message>([^<]+)<\/Message>/i.exec(responseText)?.[1];
+  const details = [code, message].filter(Boolean).join(': ');
+  return details
+    ? `Хранилище вернуло ошибку ${status} (${details})`
+    : `Хранилище вернуло ошибку ${status}`;
+}
+
 export async function putFileToPresignedUrl(
   uploadUrl: string,
   file: File,
@@ -25,10 +34,14 @@ export async function putFileToPresignedUrl(
         resolve();
         return;
       }
-      reject(new Error(UPLOAD_NETWORK_ERROR_MESSAGE));
+      reject(new Error(describeS3Failure(xhr.status, xhr.responseText || '')));
     };
     xhr.onerror = () => {
-      reject(new Error(UPLOAD_NETWORK_ERROR_MESSAGE));
+      reject(
+        new Error(
+          `Загрузка в хранилище не дошла до сервера (${new URL(uploadUrl).host}). Проверьте CORS для этого адреса.`,
+        ),
+      );
     };
     xhr.ontimeout = () => {
       reject(new Error(UPLOAD_NETWORK_ERROR_MESSAGE));
@@ -39,7 +52,7 @@ export async function putFileToPresignedUrl(
 export function isLikelyCorsOrNetworkError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   if (err.message === UPLOAD_NETWORK_ERROR_MESSAGE) return true;
-  return /CORS|network error|S3 upload|timeout|ECONNRESET|ETIMEDOUT|Failed to fetch|хранилищ|Internal Server/i.test(
+  return /CORS|network ?error|NetworkError|timeout|timed out|ECONNRESET|ECONNREFUSED|ETIMEDOUT|Failed to fetch|не дошла до сервера/i.test(
     err.message,
   );
 }
