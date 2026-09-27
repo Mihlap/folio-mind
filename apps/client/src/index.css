@@ -4,6 +4,7 @@
 @theme {
   --font-sans: 'DM Sans', system-ui, sans-serif;
   --font-display: 'Instrument Serif', Georgia, serif;
+  --font-classic: 'PT Serif', Georgia, 'Times New Roman', serif;
   --color-folio-50: #f5f7ff;
   --color-folio-100: #e8ecfe;
   --color-folio-200: #c7d2fe;
@@ -197,4 +198,99 @@ body {
 
 .progress-indeterminate {
   animation: folio-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes landing-focus {
+  0%,
+  18% {
+    opacity: 1;
+  }
+  22%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes landing-scan {
+  0% {
+    opacity: 0;
+    transform: translateY(-30%);
+  }
+  6% {
+    opacity: 1;
+  }
+  18% {
+    opacity: 0;
+    transform: translateY(430%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(430%);
+  }
+}
+
+@keyframes landing-version {
+  0%,
+  18% {
+    background-color: rgb(67 56 202);
+    border-color: transparent;
+    color: #fff;
+  }
+  22%,
+  100% {
+    background-color: #fff;
+    border-color: rgb(226 232 240);
+    color: rgb(100 116 139);
+  }
+}
+
+@keyframes landing-resolve {
+  0%,
+  56% {
+    background-color: rgb(255 251 235);
+    border-color: rgb(252 211 77);
+  }
+  62%,
+  100% {
+    background-color: rgb(236 253 245);
+    border-color: rgb(167 243 208);
+  }
+}
+
+@keyframes landing-dot {
+  0%,
+  56% {
+    background-color: rgb(251 191 36);
+  }
+  62%,
+  100% {
+    background-color: rgb(16 185 129);
+  }
+}
+
+@keyframes landing-activity {
+  0%,
+  30% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  33.3% {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes notice-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

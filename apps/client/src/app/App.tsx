@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAppSelector } from '../hooks/index.js';
 import { AppShell } from '../components/layout/AppShell.js';
+import { CookieNotice } from '../components/layout/CookieNotice.js';
 import { DocumentWorkspaceProvider } from '../context/document-workspace-context.js';
 import { BackgroundUploadProvider } from '../context/background-upload-provider.js';
 import { LandingPage } from '../pages/public/LandingPage.js';
@@ -74,6 +75,9 @@ const GuestSharePage = lazy(() =>
     default: module.GuestSharePage,
   })),
 );
+const PrivacyPage = lazy(() =>
+  import('../pages/public/PrivacyPage.js').then((module) => ({ default: module.PrivacyPage })),
+);
 
 function PageFallback() {
   return <div className="p-6 text-sm text-slate-500">Загрузка…</div>;
@@ -86,55 +90,59 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 export function App() {
   return (
-    <Suspense fallback={<PageFallback />}>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <PendingVerifyRedirect>
-              <LandingPage />
-            </PendingVerifyRedirect>
-          }
-        />
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/register"
-          element={
-            <PendingVerifyRedirect>
-              <RegisterPage />
-            </PendingVerifyRedirect>
-          }
-        />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/check-email" element={<CheckEmailPage />} />
-        <Route path="/magic-link" element={<MagicLinkPage />} />
-        <Route path="/magic-link/verify" element={<MagicLinkVerifyPage />} />
-        <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-        <Route path="/phone-auth" element={<PhoneAuthPage />} />
-        <Route path="/share/:token" element={<GuestSharePage />} />
-        <Route
-          path="/app/*"
-          element={
-            <PrivateRoute>
-              <DocumentWorkspaceProvider>
-                <BackgroundUploadProvider>
-                  <AppShell />
-                </BackgroundUploadProvider>
-              </DocumentWorkspaceProvider>
-            </PrivateRoute>
-          }
-        >
-          <Route index element={<DashboardPage />} />
-          <Route path="projects" element={<ProjectsPage />} />
-          <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-          <Route path="media" element={<MediaLibraryPage />} />
-          <Route path="regulations" element={<RegulationsPage />} />
-          <Route path="documents/:id" element={<DocumentPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+    <>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <PendingVerifyRedirect>
+                <LandingPage />
+              </PendingVerifyRedirect>
+            }
+          />
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/register"
+            element={
+              <PendingVerifyRedirect>
+                <RegisterPage />
+              </PendingVerifyRedirect>
+            }
+          />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/check-email" element={<CheckEmailPage />} />
+          <Route path="/magic-link" element={<MagicLinkPage />} />
+          <Route path="/magic-link/verify" element={<MagicLinkVerifyPage />} />
+          <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+          <Route path="/phone-auth" element={<PhoneAuthPage />} />
+          <Route path="/share/:token" element={<GuestSharePage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route
+            path="/app/*"
+            element={
+              <PrivateRoute>
+                <DocumentWorkspaceProvider>
+                  <BackgroundUploadProvider>
+                    <AppShell />
+                  </BackgroundUploadProvider>
+                </DocumentWorkspaceProvider>
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<DashboardPage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+            <Route path="media" element={<MediaLibraryPage />} />
+            <Route path="regulations" element={<RegulationsPage />} />
+            <Route path="documents/:id" element={<DocumentPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+      <CookieNotice />
+    </>
   );
 }
