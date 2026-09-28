@@ -475,7 +475,7 @@ export function LandingPage() {
                   key={step.title}
                   className="relative rounded-3xl border border-slate-200/80 p-6"
                 >
-                  <span className="font-display text-4xl text-folio-300">
+                  <span className="text-4xl tabular-nums text-folio-300">
                     {String(index + 1).padStart(2, '0')}
                   </span>
                   <h3 className="mt-3 text-lg font-semibold text-slate-900">{step.title}</h3>
