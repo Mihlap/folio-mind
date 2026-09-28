@@ -5,6 +5,7 @@ services:
       dockerfile: apps/server/Dockerfile
       args:
         PRISMA_ENGINES_MIRROR: ${PRISMA_ENGINES_MIRROR:-}
+        PNPM_REGISTRY: ${PNPM_REGISTRY:-https://registry.npmmirror.com}
     restart: unless-stopped
     ports:
       - '3001:3001'
@@ -27,6 +28,7 @@ services:
       dockerfile: apps/client/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:?задайте VITE_API_URL в .env.prod - без него клиент соберётся на http://localhost:3001}
+        PNPM_REGISTRY: ${PNPM_REGISTRY:-https://registry.npmmirror.com}
     restart: unless-stopped
     ports:
       - '${CLIENT_PORT:-80}:80'
@@ -37,6 +39,7 @@ services:
       dockerfile: apps/worker/Dockerfile
       args:
         PRISMA_ENGINES_MIRROR: ${PRISMA_ENGINES_MIRROR:-}
+        PNPM_REGISTRY: ${PNPM_REGISTRY:-https://registry.npmmirror.com}
     restart: unless-stopped
     env_file:
       - apps/server/.env.prod

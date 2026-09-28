@@ -8,8 +8,10 @@ COPY apps/server/package.json ./apps/server/
 COPY apps/server/prisma ./apps/server/prisma
 COPY packages/*/package.json ./packages/
 ARG PRISMA_ENGINES_MIRROR
+ARG PNPM_REGISTRY=https://registry.npmmirror.com
 ENV PRISMA_ENGINES_MIRROR=$PRISMA_ENGINES_MIRROR
-ENV npm_config_fetch_timeout=30000 \
+ENV npm_config_registry=$PNPM_REGISTRY \
+    npm_config_fetch_timeout=30000 \
     npm_config_fetch_retries=5 \
     npm_config_fetch_retry_mintimeout=5000 \
     npm_config_fetch_retry_maxtimeout=20000
@@ -22,8 +24,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=deps /app/packages/. ./packages/
 ARG PRISMA_ENGINES_MIRROR
+ARG PNPM_REGISTRY=https://registry.npmmirror.com
 ENV PRISMA_ENGINES_MIRROR=$PRISMA_ENGINES_MIRROR
-ENV npm_config_fetch_timeout=30000 \
+ENV npm_config_registry=$PNPM_REGISTRY \
+    npm_config_fetch_timeout=30000 \
     npm_config_fetch_retries=5 \
     npm_config_fetch_retry_mintimeout=5000 \
     npm_config_fetch_retry_maxtimeout=20000
