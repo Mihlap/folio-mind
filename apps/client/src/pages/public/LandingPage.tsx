@@ -604,7 +604,9 @@ export function LandingPage() {
 
           <div className="mt-10 flex flex-col gap-3 border-t border-slate-200/80 pt-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p className="min-w-0 leading-relaxed sm:flex-1">
-              {laba.company}. ИНН {laba.inn}, КПП {laba.kpp}, ОГРН {laba.ogrn}.
+              {laba.company}. <span className="whitespace-nowrap">ИНН {laba.inn}</span>,{' '}
+              <span className="whitespace-nowrap">КПП {laba.kpp}</span>,{' '}
+              <span className="whitespace-nowrap">ОГРН {laba.ogrn}</span>.
             </p>
             <a
               href="https://laba-laba.ru/"

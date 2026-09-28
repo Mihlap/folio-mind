@@ -415,7 +415,9 @@ export function PrivacyPage() {
 
         <div className="mt-10 border-t border-slate-200/80 pt-6 text-sm text-slate-500">
           <p>
-            {operator.company}, ИНН {operator.inn}, КПП {operator.kpp}, ОГРН {operator.ogrn}
+            {operator.company}, <span className="whitespace-nowrap">ИНН {operator.inn}</span>,{' '}
+            <span className="whitespace-nowrap">КПП {operator.kpp}</span>,{' '}
+            <span className="whitespace-nowrap">ОГРН {operator.ogrn}</span>
           </p>
           <p className="mt-1">{operator.address}</p>
           <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
