@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
+      args:
+        PRISMA_ENGINES_MIRROR: ${PRISMA_ENGINES_MIRROR:-}
     restart: unless-stopped
     ports:
       - '3001:3001'
@@ -33,6 +35,8 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
+      args:
+        PRISMA_ENGINES_MIRROR: ${PRISMA_ENGINES_MIRROR:-}
     restart: unless-stopped
     env_file:
       - apps/server/.env.prod

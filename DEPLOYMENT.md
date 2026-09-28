@@ -257,14 +257,46 @@ ELIFECYCLE  Command failed with exit code 1.
 Это **не** ошибка проекта: `pnpm-lock.yaml` в порядке, код может вообще не меняться. Проверять в первую очередь нечего — смотрите на текст ошибки, а не на `git diff`. Помогают два пути:
 
 - **повтор** — `tools/deploy-prod.sh` сам делает до трёх попыток сборки с паузой 20с, этого обычно хватает;
-- **зеркало движков** — если сеть до CDN плохая постоянно. Переменная `PRISMA_ENGINES_MIRROR` читается **внутри образа**, поэтому одного значения в `.env.prod` мало: нужно пробросить его в сборку. В `deps`-слое `apps/server/Dockerfile` и `apps/worker/Dockerfile` (слой, где идёт `pnpm install --frozen-lockfile`) добавьте перед ним:
-  ```dockerfile
-  ARG PRISMA_ENGINES_MIRROR
-  ENV PRISMA_ENGINES_MIRROR=$PRISMA_ENGINES_MIRROR
+- **зеркало движков** — если сеть до CDN плохая постоянно. Проброс уже сделан в репозитории: `ARG PRISMA_ENGINES_MIRROR` / `ENV` стоят в обоих `pnpm install` (слои `deps` и `builder`) в `apps/server/Dockerfile` и `apps/worker/Dockerfile`, а в `docker-compose.prod.yml` у сервисов `server` и `worker` есть `build.args.PRISMA_ENGINES_MIRROR`. Значение приходит из `.env.prod`; пустая строка означает «как обычно», поэтому включать зеркало нужно только если сеть до CDN действительно плохая.
+
+  Включать надо **после проверки**, что зеркало отдаёт нужные файлы, иначе сборка упадёт целиком. Проверяется одной строкой, где `<SHA>` — значение `prisma.enginesVersion` из `pnpm-lock.yaml` (например `c2990dca591cba766e3b7ef5d9e8a84796e47ab7` для 6.19.3), а платформа — та, что стоит в образе (`debian-openssl-3.0.x` для `node:20-alpine`):
+
+  ```bash
+  curl -sL -o /dev/null -w '%{http_code}\n' "$MIRROR/all_commits/<SHA>/debian-openssl-3.0.x/schema-engine.gz"
+  curl -sL -o /dev/null -w '%{http_code}\n' "$MIRROR/all_commits/<SHA>/debian-openssl-3.0.x/query-engine.gz"
   ```
-  а в `docker-compose.prod.yml` — в `build.args` этих двух сервисов. Значение должно вести на зеркало бинарников Prisma; пустая строка означает «как обычно», так что менять compose ради этого не обязательно.
+
+  Ожидается `200` на оба. Оригинал `https://binaries.prisma.sh` проверяется так же — если он отдаёт `404` на файле, значит имя бинарника неверное, а не что зеркало неполное. Остальные имена (`libquery_engine.so.gz`, `migration-engine.gz`, `introspection-engine.gz`) для 6.19.3 не существуют **ни на одном** из хостов, их и не нужно проверять.
 
 Упавшая сборка безвредна: `up` падает до пересоздания контейнеров, поэтому работающий прод продолжает отвечать, пока чинится сеть. Проверить можно так же, как после любого деплоя (раздел «Проверка после каждого деплоя»).
+
+**Сборка может не упасть, а зависнуть.** Это отдельный симптом, и он опаснее падения: `pnpm install` не имеет таймаута на скачивание и при оборванном соединении просто висит — лог перестаёт расти, `load average` падает почти в ноль, а процесс `node .../pnpm install --frozen-lockfile` живёт десятками минут. Проверяется так:
+
+```bash
+L1=$(stat -c %s /tmp/deploy.log); sleep 45; L2=$(stat -c %s /tmp/deploy.log)
+echo "лог за 45с: +$((L2-L1)) байт"; cat /proc/loadavg
+```
+
+`+0 байт` вместе с пустой нагрузкой означает зависание, а не медленную работу. Повторы скрипта в этом случае не помогают — они тоже будут висеть. Лечится убийством сборки и повтором: успевшие собраться слои лежат в кэше, поэтому следующий заход делает меньше работы:
+
+```bash
+pkill -f 'tools/deploy-prod.sh'; pkill -f 'docker-buildx bake'
+pkill -f 'docker compose -f docker-compose.prod.yml'; sleep 3; pkill -9 -f 'pnpm install'
+cd ~/app && tools/deploy-prod.sh
+```
+
+Таймауты загрузки в образах уже выставлены (`npm_config_fetch_timeout=30000` и пять повторов), но они помогают только там, где соединение рвётся явной ошибкой, а не зависает молча.
+
+**Чистить кэш сборки сразу после деплоя нельзя.** Новый `worker` поднимается со старым `REDIS_URL` в `.env.prod` и не обновляет hash ключа пошагового прогресса. Если в Redis в этот момент лежат незавершённые задания от прежнего воркера, он возьмёт их и упадёт на неизвестном шаге. Сначала убедитесь, что очередь пуста, и только потом чистите:
+
+```bash
+PW=$(grep -E '^REDIS_PASSWORD=' .env.prod | cut -d= -f2-)
+for q in default active scan preview; do
+  echo "bullmq:$q:wait = $(docker exec pdf-redis-1 redis-cli -a "$PW" --no-auth-warning LLEN bullmq:$q:wait)"
+done
+```
+
+Нули во всех очередях — можно `docker builder prune -f` (освобождает ~10 ГБ). `redis-cli` без пароля молча вернёт пустоту: в проде `REDIS_PASSWORD` обязателен, и ошибка уйдёт в stderr, который легко потерять.
 
 **Ужимание образов.** Пробовал сделать server/worker легче (они ~1.4–1.5 GB из-за полного node_modules + Ghostscript/QPDF): `node --experimental-strip-types` не дружит с `.js`-суффиксами в импортах TS-пакетов, а `pnpm prune --production` в монорепе не чистит dev-дерево. В итоге оставил рабочий вариант. Если хотите освободить диск — `docker builder prune -f`.
 
