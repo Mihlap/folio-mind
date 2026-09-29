@@ -77,6 +77,15 @@ function renumber(slides: PresentationSlideDraft[]): PresentationSlideDraft[] {
   return slides.map((slide, index) => ({ ...slide, position: index }));
 }
 
+function bulletWord(count: number): string {
+  const mod100 = count % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'пунктов';
+  const mod10 = count % 10;
+  if (mod10 === 1) return 'пункт';
+  if (mod10 >= 2 && mod10 <= 4) return 'пункта';
+  return 'пунктов';
+}
+
 export function DocumentPresentationPanel({
   documentId,
   versionId,
@@ -459,7 +468,7 @@ export function DocumentPresentationPanel({
             disabled={!canEdit}
           />
           {bullets.length > 0 ? (
-            <p className="text-xs text-slate-500">На слайде: {bullets.length} пунктов</p>
+            <p className="text-xs text-slate-500">На слайде: {bullets.length} {bulletWord(bullets.length)}</p>
           ) : null}
           <textarea
             className="w-full rounded border border-slate-200 px-2 py-1 text-sm"
