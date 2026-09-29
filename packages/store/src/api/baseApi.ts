@@ -60,6 +60,6 @@ const baseQueryWithErrorNormalization: ApiBaseQueryFn = async (args, api, extraO
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithErrorNormalization,
-  tagTypes: ['Me', 'Documents', 'DocumentMembers', 'DocumentMemberInvites', 'Projects', 'ProjectMembers', 'Annotations', 'AiSuggestions', 'RagSources', 'ShareLinks', 'GuestComments', 'MediaAssets', 'LayoutTemplates'],
+  tagTypes: ['Me', 'Documents', 'DocumentMembers', 'DocumentMemberInvites', 'Projects', 'ProjectMembers', 'Annotations', 'AiSuggestions', 'RagSources', 'ShareLinks', 'GuestComments', 'MediaAssets', 'LayoutTemplates', 'Presentations'],
   endpoints: () => ({}),
 });

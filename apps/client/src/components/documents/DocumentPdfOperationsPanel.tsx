@@ -20,6 +20,7 @@ import {
   msgReplaceCurrentStarted,
   readJobProgressLabel,
 } from '@folio-mind/store';
+import type { PresentationSlideDraft } from '@folio-mind/store';
 import type { OperationSaveMode } from './OperationSaveModeSelect.js';
 import { estimateOptimizeSize, formatFileSize, formatOptimizeSizeRange } from '@folio-mind/store';
 import { isPdfTextLayerUnavailable } from '@folio-mind/store';
@@ -41,6 +42,7 @@ import { DocumentInternalMarkupPanel } from './DocumentInternalMarkupPanel.js';
 import { DocumentSharePanel } from './DocumentSharePanel.js';
 import { DocumentAccessPanel } from './DocumentAccessPanel.js';
 import { DocumentBookletPanel } from './DocumentBookletPanel.js';
+import { DocumentPresentationPanel } from './DocumentPresentationPanel.js';
 import { DocumentGuestCommentsPanel } from './DocumentGuestCommentsPanel.js';
 import type { EditTextInjection } from './useDocumentAnnotationsPanel.js';
 import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
@@ -89,13 +91,14 @@ type ToolGroupId = 'pdf' | 'layout' | 'approval' | 'edits';
 const TOOL_GROUP_IDS: ToolGroupId[] = ['pdf', 'layout', 'approval', 'edits'];
 const GROUP_SECTIONS: Record<ToolGroupId, ToolSectionId[]> = {
   pdf: ['optimize', 'split', 'pages', 'merge', 'diff', 'export'],
-  layout: ['layout', 'booklet'],
+  layout: ['layout', 'booklet', 'presentation'],
   approval: ['team-access', 'share', 'annotations'],
   edits: ['edits'],
 };
 
 function getSectionGroup(sectionId: ToolSectionId): ToolGroupId {
-  if (sectionId === 'layout' || sectionId === 'booklet') return 'layout';
+  if (sectionId === 'layout' || sectionId === 'booklet' || sectionId === 'presentation')
+    return 'layout';
   if (sectionId === 'team-access' || sectionId === 'share' || sectionId === 'annotations')
     return 'approval';
   if (sectionId === 'edits') return 'edits';
@@ -182,6 +185,8 @@ type Props = {
   documentRole?: string | null;
   currentUserId?: string | null;
   onRequestPdfInteraction?: (kind: PdfActionHintKind) => void;
+  onPresent?: (deck: { title: string; slides: PresentationSlideDraft[] }) => void;
+  authToken?: string | null;
 };
 export function DocumentPdfOperationsPanel({
   documentId,
@@ -217,6 +222,8 @@ export function DocumentPdfOperationsPanel({
   documentRole = 'viewer',
   currentUserId = null,
   onRequestPdfInteraction,
+  onPresent,
+  authToken,
 }: Props) {
   const accessRole = normalizeDocumentRole(documentRole);
   const canEdit = roleHasCapability(accessRole, 'edit');
@@ -1233,6 +1240,35 @@ export function DocumentPdfOperationsPanel({
                   versionId={activeVersion?.id ?? ''}
                   pageCount={effectivePageCount}
                   viewerPage={viewerPage}
+                />
+              </ToolAccordionSection>
+
+              <ToolAccordionSection
+                title="Презентация"
+                subtitle="Слайды 16:9 из страниц документа и медиатеки"
+                isOpen={isSectionOpen('presentation')}
+                onToggle={() => toggleSection('presentation')}
+                disabled={!isSectionAllowed('presentation')}
+                disabledReason={restrictionHint}
+                sectionId="presentation"
+                sectionRef={sectionRefCallbacks.presentation}
+                helpTitle="Презентация для показа заказчику"
+                helpContent={
+                  <>
+                    <p>Соберите слайды из страниц документа и файлов медиатеки, задайте порядок и тексты.</p>
+                    <p>Готовую презентацию можно показать в режиме презентации или сохранить и вернуться к сборке позже.</p>
+                  </>
+                }
+              >
+                <DocumentPresentationPanel
+                  documentId={documentId}
+                  versionId={activeVersion?.id ?? ''}
+                  documentTitle={documentTitle}
+                  pageCount={effectivePageCount}
+                  versionReady={versionReady}
+                  canEdit={canEdit}
+                  token={authToken ?? null}
+                  onPresent={(deck) => onPresent?.(deck)}
                 />
               </ToolAccordionSection>
             </div>

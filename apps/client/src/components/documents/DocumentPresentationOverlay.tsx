@@ -1,6 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { PdfViewer } from '@folio-mind/ui';
+import {
+  useGetPresentationPreviewsQuery,
+  useListMediaAssetsQuery,
+  type MediaAssetItem,
+} from '@folio-mind/store';
+import { SlideCanvas, type SlideLike } from './presentation/SlideCanvas.js';
 
 type Props = {
   open: boolean;
@@ -13,6 +19,11 @@ type Props = {
   pdfData?: Uint8Array;
   pdfSourceKey?: string;
   pdfReady: boolean;
+  documentId?: string;
+  versionId?: string;
+  deckTitle?: string | null;
+  slides?: SlideLike[];
+  token?: string | null;
 };
 
 export function DocumentPresentationOverlay({
@@ -26,9 +37,16 @@ export function DocumentPresentationOverlay({
   pdfData,
   pdfSourceKey,
   pdfReady,
+  documentId,
+  versionId,
+  deckTitle,
+  slides,
+  token,
 }: Props) {
-  const canGoPrev = page > 1;
-  const canGoNext = pageCount > 0 ? page < pageCount : false;
+  const deck = useMemo(() => (slides ?? []).filter(Boolean), [slides]);
+  const deckLength = deck.length;
+  const isDeckMode = deckLength > 0;
+  const position = Math.min(Math.max(1, page), Math.max(1, deckLength || pageCount || 1));
 
   useEffect(() => {
     if (!open) return;
@@ -48,14 +66,15 @@ export function DocumentPresentationOverlay({
         onClose();
         return;
       }
+      const total = isDeckMode ? deckLength : pageCount;
       if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'PageDown') {
         event.preventDefault();
-        if (canGoNext) onPageChange(page + 1);
+        if (total > 0 && position < total) onPageChange(position + 1);
         return;
       }
       if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
         event.preventDefault();
-        if (canGoPrev) onPageChange(page - 1);
+        if (position > 1) onPageChange(position - 1);
         return;
       }
       if (event.key === 'Home') {
@@ -63,17 +82,20 @@ export function DocumentPresentationOverlay({
         onPageChange(1);
         return;
       }
-      if (event.key === 'End' && pageCount > 0) {
+      if (event.key === 'End' && total > 0) {
         event.preventDefault();
-        onPageChange(pageCount);
+        onPageChange(total);
       }
     }
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose, onPageChange, page, pageCount, canGoNext, canGoPrev]);
+  }, [deckLength, isDeckMode, onClose, onPageChange, pageCount, position, open]);
 
   if (!open) return null;
+
+  const total = isDeckMode ? deckLength : pageCount;
+  const heading = isDeckMode ? (deckTitle?.trim() || documentTitle) : documentTitle;
 
   return createPortal(
     <div
@@ -84,10 +106,10 @@ export function DocumentPresentationOverlay({
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{documentTitle}</p>
+          <p className="truncate text-sm font-medium">{heading}</p>
           <p className="text-xs text-white/60">
-            Стр. {page}
-            {pageCount > 0 ? ` из ${pageCount}` : ''}
+            {isDeckMode ? 'Слайд' : 'Стр.'} {position}
+            {total > 0 ? ` из ${total}` : ''}
           </p>
         </div>
         <button
@@ -100,7 +122,15 @@ export function DocumentPresentationOverlay({
       </header>
 
       <div className="relative min-h-0 flex-1">
-        {pdfReady && (pdfUrl || pdfData) ? (
+        {isDeckMode ? (
+          <DeckStage
+            slides={deck}
+            index={position - 1}
+            documentId={documentId}
+            versionId={versionId}
+            token={token ?? null}
+          />
+        ) : pdfReady && (pdfUrl || pdfData) ? (
           <PdfViewer
             className="h-full min-h-0"
             url={pdfUrl}
@@ -133,5 +163,55 @@ export function DocumentPresentationOverlay({
       </footer>
     </div>,
     document.body,
+  );
+}
+
+function DeckStage({
+  slides,
+  index,
+  documentId,
+  versionId,
+  token,
+}: {
+  slides: SlideLike[];
+  index: number;
+  documentId?: string;
+  versionId?: string;
+  token: string | null;
+}) {
+  const previews = useGetPresentationPreviewsQuery(
+    { documentId: documentId ?? '', versionId: versionId ?? '' },
+    { skip: !documentId || !versionId },
+  );
+  const media = useListMediaAssetsQuery(documentId ? { documentId } : undefined);
+  const mediaAssets: MediaAssetItem[] = media.data?.items ?? [];
+
+  const urlByPage = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const item of previews.data?.pages ?? []) map.set(item.page, item.url);
+    return map;
+  }, [previews.data?.pages]);
+
+  const slide = slides[index];
+  if (!slide) return null;
+
+  return (
+    <div className="flex h-full w-full items-center justify-center p-4">
+      <div className="w-full max-w-[min(100%,calc((100vh-8rem)*16/9))]">
+        <SlideCanvas
+          slide={slide}
+          mediaAssets={mediaAssets}
+          pageUrl={slide.sourcePage != null ? (urlByPage.get(slide.sourcePage) ?? null) : null}
+          token={token}
+          className="rounded-lg shadow-2xl"
+          interactive
+        />
+        {slide.notes ? (
+          <p className="mt-3 max-h-24 overflow-y-auto text-center text-xs text-white/60">
+            {slide.notes}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }

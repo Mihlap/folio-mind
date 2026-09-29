@@ -17,6 +17,7 @@ model Tenant {
   ragSources RagSource[]
   mediaAssets MediaAsset[]
   layoutTemplates LayoutTemplate[]
+  presentations Presentation[]
   apiKeys ApiKey[]
   webhookEndpoints WebhookEndpoint[]
   invites   TenantInvite[]
@@ -59,6 +60,7 @@ model User {
   createdTenantInvites TenantInvite[] @relation("CreatedTenantInvites")
   ownedProjects     Project[]
   projectMembers    ProjectMember[]
+  presentations     Presentation[]
 }
 
 model SmsCode {
@@ -173,11 +175,55 @@ model Document {
   mediaAssets             MediaAsset[]
   members                 DocumentMember[]
   tenantInvites           TenantInvite[]
-  chunks                  DocumentChunk[]
+  chunks                 DocumentChunk[]
+  presentations          Presentation[]
 
   @@index([tenantId, updatedAt])
   @@index([tenantId, reviewStatus])
   @@index([tenantId, projectId, updatedAt])
+}
+
+model Presentation {
+  id         String              @id @default(cuid())
+  tenantId   String
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documentId String
+  document   Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionId  String
+  version    DocumentVersion     @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  title      String
+  aiMode     String              @default("none")
+  createdById String
+  createdBy  User                @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  slides     PresentationSlide[]
+
+  @@unique([versionId])
+  @@index([tenantId, updatedAt])
+  @@index([documentId])
+}
+
+model PresentationSlide {
+  id            String       @id @default(cuid())
+  presentationId String
+  presentation  Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  position      Int
+  title         String?
+  subtitle      String?
+  body          String?
+  notes         String?
+  layoutVariant String       @default("image_top")
+  background    String?
+  sourcePage    Int?
+  mediaAssetId  String?
+  mediaAsset    MediaAsset?  @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([presentationId, position])
+  @@index([presentationId])
+  @@index([mediaAssetId])
 }
 
 model DocumentShareLink {
@@ -275,6 +321,7 @@ model MediaAsset {
   thumbS3Key String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  presentationSlides PresentationSlide[]
 
   @@index([tenantId, createdAt])
   @@index([documentId, createdAt])
@@ -326,6 +373,7 @@ model DocumentVersion {
   failureDetails       Json?
   createdAt  DateTime @default(now())
   chunks     DocumentChunk[]
+  presentation Presentation?
 
   @@unique([documentId, version])
 }

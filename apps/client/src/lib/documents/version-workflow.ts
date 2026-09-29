@@ -15,6 +15,7 @@ export type ToolSectionId =
   | 'diff'
   | 'layout'
   | 'booklet'
+  | 'presentation'
   | 'team-access'
   | 'share';
 
