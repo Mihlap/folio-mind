@@ -288,6 +288,15 @@ describe.skipIf(!runDbIntegration)('API /presentations', () => {
   });
 
   it('deletes the presentation and its slides', async () => {
+    const before = await app.inject({
+      method: 'GET',
+      url: `/presentations?documentId=${documentId}&versionId=${versionId}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    const beforeBody = before.json() as { item: Presentation | null };
+    const presentationId = beforeBody.item?.id;
+    expect(presentationId).toBeTruthy();
+
     const res = await app.inject({
       method: 'DELETE',
       url: `/presentations?versionId=${versionId}`,
@@ -303,7 +312,9 @@ describe.skipIf(!runDbIntegration)('API /presentations', () => {
     expect((check.json() as { item: Presentation | null }).item).toBeNull();
 
     const prisma = app.prisma;
-    const slides = await prisma.presentationSlide.count();
+    const slides = await prisma.presentationSlide.count({
+      where: { presentationId },
+    });
     expect(slides).toBe(0);
   });
 
@@ -331,7 +342,9 @@ describe.skipIf(!runDbIntegration)('API /presentations', () => {
 
     const after = await prisma.presentation.count({ where: { documentId: created.documentId } });
     expect(after).toBe(0);
-    const orphanSlides = await prisma.presentationSlide.count();
+    const orphanSlides = await prisma.presentationSlide.count({
+      where: { presentation: { documentId: created.documentId } },
+    });
     expect(orphanSlides).toBe(0);
   });
 });

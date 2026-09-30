@@ -6,6 +6,7 @@ import {
 } from '@folio-mind/pdf-contracts';
 import {
   fetchMediaAssetDataUrl,
+  useExportPresentationMutation,
   useGetPresentationPreviewsQuery,
   useGetPresentationQuery,
   useListMediaAssetsQuery,
@@ -104,12 +105,14 @@ export function DocumentPresentationPanel({
     { skip: !versionId || !versionReady || pageCount <= 0 },
   );
   const [save] = useSavePresentationMutation();
+  const [exportPresentation] = useExportPresentationMutation();
 
   const [title, setTitle] = useState(documentTitle);
   const [slides, setSlides] = useState<PresentationSlideDraft[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [loadedVersion, setLoadedVersion] = useState<string | null>(null);
 
   useEffect(() => {
@@ -251,6 +254,25 @@ export function DocumentPresentationPanel({
     }
   }, [documentId, documentTitle, save, slides, title, versionId]);
 
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      await save({
+        documentId,
+        versionId,
+        title: title.trim() || documentTitle,
+        aiMode: 'none',
+        slides: renumber(slides),
+      }).unwrap();
+      const result = await exportPresentation({ documentId, versionId }).unwrap();
+      setStatus(`PDF создаётся в отдельном документе: ${result.documentId}`);
+    } catch {
+      setStatus('Не удалось запустить экспорт в PDF');
+    } finally {
+      setExporting(false);
+    }
+  }, [documentId, documentTitle, exportPresentation, save, slides, title, versionId]);
+
   const pageNumbers = useMemo(
     () => Array.from({ length: Math.max(0, pageCount) }, (_, i) => i + 1),
     [pageCount],
@@ -290,6 +312,14 @@ export function DocumentPresentationPanel({
           disabled={!canEdit || saving}
         >
           {saving ? 'Сохраняем…' : 'Сохранить'}
+        </button>
+        <button
+          type="button"
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          onClick={handleExport}
+          disabled={!canEdit || exporting}
+        >
+          {exporting ? 'Готовим PDF…' : 'Экспорт в PDF'}
         </button>
         <button
           type="button"

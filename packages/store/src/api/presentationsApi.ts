@@ -96,6 +96,13 @@ export const presentationsApi = baseApi.injectEndpoints({
         { type: 'Presentations', id: 'LIST' },
       ],
     }),
+    exportPresentation: build.mutation<
+      { documentId: string; versionId: string; operationJobId: string; status: 'processing' },
+      { documentId: string; versionId: string }
+    >({
+      query: (body) => ({ url: '/presentations/export', method: 'POST', body }),
+      invalidatesTags: ['Documents'],
+    }),
     deletePresentation: build.mutation<{ ok: boolean }, { versionId: string }>({
       query: ({ versionId }) => ({
         url: '/presentations',
@@ -111,5 +118,6 @@ export const {
   useGetPresentationQuery,
   useGetPresentationPreviewsQuery,
   useSavePresentationMutation,
+  useExportPresentationMutation,
   useDeletePresentationMutation,
 } = presentationsApi;

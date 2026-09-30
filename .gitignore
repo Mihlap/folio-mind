@@ -47,6 +47,7 @@ Thumbs.db
 
 # Local debug artifacts
 /dump.html
+tools/presentation/screenshots/
 
 # Mobile native (if generated locally)
 apps/mobile/android

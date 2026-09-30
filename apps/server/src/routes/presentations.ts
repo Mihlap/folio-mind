@@ -16,7 +16,9 @@ import {
   requireDocumentAccess,
 } from '../lib/documents/document-access.js';
 import { fetchVersionPreviews } from '../lib/documents/fetch-version-previews.js';
+import { enqueueExportPresentationJob } from '../lib/queue/queue.js';
 import { isS3Configured } from '../lib/storage/s3.js';
+import { buildOriginalKey } from './documents/helpers.js';
 import type { Env } from '../lib/config/env.js';
 
 const aiModeSchema = z.enum(['none', 'advise', 'assemble', 'author']);
@@ -339,6 +341,150 @@ export const presentationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, 
         pages: result.pages.map((page) => ({ page: page.page, url: page.url })),
         status: result.status,
       };
+    },
+  );
+
+  r.post(
+    '/presentations/export',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        body: z.object({
+          documentId: z.string().min(1),
+          versionId: z.string().min(1),
+        }),
+        response: {
+          202: z.object({
+            documentId: z.string(),
+            versionId: z.string(),
+            operationJobId: z.string(),
+            status: z.literal('processing'),
+          }),
+          400: errorBody,
+          403: errorBody,
+          404: errorBody,
+          500: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!isS3Configured()) {
+        return reply.code(400).send({ error: 'Хранилище недоступно' });
+      }
+      const user = getAuthUser(request);
+      const access = await requireDocumentAccess(
+        app.prisma,
+        request.body.documentId,
+        user,
+        'edit',
+      );
+      if (!access.ok) return replyDocumentAccessError(reply, access);
+
+      const version = await app.prisma.documentVersion.findFirst({
+        where: { id: request.body.versionId, documentId: access.document.id },
+        select: { id: true },
+      });
+      if (!version) {
+        return reply.code(404).send({ error: 'Версия не найдена' });
+      }
+
+      const presentation = await app.prisma.presentation.findFirst({
+        where: { versionId: version.id, tenantId: user.tenantId },
+        include: { slides: { select: { id: true } } },
+      });
+      if (!presentation || presentation.slides.length === 0) {
+        return reply.code(404).send({ error: 'Презентация не найдена или пуста' });
+      }
+
+      const fileName = `${presentation.title.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'presentation'}.pdf`;
+      const document = await app.prisma.document.create({
+        data: {
+          title: `${presentation.title} — PDF`,
+          tenantId: user.tenantId,
+          ownerId: user.sub,
+          projectId: access.document.projectId ?? null,
+          versions: {
+            create: {
+              version: 1,
+              s3Key: 'pending',
+              size: BigInt(0),
+              mimeType: 'application/pdf',
+              status: 'processing',
+            },
+          },
+        },
+        include: { versions: true },
+      });
+      const targetVersion = document.versions[0]!;
+      const targetS3Key = buildOriginalKey(document.id, targetVersion.version, fileName);
+      await app.prisma.documentVersion.update({
+        where: { id: targetVersion.id },
+        data: { s3Key: targetS3Key },
+      });
+
+      const operation = await app.prisma.job.create({
+        data: {
+          type: 'export-presentation-pdf',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: {
+            presentationId: presentation.id,
+            sourceDocumentId: access.document.id,
+            sourceVersionId: version.id,
+            targetDocumentId: document.id,
+            targetVersionId: targetVersion.id,
+            s3Key: targetS3Key,
+          },
+        },
+      });
+      try {
+        await enqueueExportPresentationJob(env, {
+          jobId: operation.id,
+          operationJobId: operation.id,
+          presentationId: presentation.id,
+          sourceDocumentId: access.document.id,
+          sourceVersionId: version.id,
+          targetDocumentId: document.id,
+          targetVersionId: targetVersion.id,
+          tenantId: user.tenantId,
+          targetS3Key,
+          requestId: request.requestId,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to enqueue export job';
+        await app.prisma.$transaction([
+          app.prisma.documentVersion.update({
+            where: { id: targetVersion.id },
+            data: { status: 'failed', failureDetails: message },
+          }),
+          app.prisma.job.update({
+            where: { id: operation.id },
+            data: { status: 'failed', payload: { error: message } },
+          }),
+        ]);
+        return reply.code(500).send({ error: 'Не удалось поставить экспорт в очередь' });
+      }
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'presentation.export_pdf',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId: access.document.id,
+          meta: {
+            presentationId: presentation.id,
+            targetDocumentId: document.id,
+            targetVersionId: targetVersion.id,
+            slideCount: presentation.slides.length,
+          },
+        },
+      });
+
+      return reply.status(202).send({
+        documentId: document.id,
+        versionId: targetVersion.id,
+        operationJobId: operation.id,
+        status: 'processing' as const,
+      });
     },
   );
 

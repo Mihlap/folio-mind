@@ -13,6 +13,7 @@ import { processExportFormDataJob } from './jobs/optimize/export-form-data.js';
 import { processApplyVisualSignatureJob } from './jobs/optimize/apply-visual-signature.js';
 import { processExportBookletJob } from './jobs/optimize/export-booklet-package.js';
 import { processExportPagesJob } from './jobs/optimize/export-pages-images.js';
+import { processExportPresentationPdfJob } from './jobs/optimize/export-presentation-pdf.js';
 import { processPrintReadinessJob } from './jobs/optimize/print-readiness.js';
 import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
 import { processPreConvertPdfJob } from './jobs/optimize/pre-convert-pdf.js';
@@ -162,6 +163,8 @@ function createOptimizeWorker() {
             await processExportBookletJob(env, data);
           } else if (job.name === 'export-pages') {
             await processExportPagesJob(env, data);
+          } else if (job.name === 'export-presentation-pdf') {
+            await processExportPresentationPdfJob(env, data);
           } else if (job.name === 'print-readiness') {
             await processPrintReadinessJob(env, data);
           } else if (job.name === 'optimize-pdf') {

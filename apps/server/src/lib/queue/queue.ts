@@ -318,6 +318,25 @@ export async function enqueueExportPagesJob(
   await optimizeQueue.add('export-pages', payload, { jobId: payload.jobId });
 }
 
+export async function enqueueExportPresentationJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    presentationId: string;
+    sourceDocumentId: string;
+    sourceVersionId: string;
+    targetDocumentId: string;
+    targetVersionId: string;
+    tenantId: string;
+    targetS3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('export-presentation-pdf', payload, { jobId: payload.jobId });
+}
+
 export async function enqueuePrintReadinessJob(
   env: Env,
   payload: {
