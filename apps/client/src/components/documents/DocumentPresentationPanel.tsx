@@ -7,11 +7,14 @@ import {
 import {
   fetchMediaAssetDataUrl,
   useExportPresentationMutation,
+  useGetJobQuery,
   useGetPresentationPreviewsQuery,
   useGetPresentationQuery,
   useListMediaAssetsQuery,
+  useRequestPresentationAiMutation,
   useSavePresentationMutation,
   type MediaAssetItem,
+  type PresentationAiRequestMode,
   type PresentationSlideDraft,
 } from '@folio-mind/store';
 import { SlideCanvas } from './presentation/SlideCanvas.js';
@@ -42,6 +45,26 @@ function draftKey(versionId: string) {
 }
 
 type LocalDraft = { title: string; slides: PresentationSlideDraft[] };
+
+type PresentationAiDraft = {
+  title: string | null;
+  subtitle: string | null;
+  slides: Array<{
+    sourcePage: number | null;
+    mediaAssetId: string | null;
+    layoutVariant: PresentationSlideLayout;
+    title: string | null;
+    subtitle: string | null;
+    body: string | null;
+  }>;
+};
+
+type PresentationAiJobPayload = {
+  draft?: PresentationAiDraft;
+  message?: string;
+  error?: string;
+  mode?: string;
+};
 
 function readDraft(versionId: string): LocalDraft | null {
   try {
@@ -106,6 +129,7 @@ export function DocumentPresentationPanel({
   );
   const [save] = useSavePresentationMutation();
   const [exportPresentation] = useExportPresentationMutation();
+  const [requestAi] = useRequestPresentationAiMutation();
 
   const [title, setTitle] = useState(documentTitle);
   const [slides, setSlides] = useState<PresentationSlideDraft[]>([]);
@@ -114,6 +138,96 @@ export function DocumentPresentationPanel({
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [loadedVersion, setLoadedVersion] = useState<string | null>(null);
+  const [aiMode, setAiMode] = useState<'none' | PresentationAiRequestMode>('none');
+  const [aiJobId, setAiJobId] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const { data: aiJob } = useGetJobQuery(aiJobId!, {
+    skip: !aiJobId,
+    pollingInterval: aiJobId ? 2000 : 0,
+  });
+
+  useEffect(() => {
+    if (!aiJob || !aiJobId) return;
+    if (aiJob.status === 'completed') {
+      const payload = aiJob.payload as PresentationAiJobPayload | null;
+      const draft = payload?.draft;
+      if (draft && draft.slides.length > 0) {
+        setTitle((prev) => draft.title ?? prev);
+        const isAdvise = payload.mode === 'advise';
+        if (isAdvise) {
+          setSlides((prev) =>
+            renumber(
+              prev.map((slide, i) => {
+                const advised = draft.slides[i];
+                if (!advised) return slide;
+                return {
+                  ...slide,
+                  layoutVariant: advised.layoutVariant,
+                  title: advised.title ?? null,
+                  subtitle: advised.subtitle ?? null,
+                  body: advised.body ?? null,
+                };
+              }),
+            ),
+          );
+        } else {
+          setSlides(
+            renumber(
+              draft.slides.map((item, i) => ({
+                position: i,
+                title: item.title ?? null,
+                subtitle: item.subtitle ?? null,
+                body: item.body ?? null,
+                notes: null,
+                layoutVariant: item.layoutVariant,
+                background: null,
+                sourcePage: item.sourcePage ?? null,
+                mediaAssetId: item.mediaAssetId ?? null,
+              })),
+            ),
+          );
+        }
+        setAiMode(payload.mode === 'advise' || payload.mode === 'assemble' || payload.mode === 'author' ? payload.mode : 'none');
+        setStatus(payload.message ?? 'Черновик ИИ применён. Проверьте и нажмите «Сохранить».');
+      } else {
+        setStatus('ИИ вернул пустой черновик. Попробуйте другой режим.');
+      }
+      setAiJobId(null);
+      setAiBusy(false);
+    }
+    if (aiJob.status === 'failed') {
+      const payload = aiJob.payload as { error?: string } | null;
+      setAiError(payload?.error ?? 'Не удалось подготовить черновик. Проверьте, что ИИ настроен.');
+      setAiJobId(null);
+      setAiBusy(false);
+    }
+  }, [aiJob, aiJobId]);
+
+  const handleAi = useCallback(
+    async (mode: PresentationAiRequestMode) => {
+      if (!versionId) return;
+      setAiError(null);
+      setStatus(null);
+      setAiBusy(true);
+      try {
+        const result = await requestAi({ documentId, versionId, mode }).unwrap();
+        setAiJobId(result.jobId);
+        if (mode === 'advise') {
+          setStatus('ИИ готовит советы по слайдам…');
+        } else if (mode === 'author') {
+          setStatus('ИИ пишет презентацию по документу и медиатеке…');
+        } else {
+          setStatus('ИИ собирает презентацию из страниц документа…');
+        }
+      } catch {
+        setAiError('Не удалось запустить ИИ. Проверьте, что ИИ настроен.');
+        setAiBusy(false);
+      }
+    },
+    [documentId, requestAi, versionId],
+  );
 
   useEffect(() => {
     if (!versionId) return;
@@ -242,7 +356,7 @@ export function DocumentPresentationPanel({
         documentId,
         versionId,
         title: title.trim() || documentTitle,
-        aiMode: 'none',
+        aiMode,
         slides: renumber(slides),
       }).unwrap();
       clearDraft(versionId);
@@ -252,7 +366,7 @@ export function DocumentPresentationPanel({
     } finally {
       setSaving(false);
     }
-  }, [documentId, documentTitle, save, slides, title, versionId]);
+  }, [aiMode, documentId, documentTitle, save, slides, title, versionId]);
 
   const handleExport = useCallback(async () => {
     setExporting(true);
@@ -261,7 +375,7 @@ export function DocumentPresentationPanel({
         documentId,
         versionId,
         title: title.trim() || documentTitle,
-        aiMode: 'none',
+        aiMode,
         slides: renumber(slides),
       }).unwrap();
       const result = await exportPresentation({ documentId, versionId }).unwrap();
@@ -271,7 +385,7 @@ export function DocumentPresentationPanel({
     } finally {
       setExporting(false);
     }
-  }, [documentId, documentTitle, exportPresentation, save, slides, title, versionId]);
+  }, [aiMode, documentId, documentTitle, exportPresentation, save, slides, title, versionId]);
 
   const pageNumbers = useMemo(
     () => Array.from({ length: Math.max(0, pageCount) }, (_, i) => i + 1),
@@ -337,6 +451,45 @@ export function DocumentPresentationPanel({
       ) : null}
       {previews.data?.status === 'processing' ? (
         <p className="text-xs text-slate-500">Готовим превью страниц…</p>
+      ) : null}
+
+      {canEdit ? (
+        <div className="space-y-2 rounded-md border border-slate-200 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">ИИ-помощник</span>
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-2.5 py-1 text-xs disabled:opacity-50"
+              title="Улучшить заголовки и тезисы готовых слайдов"
+              onClick={() => void handleAi('advise')}
+              disabled={aiBusy || slides.length === 0}
+            >
+              Совет
+            </button>
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-2.5 py-1 text-xs disabled:opacity-50"
+              title="Собрать презентацию из страниц документа"
+              onClick={() => void handleAi('assemble')}
+              disabled={aiBusy}
+            >
+              Собрать
+            </button>
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-2.5 py-1 text-xs disabled:opacity-50"
+              title="Написать презентацию по документу и медиатеке"
+              onClick={() => void handleAi('author')}
+              disabled={aiBusy}
+            >
+              Написать
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Черновик ИИ применяется к слайдам — проверьте и нажмите «Сохранить».
+          </p>
+          {aiError ? <p className="text-xs text-red-600">{aiError}</p> : null}
+        </div>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">

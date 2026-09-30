@@ -5,6 +5,7 @@ import { processAiSuggestionsJob } from './jobs/ai/ai-suggestions.js';
 import { processRagCompareJob } from './jobs/ai/rag-compare.js';
 import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
 import { processBookletTitleDraftJob } from './jobs/ai/booklet-title.js';
+import { processPresentationAiJob } from './jobs/ai/presentation-ai.js';
 import { processApplyLayoutPdfJob } from './jobs/optimize/apply-layout-pdf.js';
 import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accepted-suggestions.js';
 import { processApplyEditsFinalJob } from './jobs/optimize/apply-edits-final.js';
@@ -119,6 +120,8 @@ function createAiWorker() {
             await processDocumentExtractJob(env, data);
           } else if (job.name === 'booklet-title') {
             await processBookletTitleDraftJob(env, data);
+          } else if (job.name === 'presentation-ai') {
+            await processPresentationAiJob(env, data);
           }
           return { ok: true };
         },

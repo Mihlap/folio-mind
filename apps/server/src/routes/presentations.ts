@@ -16,7 +16,7 @@ import {
   requireDocumentAccess,
 } from '../lib/documents/document-access.js';
 import { fetchVersionPreviews } from '../lib/documents/fetch-version-previews.js';
-import { enqueueExportPresentationJob } from '../lib/queue/queue.js';
+import { enqueueAiJob, enqueueExportPresentationJob } from '../lib/queue/queue.js';
 import { isS3Configured } from '../lib/storage/s3.js';
 import { buildOriginalKey } from './documents/helpers.js';
 import type { Env } from '../lib/config/env.js';
@@ -485,6 +485,90 @@ export const presentationRoutes: FastifyPluginAsync<{ env: Env }> = async (app, 
         operationJobId: operation.id,
         status: 'processing' as const,
       });
+    },
+  );
+
+  r.post(
+    '/presentations/ai',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        body: z.object({
+          documentId: z.string().min(1),
+          versionId: z.string().min(1),
+          mode: z.enum(['advise', 'assemble', 'author']),
+        }),
+        response: {
+          202: z.object({ jobId: z.string(), status: z.literal('processing') }),
+          400: errorBody,
+          403: errorBody,
+          404: errorBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = getAuthUser(request);
+      const access = await requireDocumentAccess(
+        app.prisma,
+        request.body.documentId,
+        user,
+        'edit',
+      );
+      if (!access.ok) return replyDocumentAccessError(reply, access);
+
+      const version = await app.prisma.documentVersion.findFirst({
+        where: { id: request.body.versionId, documentId: access.document.id },
+        select: { id: true, status: true },
+      });
+      if (!version) {
+        return reply.code(404).send({ error: 'Версия не найдена' });
+      }
+      if (version.status !== 'ready') {
+        return reply.code(400).send({ error: 'Дождитесь готовности версии' });
+      }
+
+      const presentation = await app.prisma.presentation.findFirst({
+        where: { versionId: version.id, tenantId: user.tenantId },
+        select: { id: true },
+      });
+
+      const job = await app.prisma.job.create({
+        data: {
+          type: 'presentation-ai',
+          status: 'queued',
+          tenantId: user.tenantId,
+          payload: {
+            presentationId: presentation?.id ?? null,
+            documentId: access.document.id,
+            versionId: version.id,
+            mode: request.body.mode,
+          },
+        },
+      });
+
+      await enqueueAiJob(env, {
+        jobId: job.id,
+        documentId: access.document.id,
+        versionId: version.id,
+        tenantId: user.tenantId,
+        type: 'presentation-ai',
+        requestId: request.requestId,
+      });
+
+      await app.prisma.auditLog.create({
+        data: {
+          action: 'presentation.ai',
+          userId: user.sub,
+          tenantId: user.tenantId,
+          documentId: access.document.id,
+          meta: {
+            presentationId: presentation?.id ?? null,
+            mode: request.body.mode,
+          },
+        },
+      });
+
+      return reply.status(202).send({ jobId: job.id, status: 'processing' as const });
     },
   );
 

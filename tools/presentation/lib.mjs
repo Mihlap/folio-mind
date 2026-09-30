@@ -75,17 +75,33 @@ export async function registerVerified(label) {
 
 export async function makePdf(pageCount) {
   const require = await serverRequire();
-  const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+  const { PDFDocument, rgb } = require('pdf-lib');
+  const fontkit = require('@pdf-lib/fontkit');
+  const { readFileSync } = require('node:fs');
   const doc = await PDFDocument.create();
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.registerFontkit(fontkit);
+  const fontBytes = readFileSync(require.resolve('dejavu-fonts-ttf/ttf/DejaVuSans.ttf'));
+  const font = await doc.embedFont(fontBytes);
+  const lines = [
+    'ЖК «Северный» — архитектурная презентация проекта планировки территории.',
+    'Территория 12,4 гектара: жилая застройка, детский сад на 220 мест и школа на 840 мест.',
+    'Фасады в панельно-кирпичном исполнении, цветовая гамма — белый, графит и терракота.',
+    'Дворы без машин: подземный паркинг на 480 мест и гостевые парковочные карманы.',
+    'Благоустройство: прогулочный бульвар, спортивные площадки и зона тихого отдыха.',
+    'Строительство ведётся в три очереди, общий срок — 42 месяца.',
+  ];
   for (let i = 0; i < pageCount; i++) {
     const page = doc.addPage([595, 842]);
-    page.drawText(`Smoke document page ${i + 1}`, {
+    page.drawText(`Smoke документ — страница ${i + 1}`, {
       x: 60,
       y: 760,
-      size: 28,
+      size: 20,
       font,
       color: rgb(0.1, 0.1, 0.35),
+    });
+    const textLines = lines.slice(0, Math.min(lines.length, i + 1));
+    textLines.forEach((line, k) => {
+      page.drawText(line, { x: 60, y: 700 - k * 26, size: 12, font, color: rgb(0.2, 0.2, 0.2) });
     });
     page.drawRectangle({
       x: 60,
@@ -176,4 +192,21 @@ export async function waitForPreviews(token, documentId, versionId, expected, ti
     `превью не появились за ${timeoutMs / 1000}с (status=${lastStatus}, страниц=${lastCount}, ждали ${want}). ` +
       'Проверьте, что worker запущен и S3 доступен.',
   );
+}
+
+export async function waitForAiJob(token, jobId, timeoutMs = 240_000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = 'unknown';
+  let lastPayload = null;
+  while (Date.now() < deadline) {
+    const job = await api(`/jobs/${jobId}`, { headers: authHeaders(token) });
+    last = job.status ?? 'unknown';
+    lastPayload = job.payload ?? null;
+    if (last === 'completed' || last === 'failed') {
+      return { status: last, payload: lastPayload };
+    }
+    await new Promise((r) => setTimeout(r, 2_500));
+  }
+  const error = lastPayload?.error ?? '';
+  throw new Error(`ИИ-задача ${jobId} не завершилась за ${timeoutMs / 1000}с (status=${last}) ${error ? ': ' + error : ''}`);
 }

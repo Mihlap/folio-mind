@@ -4,6 +4,8 @@ import type {
   PresentationSlideLayout,
 } from '@folio-mind/pdf-contracts';
 
+export type PresentationAiRequestMode = Exclude<PresentationAiMode, 'none'>;
+
 export type PresentationSlideItem = {
   id: string;
   position: number;
@@ -103,6 +105,16 @@ export const presentationsApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/presentations/export', method: 'POST', body }),
       invalidatesTags: ['Documents'],
     }),
+    requestPresentationAi: build.mutation<
+      { jobId: string; status: string },
+      { documentId: string; versionId: string; mode: PresentationAiRequestMode }
+    >({
+      query: ({ documentId, versionId, mode }) => ({
+        url: '/presentations/ai',
+        method: 'POST',
+        body: { documentId, versionId, mode },
+      }),
+    }),
     deletePresentation: build.mutation<{ ok: boolean }, { versionId: string }>({
       query: ({ versionId }) => ({
         url: '/presentations',
@@ -119,5 +131,6 @@ export const {
   useGetPresentationPreviewsQuery,
   useSavePresentationMutation,
   useExportPresentationMutation,
+  useRequestPresentationAiMutation,
   useDeletePresentationMutation,
 } = presentationsApi;

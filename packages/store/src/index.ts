@@ -355,11 +355,12 @@ export {
   type LayoutTemplateItem,
 } from './api/layoutTemplatesApi.js';
 export {
-  presentationsApi,
+presentationsApi,
   useGetPresentationQuery,
   useGetPresentationPreviewsQuery,
 useSavePresentationMutation,
 useExportPresentationMutation,
+useRequestPresentationAiMutation,
 useDeletePresentationMutation,
   type PresentationItem,
   type PresentationSlideItem,
@@ -367,6 +368,7 @@ useDeletePresentationMutation,
   type PresentationDraft,
   type PresentationPreviewPage,
   type PresentationPreviewsResult,
+  type PresentationAiRequestMode,
 } from './api/presentationsApi.js';
 export {
   useRequestBookletTitleDraftMutation,

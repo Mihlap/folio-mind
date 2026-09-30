@@ -204,6 +204,16 @@ export type PresentationAiDraft = {
   slides: PresentationAiSlideDraft[];
 };
 
+function parseAiBody(body: unknown): string | null {
+  if (typeof body === 'string') return body.slice(0, 2000) || null;
+  if (Array.isArray(body)) {
+    const parts = body.filter((p): p is string => typeof p === 'string').map((p) => p.trim());
+    const joined = parts.filter(Boolean).join('\n');
+    return joined.slice(0, 2000) || null;
+  }
+  return null;
+}
+
 export function parsePresentationAiDraft(raw: string): PresentationAiDraft | null {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
@@ -215,13 +225,12 @@ export function parsePresentationAiDraft(raw: string): PresentationAiDraft | nul
   } catch {
     return null;
   }
-
-  if (!parsed || typeof parsed !== 'object') return null;
   const candidate = parsed as {
     title?: unknown;
     subtitle?: unknown;
     slides?: unknown;
   };
+  if (!candidate || typeof candidate !== 'object') return null;
   if (!Array.isArray(candidate.slides)) return null;
 
   const slides: PresentationAiSlideDraft[] = [];
@@ -237,7 +246,7 @@ export function parsePresentationAiDraft(raw: string): PresentationAiDraft | nul
         : PRESENTATION_SLIDE_DEFAULT_LAYOUT,
       title: typeof slide.title === 'string' ? slide.title : null,
       subtitle: typeof slide.subtitle === 'string' ? slide.subtitle : null,
-      body: typeof slide.body === 'string' ? slide.body : null,
+      body: parseAiBody(slide.body),
     });
   }
 

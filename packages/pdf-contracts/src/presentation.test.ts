@@ -149,6 +149,13 @@ describe('presentation', () => {
     expect(draft?.slides[0].layoutVariant).toBe('image_top');
   });
 
+  it('merges an array body into newline-separated theses', () => {
+    const draft = parsePresentationAiDraft(
+      '{"slides":[{"body":["тезис 1","  тезис 2  ","тезис 3"]}]}',
+    );
+    expect(draft?.slides[0].body).toBe('тезис 1\nтезис 2\nтезис 3');
+  });
+
   it('rejects malformed drafts instead of throwing', () => {
     expect(parsePresentationAiDraft('не json вовсе')).toBeNull();
     expect(parsePresentationAiDraft('{"slides":')).toBeNull();

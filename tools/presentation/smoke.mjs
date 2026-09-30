@@ -6,6 +6,7 @@ import {
   makePdf,
   registerVerified,
   uploadPdf,
+  waitForAiJob,
   waitForPreviews,
   waitForVersionReady,
 } from './lib.mjs';
@@ -162,6 +163,74 @@ async function main() {
   });
   if (restored.slides.length !== 5) throw new Error('не удалось восстановить презентацию перед экспортом');
   ok('презентация восстановлена для экспорта');
+
+  async function runAiMode(mode, pageCount, expectedSlides) {
+    const aiRes = await api('/presentations/ai', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify({ documentId, versionId, mode }),
+    });
+    if (aiRes.status !== 'processing' || !aiRes.jobId) {
+      throw new Error(`${mode}: задача не создана: ${JSON.stringify(aiRes)}`);
+    }
+    const done = await waitForAiJob(token, aiRes.jobId, 300_000);
+    if (done.status !== 'completed') {
+      throw new Error(
+        `${mode}: задача завершилась ошибкой: ${JSON.stringify(done.payload).slice(0, 400)}`,
+      );
+    }
+    const draft = done.payload?.draft;
+    if (!draft || !Array.isArray(draft.slides) || draft.slides.length === 0) {
+      throw new Error(`${mode}: пустой черновик: ${JSON.stringify(done.payload).slice(0, 400)}`);
+    }
+    for (const slide of draft.slides) {
+      if (slide.sourcePage != null && slide.sourcePage > pageCount) {
+        throw new Error(`${mode}: sourcePage ${slide.sourcePage} вне документа`);
+      }
+      if (slide.mediaAssetId != null) {
+        throw new Error(`${mode}: неожиданный mediaAssetId (в смоуке нет медиатеки)`);
+      }
+      if (!slide.layoutVariant) {
+        throw new Error(`${mode}: слайд без layoutVariant`);
+      }
+    }
+    if (expectedSlides && draft.slides.length !== expectedSlides) {
+      throw new Error(
+        `${mode}: слайдов ${draft.slides.length}, ожидалось ${expectedSlides}`,
+      );
+    }
+    return draft;
+  }
+
+  const assembleDraft = await runAiMode('assemble', version.pageCount);
+  ok('ИИ «Собрать» вернул черновик', `${assembleDraft.slides.length} слайдов`);
+
+  const authorDraft = await runAiMode('author', version.pageCount);
+  ok('ИИ «Написать» вернул черновик', `${authorDraft.slides.length} слайдов`);
+
+  const adviseDraft = await runAiMode('advise', version.pageCount, restored.slides.length);
+  ok('ИИ «Совет» вернул черновик', `${adviseDraft.slides.length} слайдов`);
+
+  await api('/presentations', {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({
+      documentId,
+      versionId,
+      title: assembleDraft.title || 'Объект Северный',
+      aiMode: 'assemble',
+      slides: assembleDraft.slides.map((slide, index) => ({
+        position: index,
+        title: slide.title,
+        subtitle: slide.subtitle,
+        body: slide.body,
+        layoutVariant: slide.layoutVariant,
+        sourcePage: slide.sourcePage,
+        mediaAssetId: slide.mediaAssetId,
+      })),
+    }),
+  });
+  ok('черновик ИИ принят сервером на сохранение', `слайдов=${assembleDraft.slides.length}`);
 
   const exportRes = await api('/presentations/export', {
     method: 'POST',

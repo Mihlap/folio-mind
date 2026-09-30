@@ -127,7 +127,7 @@ export async function enqueueAiJob(
     documentId: string;
     versionId: string;
     tenantId: string;
-    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare' | 'booklet-title' | 'document-extract';
+    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare' | 'booklet-title' | 'document-extract' | 'presentation-ai';
     prompt?: string;
     requestId?: string;
   },
