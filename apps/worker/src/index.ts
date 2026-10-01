@@ -5,6 +5,7 @@ import { processAiSuggestionsJob } from './jobs/ai/ai-suggestions.js';
 import { processRagCompareJob } from './jobs/ai/rag-compare.js';
 import { processAiSummaryJob } from './jobs/ai/ai-summary.js';
 import { processBookletTitleDraftJob } from './jobs/ai/booklet-title.js';
+import { processPresentationAiJob } from './jobs/ai/presentation-ai.js';
 import { processApplyLayoutPdfJob } from './jobs/optimize/apply-layout-pdf.js';
 import { processApplyAcceptedSuggestionsJob } from './jobs/optimize/apply-accepted-suggestions.js';
 import { processApplyEditsFinalJob } from './jobs/optimize/apply-edits-final.js';
@@ -13,6 +14,7 @@ import { processExportFormDataJob } from './jobs/optimize/export-form-data.js';
 import { processApplyVisualSignatureJob } from './jobs/optimize/apply-visual-signature.js';
 import { processExportBookletJob } from './jobs/optimize/export-booklet-package.js';
 import { processExportPagesJob } from './jobs/optimize/export-pages-images.js';
+import { processExportPresentationPdfJob } from './jobs/optimize/export-presentation-pdf.js';
 import { processPrintReadinessJob } from './jobs/optimize/print-readiness.js';
 import { processMergeVersionsJob } from './jobs/optimize/merge-versions.js';
 import { processPreConvertPdfJob } from './jobs/optimize/pre-convert-pdf.js';
@@ -118,6 +120,8 @@ function createAiWorker() {
             await processDocumentExtractJob(env, data);
           } else if (job.name === 'booklet-title') {
             await processBookletTitleDraftJob(env, data);
+          } else if (job.name === 'presentation-ai') {
+            await processPresentationAiJob(env, data);
           }
           return { ok: true };
         },
@@ -162,6 +166,8 @@ function createOptimizeWorker() {
             await processExportBookletJob(env, data);
           } else if (job.name === 'export-pages') {
             await processExportPagesJob(env, data);
+          } else if (job.name === 'export-presentation-pdf') {
+            await processExportPresentationPdfJob(env, data);
           } else if (job.name === 'print-readiness') {
             await processPrintReadinessJob(env, data);
           } else if (job.name === 'optimize-pdf') {

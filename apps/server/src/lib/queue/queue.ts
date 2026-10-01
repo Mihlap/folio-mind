@@ -127,7 +127,7 @@ export async function enqueueAiJob(
     documentId: string;
     versionId: string;
     tenantId: string;
-    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare' | 'booklet-title' | 'document-extract';
+    type: 'summary' | 'chat' | 'suggestions' | 'rag-compare' | 'booklet-title' | 'document-extract' | 'presentation-ai';
     prompt?: string;
     requestId?: string;
   },
@@ -316,6 +316,25 @@ export async function enqueueExportPagesJob(
 ): Promise<void> {
   const { optimizeQueue } = getQueues(env);
   await optimizeQueue.add('export-pages', payload, { jobId: payload.jobId });
+}
+
+export async function enqueueExportPresentationJob(
+  env: Env,
+  payload: {
+    jobId: string;
+    operationJobId: string;
+    presentationId: string;
+    sourceDocumentId?: string;
+    sourceVersionId?: string;
+    targetDocumentId: string;
+    targetVersionId: string;
+    tenantId: string;
+    targetS3Key: string;
+    requestId?: string;
+  },
+): Promise<void> {
+  const { optimizeQueue } = getQueues(env);
+  await optimizeQueue.add('export-presentation-pdf', payload, { jobId: payload.jobId });
 }
 
 export async function enqueuePrintReadinessJob(

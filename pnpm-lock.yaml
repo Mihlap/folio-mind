@@ -53,6 +53,9 @@ importers:
       '@folio-mind/edit-markdown':
         specifier: workspace:*
         version: link:../../packages/edit-markdown
+      '@folio-mind/pdf-contracts':
+        specifier: workspace:*
+        version: link:../../packages/pdf-contracts
       '@folio-mind/store':
         specifier: workspace:*
         version: link:../../packages/store

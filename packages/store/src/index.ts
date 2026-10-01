@@ -355,6 +355,24 @@ export {
   type LayoutTemplateItem,
 } from './api/layoutTemplatesApi.js';
 export {
+  presentationsApi,
+  useGetPresentationQuery,
+  useGetPresentationByIdQuery,
+  useListStandalonePresentationsQuery,
+  useGetPresentationPreviewsQuery,
+  useSavePresentationMutation,
+  useExportPresentationMutation,
+  useRequestPresentationAiMutation,
+  useDeletePresentationMutation,
+  type PresentationItem,
+  type PresentationSlideItem,
+  type PresentationSlideDraft,
+  type PresentationDraft,
+  type PresentationPreviewPage,
+  type PresentationPreviewsResult,
+  type PresentationAiRequestMode,
+} from './api/presentationsApi.js';
+export {
   useRequestBookletTitleDraftMutation,
   useLazySearchProjectMaterialsQuery,
   type BookletTitleDraftResult,

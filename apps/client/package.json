@@ -17,6 +17,7 @@
     "@capacitor/core": "^7.4.2",
     "@capacitor/status-bar": "^7.0.1",
     "@folio-mind/edit-markdown": "workspace:*",
+    "@folio-mind/pdf-contracts": "workspace:*",
     "@folio-mind/store": "workspace:*",
     "@folio-mind/ui": "workspace:*",
     "@microsoft/fetch-event-source": "^2.0.1",

@@ -12,6 +12,7 @@ import type { LayoutEditorState } from '../../hooks/useLayoutEditor.js';
 import {
   roleHasCapability,
   type DocumentReviewStatus,
+  type PresentationSlideDraft,
   type ShareLinkItem,
 } from '@folio-mind/store';
 import type { VersionCreatedNotice } from '../../hooks/useVersionCreatedNotice.js';
@@ -63,6 +64,8 @@ type Props = {
   onTabChange: (tab: DocumentRightTab) => void;
   mode?: 'docked' | 'drawer';
   onRequestPdfInteraction?: (kind: PdfActionHintKind) => void;
+  onPresent?: (deck: { title: string; slides: PresentationSlideDraft[] }) => void;
+  authToken?: string | null;
 };
 const TABS: Array<{
   id: DocumentRightTab;
@@ -116,6 +119,8 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
   onTabChange,
   mode = 'docked',
   onRequestPdfInteraction,
+  onPresent,
+  authToken,
 },
   ref,
 ) {
@@ -256,6 +261,8 @@ export const DocumentRightPanel = forwardRef<HTMLElement, Props>(function Docume
             documentRole={documentRole}
             currentUserId={currentUserId}
             onRequestPdfInteraction={onRequestPdfInteraction}
+    onPresent={onPresent}
+    authToken={authToken}
           />
         </div>
         )}

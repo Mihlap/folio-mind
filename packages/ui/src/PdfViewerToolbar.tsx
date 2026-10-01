@@ -93,7 +93,7 @@ export function PdfViewerToolbar({
         <ToolbarButton
           active={false}
           onClick={onPresentationStart}
-          label="Презентация"
+          label="Режим презентации"
           disabled={presentationDisabled}
         />
       )}

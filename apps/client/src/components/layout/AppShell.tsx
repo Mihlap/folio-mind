@@ -28,6 +28,7 @@ const nav: NavEntry[] = [
   { type: 'link', to: '/app/projects', label: 'Проекты', end: true, icon: '📁' },
   { type: 'link', to: '/app', label: 'Документы', end: true, icon: '📄' },
   { type: 'divider' },
+  { type: 'link', to: '/app/presentations', label: 'Презентации', end: false, icon: '🖥' },
   { type: 'link', to: '/app/media', label: 'Медиатека', end: true, icon: '🖼' },
 ];
 

@@ -25,6 +25,9 @@
     "smoke:phase3:docx": "node tools/smoke-phase3-docx.mjs",
     "smoke:phase3:pdf2docx": "node tools/smoke-phase3-pdf2docx.mjs",
     "smoke:rag": "node tools/smoke-rag-chat.mjs",
+    "smoke:presentation": "node tools/presentation/smoke.mjs",
+    "smoke:presentation:seed": "node tools/presentation/seed-demo.mjs",
+    "smoke:presentation:ui": "node tools/presentation/ui-check.mjs",
     "mobile:sync": "pnpm --filter @folio-mind/mobile sync",
     "mobile:open:android": "pnpm --filter @folio-mind/mobile open:android",
     "mobile:apk:debug": "pnpm --filter @folio-mind/mobile assemble:debug"

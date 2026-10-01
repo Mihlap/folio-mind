@@ -14,6 +14,7 @@ import {
   useRunVersionOcrMutation,
   fetchMediaAssetDataUrl,
   useUploadMediaAssetMutation,
+  useGetPresentationQuery,
   clearSearch,
   nextSearchMatch,
   prevSearchMatch,
@@ -29,6 +30,7 @@ import {
   isPdfTextLayerUnavailable,
   isVisionOcrInProgressStatus,
 } from '@folio-mind/store';
+import type { PresentationSlideDraft } from '@folio-mind/store';
 import { DocumentMobileSheet } from '../../components/documents/DocumentMobileSheet.js';
 import { DocumentThumbnailStrip } from '../../components/documents/DocumentThumbnailStrip.js';
 import { DocumentPageHeader } from '../../components/documents/DocumentPageHeader.js';
@@ -137,6 +139,7 @@ export function DocumentPage() {
   );
   const [layoutAddNotice, setLayoutAddNotice] = useState<string | null>(null);
   const [presentationOpen, setPresentationOpen] = useState(false);
+  const [liveDeck, setLiveDeck] = useState<{ title: string; slides: PresentationSlideDraft[] } | null>(null);
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null);
   const [pdfActionHint, setPdfActionHint] = useState<PdfActionHintKind | null>(null);
   const [showDockedRightPanel, setShowDockedRightPanel] = useState(() =>
@@ -221,6 +224,37 @@ export function DocumentPage() {
   useEffect(() => {
     setPresentationOpen(false);
   }, [activeVersion?.id]);
+  const savedPresentation = useGetPresentationQuery(
+    { documentId: doc?.id ?? '', versionId: activeVersion?.id },
+    { skip: !doc?.id || !activeVersion?.id },
+  );
+  const presentationSlides = useMemo(
+    () =>
+      (savedPresentation.data?.item?.slides ?? []).map((slide) => ({
+        id: slide.id,
+        title: slide.title,
+        subtitle: slide.subtitle,
+        body: slide.body,
+        notes: slide.notes,
+        layoutVariant: slide.layoutVariant,
+        background: slide.background,
+        sourcePage: slide.sourcePage,
+        mediaAssetId: slide.mediaAssetId,
+      })),
+    [savedPresentation.data?.item?.slides],
+  );
+  const openPresentation = useCallback(
+    (deck?: { title: string; slides: PresentationSlideDraft[] }) => {
+      setLiveDeck(deck ?? null);
+      setPresentationOpen(true);
+    },
+    [],
+  );
+  const openDeckSlides = useMemo(() => {
+    if (!liveDeck) return presentationSlides;
+    return liveDeck.slides.map((slide) => ({ ...slide, id: slide.id ?? `draft-${slide.position}` }));
+  }, [liveDeck, presentationSlides]);
+  const openDeckTitle = liveDeck ? liveDeck.title : savedPresentation.data?.item?.title ?? null;
   const layout = useLayoutEditor({
     versionId: activeVersion?.id,
     viewerPage,
@@ -1051,7 +1085,7 @@ export function DocumentPage() {
                             }
                           : undefined
                       }
-                      onPresentationStart={() => setPresentationOpen(true)}
+                      onPresentationStart={() => openPresentation()}
                       presentationDisabled={!versionReady || !pdfReadyForUi || layoutPageCount <= 0}
                     />
                   )}
@@ -1218,6 +1252,8 @@ export function DocumentPage() {
             onDismissVersionCreatedNotice={dismissVersionCreatedNotice}
             documentRole={documentRole}
             currentUserId={currentUserId}
+            onPresent={openPresentation}
+            authToken={token}
             collapsed={rightPanel.collapsed}
             onToggleCollapsed={rightPanel.toggleCollapsed}
             onExpand={rightPanel.expand}
@@ -1322,7 +1358,10 @@ export function DocumentPage() {
       {doc && activeVersion?.id && (
         <DocumentPresentationOverlay
           open={presentationOpen}
-          onClose={() => setPresentationOpen(false)}
+          onClose={() => {
+            setPresentationOpen(false);
+            setLiveDeck(null);
+          }}
           documentTitle={doc.title}
           page={viewerPage}
           pageCount={layoutPageCount}
@@ -1331,6 +1370,11 @@ export function DocumentPage() {
           pdfData={pdfViewMode === 'bytes' ? (pdfData ?? undefined) : undefined}
           pdfSourceKey={pdfSourceKey ?? undefined}
           pdfReady={pdfReadyForUi}
+          documentId={doc.id}
+          versionId={activeVersion?.id}
+          deckTitle={openDeckTitle}
+          slides={openDeckSlides}
+          token={token}
         />
       )}
 
