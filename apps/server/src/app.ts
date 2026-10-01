@@ -21,6 +21,7 @@ import { oauthRoutes } from './routes/oauth.js';
 import { documentRoutes } from './routes/documents.js';
 import { publicShareRoutes } from './routes/public-share.js';
 import { healthRoutes } from './routes/health.js';
+import { metricsRoutes } from './routes/metrics.js';
 import { meRoutes } from './routes/me.js';
 import { ragRoutes } from './routes/rag.js';
 import { layoutTemplateRoutes } from './routes/layout-templates.js';
@@ -86,6 +87,7 @@ export async function buildApp(options: BuildAppOptions) {
     await app.register(projectRoutes, { env: options.env });
     await app.register(pageReviewRoutes, { env: options.env });
     await app.register(presentationRoutes, { env: options.env });
+    await app.register(metricsRoutes, { env: options.env });
     await app.register(apiV1Routes, { env: options.env });
   } else if (options.skipDatabase) {
     await app.register(healthRoutes, { env: options.env });

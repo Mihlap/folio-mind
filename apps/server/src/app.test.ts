@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
+import { AUTH_EVENT_REGISTER } from './lib/metrics/auth-metrics.js';
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 const runDbIntegration = Boolean(databaseUrl);
@@ -86,6 +87,34 @@ describe.skipIf(!runDbIntegration)('API /auth/register', () => {
     };
     expect(body.needsEmailVerification).toBe(true);
     expect(body.email).toBe(email.toLowerCase());
+    await app.close();
+  });
+
+  it('records a registration metric', async () => {
+    const app = await buildApp({ env: testEnv });
+    const email = `reg-metric-${Date.now()}@folio-mind.test`;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email, password: 'Password123', name: 'metric' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const user = await app.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      select: { id: true, tenantId: true },
+    });
+    expect(user).not.toBeNull();
+
+    const events = await app.prisma.authEvent.findMany({
+      where: { userId: user?.id, type: AUTH_EVENT_REGISTER },
+    });
+    expect(events.length).toBe(1);
+    expect(events[0]?.tenantId).toBe(user?.tenantId);
+
+    await app.prisma.authEvent.deleteMany({ where: { userId: user?.id } });
+    await app.prisma.user.deleteMany({ where: { id: user?.id } });
+    await app.prisma.tenant.deleteMany({ where: { id: user?.tenantId } });
     await app.close();
   });
 });

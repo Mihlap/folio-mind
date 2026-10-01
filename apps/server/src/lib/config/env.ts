@@ -68,8 +68,8 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),  
-  SMTP_FROM: z.string().optional(), 
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
   SMTP_FROM_NAME: z.string().optional(),
   GUEST_COMMENT_WEBHOOK_URL: z.string().url().optional(),
   GUEST_COMMENT_TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
@@ -82,6 +82,9 @@ const envSchema = z.object({
   MEDIA_MAX_FILE_BYTES: z.coerce.number().int().positive().optional(),
   MEDIA_TENANT_QUOTA_BYTES: z.coerce.number().int().positive().optional(),
   MEDIA_MAX_PIXEL_SIDE: z.coerce.number().int().positive().optional(),
+  // Токен для чтения счётчиков посещаемости на GET /metrics/auth.
+  // Если не задан, endpoint отвечает 401 кому угодно.
+  AUTH_METRICS_TOKEN: z.string().min(16).optional(),
 });
 export type Env = z.infer<typeof envSchema>;
 export function loadEnv(): Env {

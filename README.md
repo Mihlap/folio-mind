@@ -37,6 +37,7 @@ Folio Mind закрывает цепочку «загрузил → посмот
 - **Экспорт буклета** — ZIP (PDF + JPG), проверка DPI, опционально PDF/A.
 - **Правки в тексте** — реестр правок, «Собрать PDF» для согласования, «Применить правки» через DOCX/Gotenberg.
 - **ИИ** — чат по документу и по инструкции приложения, пересказ, предложения правок, RAG по загруженным регламентам.
+- **Посещаемость** — счётчики регистраций и входов по дням: `GET /metrics/auth?days=30` (закрыт токеном `AUTH_METRICS_TOKEN`) или `pnpm metrics:auth`. Считает только факты, без e-mail и IP. Разовую ссылку для коллеги выдаёт `pnpm metrics:auth 30 --share`, она истекает сама.
 
 Инструкция для конечных пользователей: [USER_GUIDE.md](./USER_GUIDE.md).
 
@@ -171,6 +172,7 @@ powershell -File .\tools\install-ghostscript.ps1
 | `pnpm smoke:phase3:docx` | Smoke: apply-edits через DOCX |
 | `pnpm smoke:phase3:pdf2docx` | Smoke: конвертация DOCX → PDF |
 | `pnpm smoke:rag` | Smoke: RAG-чат по регламентам |
+| `pnpm metrics:auth` | Посещаемость: регистрации и входы по дням (нужен `AUTH_METRICS_TOKEN`), `--share` печатает разовую ссылку. Подробности в [METRICS_GUIDE.md](./METRICS_GUIDE.md) |
 | `pnpm mobile:sync` | Синхронизация PWA в `apps/mobile` |
 | `pnpm mobile:open:android` | Открыть проект Android Studio |
 | `pnpm mobile:apk:debug` | Сборка Android APK (Capacitor) |

@@ -35,6 +35,11 @@ import {
   findActiveTenantInvite,
   acceptTenantInviteForUser,
 } from '../lib/tenant/tenant-invite.js';
+import {
+  AUTH_EVENT_LOGIN,
+  AUTH_EVENT_REGISTER,
+  recordAuthEvent,
+} from '../lib/metrics/auth-metrics.js';
 const registerSchema = z.object({
   email: z.string().email(),
   password: passwordSchema,
@@ -236,6 +241,11 @@ export const authRoutes: FastifyPluginAsync<{
       if (tenantInvite) {
         await consumeTenantInvite(app.prisma, tenantInvite.id, user.id);
       }
+      await recordAuthEvent(app.prisma, {
+        type: AUTH_EVENT_REGISTER,
+        userId: user.id,
+        tenantId: tenant.id,
+      });
       try {
         await sendVerificationEmailForUser(app.prisma, env, user.id, email, request.log);
       } catch (err) {
@@ -462,6 +472,15 @@ export const authRoutes: FastifyPluginAsync<{
           message: 'Подтвердите email по ссылке из письма или запросите повторную отправку.',
         });
       }
+      const now = new Date();
+      await recordAuthEvent(app.prisma, {
+        type: AUTH_EVENT_LOGIN,
+        userId: user.id,
+        tenantId: user.tenantId,
+      });
+      await app.prisma.user
+        .update({ where: { id: user.id }, data: { lastLoginAt: now } })
+        .catch((err) => request.log.error({ err }, 'lastLoginAt update failed'));
       const token = await issueAuthToken(reply, user);
       return {
         token,

@@ -25,6 +25,7 @@
     "smoke:phase3:docx": "node tools/smoke-phase3-docx.mjs",
     "smoke:phase3:pdf2docx": "node tools/smoke-phase3-pdf2docx.mjs",
     "smoke:rag": "node tools/smoke-rag-chat.mjs",
+    "metrics:auth": "node tools/metrics-auth.mjs",
     "smoke:presentation": "node tools/presentation/smoke.mjs",
     "smoke:presentation:seed": "node tools/presentation/seed-demo.mjs",
     "smoke:presentation:ui": "node tools/presentation/ui-check.mjs",

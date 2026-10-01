@@ -33,7 +33,7 @@ export function CookieNotice() {
             </p>
             <p className="mt-1 text-sm leading-relaxed text-slate-600">
               Сервис сохраняет в браузере только те данные, которые нужны для входа и работы с
-              документами. Рекламных и аналитических трекеров нет.{' '}
+              документами. Рекламных и сторонних аналитических трекеров нет.{' '}
               <Link
                 to="/privacy"
                 className="whitespace-nowrap font-medium text-folio-600 hover:underline"
