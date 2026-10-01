@@ -1,8 +1,5 @@
 import { baseApi } from './baseApi.js';
-import type {
-  PresentationAiMode,
-  PresentationSlideLayout,
-} from '@folio-mind/pdf-contracts';
+import type { PresentationAiMode, PresentationSlideLayout } from '@folio-mind/pdf-contracts';
 
 export type PresentationAiRequestMode = Exclude<PresentationAiMode, 'none'>;
 
@@ -21,8 +18,8 @@ export type PresentationSlideItem = {
 
 export type PresentationItem = {
   id: string;
-  documentId: string;
-  versionId: string;
+  documentId: string | null;
+  versionId: string | null;
   title: string;
   aiMode: PresentationAiMode;
   slides: PresentationSlideItem[];
@@ -44,8 +41,9 @@ export type PresentationSlideDraft = {
 };
 
 export type PresentationDraft = {
-  documentId: string;
-  versionId: string;
+  id?: string;
+  documentId?: string;
+  versionId?: string;
   title: string;
   aiMode: PresentationAiMode;
   slides: PresentationSlideDraft[];
@@ -79,6 +77,16 @@ export const presentationsApi = baseApi.injectEndpoints({
       }),
       providesTags: (_result, _error, arg) => tag(arg.documentId, arg.versionId),
     }),
+    getPresentationById: build.query<{ item: PresentationItem | null }, string>({
+      query: (id) => ({ url: '/presentations', params: { id } }),
+      providesTags: (_result, _error, id) => [
+        { type: 'Presentations' as const, id: `standalone:${id}` },
+      ],
+    }),
+    listStandalonePresentations: build.query<{ items: PresentationItem[]; total: number }, void>({
+      query: () => ({ url: '/presentations', params: { standalone: '1' } }),
+      providesTags: [{ type: 'Presentations' as const, id: 'standalone:LIST' }],
+    }),
     getPresentationPreviews: build.query<
       PresentationPreviewsResult,
       { documentId: string; versionId: string; from?: number; to?: number }
@@ -94,13 +102,17 @@ export const presentationsApi = baseApi.injectEndpoints({
     savePresentation: build.mutation<PresentationItem, PresentationDraft>({
       query: (body) => ({ url: '/presentations', method: 'PUT', body }),
       invalidatesTags: (_result, _error, arg) => [
-        ...tag(arg.documentId, arg.versionId),
+        ...(arg.id
+          ? ([{ type: 'Presentations' as const, id: `standalone:${arg.id}` }] as const)
+          : []),
+        ...(arg.documentId ? tag(arg.documentId, arg.versionId) : []),
         { type: 'Presentations', id: 'LIST' },
+        { type: 'Presentations', id: 'standalone:LIST' },
       ],
     }),
     exportPresentation: build.mutation<
       { documentId: string; versionId: string; operationJobId: string; status: 'processing' },
-      { documentId: string; versionId: string }
+      { presentationId: string } | { documentId: string; versionId: string }
     >({
       query: (body) => ({ url: '/presentations/export', method: 'POST', body }),
       invalidatesTags: ['Documents'],
@@ -115,19 +127,33 @@ export const presentationsApi = baseApi.injectEndpoints({
         body: { documentId, versionId, mode },
       }),
     }),
-    deletePresentation: build.mutation<{ ok: boolean }, { versionId: string }>({
-      query: ({ versionId }) => ({
+    deletePresentation: build.mutation<
+      { ok: boolean },
+      { presentationId?: string; versionId?: string }
+    >({
+      query: ({ presentationId, versionId }) => ({
         url: '/presentations',
         method: 'DELETE',
-        params: { versionId },
+        params: {
+          ...(presentationId ? { id: presentationId } : {}),
+          ...(versionId ? { versionId } : {}),
+        },
       }),
-      invalidatesTags: [{ type: 'Presentations', id: 'LIST' }],
+      invalidatesTags: (_result, _error, arg) => [
+        { type: 'Presentations', id: 'LIST' },
+        { type: 'Presentations' as const, id: 'standalone:LIST' },
+        ...(arg.presentationId
+          ? ([{ type: 'Presentations' as const, id: `standalone:${arg.presentationId}` }] as const)
+          : []),
+      ],
     }),
   }),
 });
 
 export const {
   useGetPresentationQuery,
+  useGetPresentationByIdQuery,
+  useListStandalonePresentationsQuery,
   useGetPresentationPreviewsQuery,
   useSavePresentationMutation,
   useExportPresentationMutation,

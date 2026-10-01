@@ -27,6 +27,16 @@ const MediaLibraryPage = lazy(() =>
     default: module.MediaLibraryPage,
   })),
 );
+const PresentationsPage = lazy(() =>
+  import('../pages/app/PresentationsPage.js').then((module) => ({
+    default: module.PresentationsPage,
+  })),
+);
+const PresentationEditorPage = lazy(() =>
+  import('../pages/app/PresentationEditorPage.js').then((module) => ({
+    default: module.PresentationEditorPage,
+  })),
+);
 const RegulationsPage = lazy(() =>
   import('../pages/app/RegulationsPage.js').then((module) => ({ default: module.RegulationsPage })),
 );
@@ -136,6 +146,9 @@ export function App() {
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="media" element={<MediaLibraryPage />} />
+            <Route path="presentations" element={<PresentationsPage />} />
+            <Route path="presentations/new" element={<PresentationEditorPage />} />
+            <Route path="presentations/:id" element={<PresentationEditorPage />} />
             <Route path="regulations" element={<RegulationsPage />} />
             <Route path="documents/:id" element={<DocumentPage />} />
           </Route>

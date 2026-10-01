@@ -52,8 +52,8 @@ type Slide = {
 
 type Presentation = {
   id: string;
-  documentId: string;
-  versionId: string;
+  documentId: string | null;
+  versionId: string | null;
   title: string;
   aiMode: string;
   slides: Slide[];
@@ -318,7 +318,7 @@ describe.skipIf(!runDbIntegration)('API /presentations', () => {
     expect(slides).toBe(0);
   });
 
-  it('removes presentations when the document is deleted', async () => {
+  it('keeps the presentation when the document is deleted', async () => {
     const created = await createUserWithDocument(`present-cascade-${Date.now()}@folio-mind.test`);
     const save = await app.inject({
       method: 'PUT',
@@ -333,18 +333,187 @@ describe.skipIf(!runDbIntegration)('API /presentations', () => {
       },
     });
     expect(save.statusCode).toBe(200);
+    const presentationId = (save.json() as Presentation).id;
 
     const prisma = app.prisma;
-    const before = await prisma.presentation.count({ where: { documentId: created.documentId } });
-    expect(before).toBe(1);
-
     await prisma.document.delete({ where: { id: created.documentId } });
 
-    const after = await prisma.presentation.count({ where: { documentId: created.documentId } });
-    expect(after).toBe(0);
-    const orphanSlides = await prisma.presentationSlide.count({
-      where: { presentation: { documentId: created.documentId } },
+    const kept = await prisma.presentation.findUnique({
+      where: { id: presentationId },
+      select: { documentId: true, versionId: true, slides: { select: { id: true } } },
     });
-    expect(orphanSlides).toBe(0);
+    expect(kept).not.toBeNull();
+    expect(kept?.documentId).toBeNull();
+    expect(kept?.versionId).toBeNull();
+    expect(kept?.slides.length).toBe(1);
+
+    await prisma.presentation.delete({ where: { id: presentationId } });
+  });
+});
+
+describe.skipIf(!runDbIntegration)('API /presentations standalone', () => {
+  const stamp = Date.now();
+
+  let ownerToken: string;
+  let strangerToken: string;
+  let app: Awaited<ReturnType<typeof buildApp>>;
+  let presentationId = '';
+
+  beforeAll(async () => {
+    ownerToken = (await createUserWithDocument(`standalone-owner-${stamp}@folio-mind.test`)).token;
+    strangerToken = (await createUserWithDocument(`standalone-stranger-${stamp}@folio-mind.test`))
+      .token;
+    app = await buildApp({ env: testEnv });
+  }, 180000);
+
+  afterAll(async () => {
+    const prisma = app?.prisma;
+    if (prisma) {
+      const user = await prisma.user.findFirst({
+        where: { email: `standalone-owner-${stamp}@folio-mind.test`.toLowerCase() },
+        select: { tenantId: true },
+      });
+      if (user) {
+        await prisma.presentation.deleteMany({
+          where: { tenantId: user.tenantId, documentId: null },
+        });
+      }
+    }
+    await app?.close();
+  });
+
+  it('creates a presentation without a document', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/presentations',
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: {
+        title: 'Титульный показ',
+        aiMode: 'none',
+        slides: [
+          { position: 0, title: 'Первый', layoutVariant: 'title_only' },
+          { position: 1, title: 'Второй', layoutVariant: 'section' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Presentation;
+    expect(body.documentId).toBeNull();
+    expect(body.versionId).toBeNull();
+    expect(body.slides.map((slide) => slide.title)).toEqual(['Первый', 'Второй']);
+    presentationId = body.id;
+  });
+
+  it('rejects a source page without a document', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/presentations',
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: {
+        id: presentationId,
+        title: 'Титульный показ',
+        aiMode: 'none',
+        slides: [{ position: 0, title: 'Слайд', sourcePage: 2 }],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('replaces slides on the next save', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/presentations',
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: {
+        id: presentationId,
+        title: 'Титульный показ',
+        aiMode: 'none',
+        slides: [{ position: 0, title: 'Один слайд', layoutVariant: 'title_only' }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Presentation;
+    expect(body.id).toBe(presentationId);
+    expect(body.slides.length).toBe(1);
+    expect(body.slides[0]?.title).toBe('Один слайд');
+  });
+
+  it('lists standalone presentations and loads one by id', async () => {
+    const list = await app.inject({
+      method: 'GET',
+      url: '/presentations?standalone=1',
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(list.statusCode).toBe(200);
+    const items = (list.json() as { items: Presentation[] }).items;
+    expect(items.some((item) => item.id === presentationId)).toBe(true);
+
+    const one = await app.inject({
+      method: 'GET',
+      url: `/presentations?id=${presentationId}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(one.statusCode).toBe(200);
+    expect((one.json() as { item: Presentation | null }).item?.id).toBe(presentationId);
+  });
+
+  it('hides standalone presentations from other tenants', async () => {
+    const list = await app.inject({
+      method: 'GET',
+      url: '/presentations?standalone=1',
+      headers: { authorization: `Bearer ${strangerToken}` },
+    });
+    expect(list.statusCode).toBe(200);
+    const items = (list.json() as { items: Presentation[] }).items;
+    expect(items.some((item) => item.id === presentationId)).toBe(false);
+
+    const one = await app.inject({
+      method: 'GET',
+      url: `/presentations?id=${presentationId}`,
+      headers: { authorization: `Bearer ${strangerToken}` },
+    });
+    expect([403, 404]).toContain(one.statusCode);
+  });
+
+  it('forbids another user from editing or deleting', async () => {
+    const save = await app.inject({
+      method: 'PUT',
+      url: '/presentations',
+      headers: { authorization: `Bearer ${strangerToken}` },
+      payload: {
+        id: presentationId,
+        title: 'Взлом',
+        aiMode: 'none',
+        slides: [],
+      },
+    });
+    expect([403, 404]).toContain(save.statusCode);
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/presentations?id=${presentationId}`,
+      headers: { authorization: `Bearer ${strangerToken}` },
+    });
+    expect([403, 404]).toContain(del.statusCode);
+  });
+
+  it('deletes the standalone presentation by id', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/presentations?id=${presentationId}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const prisma = app.prisma;
+    const slides = await prisma.presentationSlide.count({ where: { presentationId } });
+    expect(slides).toBe(0);
+
+    const gone = await app.inject({
+      method: 'GET',
+      url: `/presentations?id=${presentationId}`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(gone.statusCode).toBe(404);
   });
 });

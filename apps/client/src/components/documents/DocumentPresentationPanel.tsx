@@ -189,7 +189,11 @@ export function DocumentPresentationPanel({
             ),
           );
         }
-        setAiMode(payload.mode === 'advise' || payload.mode === 'assemble' || payload.mode === 'author' ? payload.mode : 'none');
+        setAiMode(
+          payload.mode === 'advise' || payload.mode === 'assemble' || payload.mode === 'author'
+            ? payload.mode
+            : 'none',
+        );
         setStatus(payload.message ?? 'Черновик ИИ применён. Проверьте и нажмите «Сохранить».');
       } else {
         setStatus('ИИ вернул пустой черновик. Попробуйте другой режим.');
@@ -316,27 +320,24 @@ export function DocumentPresentationPanel({
     });
   }, []);
 
-  const move = useCallback(
-    (from: number, to: number) => {
-      setSlides((prev) => {
-        if (from < 0 || from >= prev.length) return prev;
-        const target = Math.max(0, Math.min(prev.length - 1, to));
-        if (from === target) return prev;
-        const next = [...prev];
-        const [moved] = next.splice(from, 1);
-        next.splice(target, 0, moved);
-        return renumber(next);
-      });
-      setSelectedIndex((prev) => {
-        if (prev == null) return prev;
-        if (prev === from) return to;
-        if (from < prev && to >= prev) return prev - 1;
-        if (from > prev && to <= prev) return prev + 1;
-        return prev;
-      });
-    },
-    [],
-  );
+  const move = useCallback((from: number, to: number) => {
+    setSlides((prev) => {
+      if (from < 0 || from >= prev.length) return prev;
+      const target = Math.max(0, Math.min(prev.length - 1, to));
+      if (from === target) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(target, 0, moved);
+      return renumber(next);
+    });
+    setSelectedIndex((prev) => {
+      if (prev == null) return prev;
+      if (prev === from) return to;
+      if (from < prev && to >= prev) return prev - 1;
+      if (from > prev && to <= prev) return prev + 1;
+      return prev;
+    });
+  }, []);
 
   const removeSlide = useCallback((index: number) => {
     setSlides((prev) => renumber(prev.filter((_, i) => i !== index)));
@@ -497,25 +498,18 @@ export function DocumentPresentationPanel({
           <div>
             <p className="mb-1 text-xs font-medium text-slate-600">Страницы документа</p>
             <div className="grid grid-cols-3 gap-1.5">
-              {pageNumbers.map((page) => {
-                const url = previewUrlByPage.get(page);
-                return (
-                  <button
-                    key={page}
-                    type="button"
-                    title={`Добавить страницу ${page}`}
-                    className="flex aspect-[3/4] flex-col items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:border-slate-400"
-                    onClick={() => addSlide(page)}
-                    disabled={!canEdit}
-                  >
-                    {url ? (
-                      <img src={url} alt={`Страница ${page}`} className="h-full w-full object-cover" />
-                    ) : (
-                      <span>{page}</span>
-                    )}
-                  </button>
-                );
-              })}
+              {pageNumbers.map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  title={`Добавить страницу ${page}`}
+                  className="flex aspect-[3/4] flex-col items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:border-slate-400"
+                  onClick={() => addSlide(page)}
+                  disabled={!canEdit}
+                >
+                  <PageThumb page={page} url={previewUrlByPage.get(page)} />
+                </button>
+              ))}
             </div>
           </div>
 
@@ -541,12 +535,6 @@ export function DocumentPresentationPanel({
         </div>
 
         <div className="space-y-2">
-          {slides.length === 0 ? (
-            <p className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500">
-              Выберите страницы или файлы слева, чтобы собрать слайды. Порядок задаётся стрелками.
-            </p>
-          ) : null}
-
           {slides.map((slide, index) => (
             <div
               key={slide.id ?? `new-${index}`}
@@ -562,7 +550,9 @@ export function DocumentPresentationPanel({
                   slide={slide}
                   mediaAssets={mediaAssets}
                   pageUrl={
-                    slide.sourcePage != null ? (previewUrlByPage.get(slide.sourcePage) ?? null) : null
+                    slide.sourcePage != null
+                      ? (previewUrlByPage.get(slide.sourcePage) ?? null)
+                      : null
                   }
                   token={token}
                   className="rounded"
@@ -611,6 +601,13 @@ export function DocumentPresentationPanel({
         </div>
       </div>
 
+      {slides.length === 0 ? (
+        <p className="rounded-md border border-dashed border-slate-300 p-3 text-sm leading-relaxed text-slate-500">
+          Соберите слайды: выберите страницу слева или файл из медиатеки.
+          <span className="mt-1 block">Порядок редактируется стрелками ↑ ↓.</span>
+        </p>
+      ) : null}
+
       {selected ? (
         <div className="space-y-2 rounded-md border border-slate-200 p-3">
           <p className="text-xs font-medium text-slate-600">
@@ -651,7 +648,9 @@ export function DocumentPresentationPanel({
             disabled={!canEdit}
           />
           {bullets.length > 0 ? (
-            <p className="text-xs text-slate-500">На слайде: {bullets.length} {bulletWord(bullets.length)}</p>
+            <p className="text-xs text-slate-500">
+              На слайде: {bullets.length} {bulletWord(bullets.length)}
+            </p>
           ) : null}
           <textarea
             className="w-full rounded border border-slate-200 px-2 py-1 text-sm"
@@ -665,6 +664,20 @@ export function DocumentPresentationPanel({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function PageThumb({ page, url }: { page: number; url?: string | null }) {
+  const [src, setSrc] = useState(url);
+  useEffect(() => setSrc(url), [url]);
+  if (!src) return <span>{page}</span>;
+  return (
+    <img
+      src={src}
+      alt={`Страница ${page}`}
+      onError={() => setSrc(null)}
+      className="h-full w-full object-cover"
+    />
   );
 }
 
@@ -696,6 +709,12 @@ function MediaThumb({ asset, token }: { asset: MediaAssetItem; token: string | n
   if (!src) {
     return <span className="block px-1 py-2 text-center text-[10px] text-slate-400">…</span>;
   }
-  return <img src={src} alt={asset.title} className="h-14 w-full object-cover" />;
+  return (
+    <img
+      src={src}
+      alt={asset.title}
+      onError={() => setFailed(true)}
+      className="h-14 w-full object-cover"
+    />
+  );
 }
-

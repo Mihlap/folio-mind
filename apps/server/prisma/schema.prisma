@@ -187,10 +187,10 @@ model Presentation {
   id         String              @id @default(cuid())
   tenantId   String
   tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  documentId String
-  document   Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  versionId  String
-  version    DocumentVersion     @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  documentId String?
+  document   Document?           @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  versionId  String?
+  version    DocumentVersion?    @relation(fields: [versionId], references: [id], onDelete: SetNull)
   title      String
   aiMode     String              @default("none")
   createdById String

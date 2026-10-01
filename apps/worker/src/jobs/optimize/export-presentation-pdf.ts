@@ -33,10 +33,10 @@ type LoadedSlide = {
 
 async function resolveSlideImage(
   slide: LoadedSlide,
-  sourceDocumentId: string,
-  sourceVersionId: string,
+  sourceDocumentId: string | null,
+  sourceVersionId: string | null,
 ): Promise<{ bytes: Buffer; mime: string } | null> {
-  if (slide.sourcePage != null && slide.sourcePage > 0) {
+  if (slide.sourcePage != null && slide.sourcePage > 0 && sourceDocumentId && sourceVersionId) {
     const keys = [
       previewPageViewKey(sourceDocumentId, sourceVersionId, slide.sourcePage),
       previewPageKey(sourceDocumentId, sourceVersionId, slide.sourcePage),
@@ -80,7 +80,7 @@ export async function processExportPresentationPdfJob(
     requestId,
   } = data;
 
-  if (!operationJobId || !presentationId || !sourceDocumentId || !sourceVersionId || !targetDocumentId || !targetVersionId || !targetS3Key) {
+  if (!operationJobId || !presentationId || !targetDocumentId || !targetVersionId || !targetS3Key) {
     throw new Error('Export presentation: missing required payload fields');
   }
 
@@ -99,7 +99,10 @@ export async function processExportPresentationPdfJob(
     if (!target) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'failed', payload: { skipped: 'version_deleted', error: 'Target version was deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }
@@ -112,7 +115,11 @@ export async function processExportPresentationPdfJob(
 
     const slides: PresentationPdfSlide[] = [];
     for (const slide of presentation.slides) {
-      const image = await resolveSlideImage(slide, sourceDocumentId, sourceVersionId);
+      const image = await resolveSlideImage(
+        slide,
+        sourceDocumentId ?? null,
+        sourceVersionId ?? null,
+      );
       slides.push({
         title: slide.title,
         subtitle: slide.subtitle,
@@ -133,7 +140,10 @@ export async function processExportPresentationPdfJob(
     if (!targetStillExists) {
       await prisma.job.update({
         where: { id: operationJobId },
-        data: { status: 'failed', payload: { skipped: 'version_deleted', error: 'Target version was deleted' } },
+        data: {
+          status: 'failed',
+          payload: { skipped: 'version_deleted', error: 'Target version was deleted' },
+        },
       });
       return;
     }

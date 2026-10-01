@@ -324,8 +324,8 @@ export async function enqueueExportPresentationJob(
     jobId: string;
     operationJobId: string;
     presentationId: string;
-    sourceDocumentId: string;
-    sourceVersionId: string;
+    sourceDocumentId?: string;
+    sourceVersionId?: string;
     targetDocumentId: string;
     targetVersionId: string;
     tenantId: string;
