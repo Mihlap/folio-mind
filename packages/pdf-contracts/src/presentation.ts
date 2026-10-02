@@ -214,23 +214,118 @@ function parseAiBody(body: unknown): string | null {
   return null;
 }
 
-export function parsePresentationAiDraft(raw: string): PresentationAiDraft | null {
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
+function repairJsonStructure(input: string): string {
+  const stack: Array<'{' | '['> = [];
+  let out = '';
+  let inString = false;
+  let escaped = false;
 
-  let parsed: unknown;
+  const push = (chunk: string) => {
+    out += chunk;
+  };
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i]!;
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        push(ch);
+        continue;
+      }
+      if (ch === '\\') {
+        escaped = true;
+        push(ch);
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+        push(ch);
+        continue;
+      }
+      if (ch === '\n' || ch === '\r' || ch === '\t') {
+        push(' ');
+        continue;
+      }
+      push(ch);
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      push(ch);
+      continue;
+    }
+    if (ch === '{' || ch === '[') {
+      stack.push(ch);
+      push(ch);
+      continue;
+    }
+    if (ch === '}' || ch === ']') {
+      const expected = ch === '}' ? '{' : '[';
+      while (stack.length > 0 && stack[stack.length - 1] !== expected) {
+        const missing = stack.pop()!;
+        push(missing === '{' ? '}' : ']');
+      }
+      if (stack.length === 0) {
+        i += 1;
+        continue;
+      }
+      stack.pop();
+      push(ch);
+      continue;
+    }
+    if (ch === ',') {
+      const rest = input.slice(i + 1);
+      const nextNonSpace = /^[\s]*/.exec(rest)?.[0] ?? '';
+      const nextChar = rest[nextNonSpace.length];
+      if (nextChar === '}' || nextChar === ']' || nextChar === undefined) {
+        i += 1;
+        continue;
+      }
+      if (nextChar === '{' || nextChar === '[') {
+        while (stack.length > 0 && stack[stack.length - 1] !== '[') {
+          const missing = stack.pop()!;
+          push(missing === '{' ? '}' : ']');
+        }
+      }
+      push(ch);
+      continue;
+    }
+    push(ch);
+  }
+
+  if (inString) push('"');
+  while (stack.length > 0) {
+    const missing = stack.pop()!;
+    push(missing === '{' ? '}' : ']');
+  }
+  return out;
+}
+
+function tryParseJson(raw: string): unknown {
   try {
-    parsed = JSON.parse(raw.slice(start, end + 1));
+    return JSON.parse(raw);
   } catch {
     return null;
   }
+}
+
+function parseJsonLoose(raw: string): unknown {
+  try {
+    return JSON.parse(repairJsonStructure(raw));
+  } catch {
+    return null;
+  }
+}
+
+function toPresentationAiDraft(parsed: unknown): PresentationAiDraft | null {
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const candidate = parsed as {
     title?: unknown;
     subtitle?: unknown;
     slides?: unknown;
   };
-  if (!candidate || typeof candidate !== 'object') return null;
   if (!Array.isArray(candidate.slides)) return null;
 
   const slides: PresentationAiSlideDraft[] = [];
@@ -255,4 +350,29 @@ export function parsePresentationAiDraft(raw: string): PresentationAiDraft | nul
     subtitle: typeof candidate.subtitle === 'string' ? candidate.subtitle : null,
     slides,
   };
+}
+
+export function parsePresentationAiDraft(raw: string): PresentationAiDraft | null {
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+
+  const bounded = raw.slice(start, raw.lastIndexOf('}') + 1);
+  const tail = raw.slice(start);
+  const candidates = [bounded, tail].filter(Boolean);
+  const seen = new Set<string>();
+
+  let best: PresentationAiDraft | null = null;
+  for (const candidate of candidates) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    const strict = tryParseJson(candidate);
+    if (strict !== null) {
+      const draft = toPresentationAiDraft(strict);
+      if (draft && draft.slides.length > 0) return draft;
+      continue;
+    }
+    const repaired = toPresentationAiDraft(parseJsonLoose(candidate));
+    if (repaired && (!best || repaired.slides.length > best.slides.length)) best = repaired;
+  }
+  return best;
 }

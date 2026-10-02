@@ -33,7 +33,9 @@ const DRAFT_SCHEMA_HINT = `Верни ТОЛЬКО один JSON-объект б
 - title презентации — до 180 символов, subtitle — до 280 символов.
 - каждый слайд: title до 200 символов, subtitle до 300, body — массив из 3–6 коротких тезисов-строк, каждая до 260 символов.
 - только строки без markdown-разметки (без **, ##, списков-маркеров).
-- Двойные кавычки внутри значений экранируй как \\".`;
+- Двойные кавычки внутри значений экранируй как \\".
+- Проверь перед отправкой, что каждый объект слайда закрыт обеими скобками { }, а после массива body стоит запятая только если дальше идёт следующий слайд.
+- Считай фигурные скобки: их число в ответе должно быть чётным.`;
 
 const ASSEMBLE_SYSTEM = `Ты архитектор презентаций для архитектурного бюро.
 По тексту документа собери каркас презентации 16:9 о проекте.
@@ -174,7 +176,7 @@ async function completeAndParseDraft(
     const userPrompt =
       attempt === 0
         ? prompt
-        : `${prompt}\n\nВАЖНО: предыдущий ответ не был валидным JSON. Верни ровно один JSON-объект с полями title, subtitle, slides, без code-блоков и без текста вокруг.`;
+        : `${prompt}\n\nВАЖНО: предыдущий ответ не был валидным JSON. Верни ровно один JSON-объект с полями title, subtitle, slides, без code-блоков и без текста вокруг. Обязательно закрой каждый объект слайда фигурной скобкой перед запятой.`;
     const result = await completeWithTransientRetry(env, provider, system, userPrompt, 6000);
     lastText = result.text;
     model = result.model;
@@ -184,7 +186,9 @@ async function completeAndParseDraft(
   }
   const parsed = parsePresentationAiDraft(lastText);
   if (parsed) return { draft: parsed, model };
-  throw new Error('Модель вернула ответ не в формате JSON');
+  throw new Error(
+    'ИИ ответил не в формате JSON. Попробуйте ещё раз или соберите слайды вручную — документ при этом не изменится.',
+  );
 }
 
 export async function processPresentationAiJob(env: WorkerEnv, data: PresentationAiPayload): Promise<void> {

@@ -156,9 +156,52 @@ describe('presentation', () => {
     expect(draft?.slides[0].body).toBe('тезис 1\nтезис 2\nтезис 3');
   });
 
+  it('recovers a draft where the model forgot a closing brace on a slide', () => {
+    const draft = parsePresentationAiDraft(
+      '{"title":"Квартал","subtitle":"эскиз","slides":[' +
+        '{"sourcePage":3,"layoutVariant":"image_top","title":"Проектные решения","body":["тезис 1","тезис 2"]},' +
+        '{"sourcePage":4,"layoutVariant":"image_top","title":"Благоустройство","body":["тезис 3"' +
+        ']},{"sourcePage":5,"layoutVariant":"image_right","title":"Смета","body":["тезис 4"]}]}',
+    );
+    expect(draft?.title).toBe('Квартал');
+    expect(draft?.slides.map((slide) => slide.title)).toEqual([
+      'Проектные решения',
+      'Благоустройство',
+      'Смета',
+    ]);
+    expect(draft?.slides[0].body).toBe('тезис 1\nтезис 2');
+    expect(draft?.slides[2].sourcePage).toBe(5);
+  });
+
+  it('recovers a draft with a trailing comma before the array closes', () => {
+    const draft = parsePresentationAiDraft(
+      '{"slides":[{"title":"Первый"},]}',
+    );
+    expect(draft?.slides).toHaveLength(1);
+    expect(draft?.slides[0].title).toBe('Первый');
+  });
+
+  it('recovers a draft truncated mid-object by the token limit', () => {
+    const draft = parsePresentationAiDraft(
+      '{"title":"Обрезано","slides":[{"title":"Первый","body":["тезис 1"]},{"title":"Второй","body":["тезис',
+    );
+    expect(draft?.title).toBe('Обрезано');
+    expect(draft?.slides).toHaveLength(2);
+    expect(draft?.slides[0].title).toBe('Первый');
+    expect(draft?.slides[1].title).toBe('Второй');
+  });
+
+  it('keeps unescaped newlines inside model strings instead of failing', () => {
+    const draft = parsePresentationAiDraft(
+      '{"slides":[{"title":"Первый","body":"строка 1\nстрока 2"}]}',
+    );
+    expect(draft?.slides[0].body).toBe('строка 1 строка 2');
+  });
+
   it('rejects malformed drafts instead of throwing', () => {
     expect(parsePresentationAiDraft('не json вовсе')).toBeNull();
     expect(parsePresentationAiDraft('{"slides":')).toBeNull();
     expect(parsePresentationAiDraft('{"title":"нет слайдов"}')).toBeNull();
+    expect(parsePresentationAiDraft('[1,2,3]')).toBeNull();
   });
 });
