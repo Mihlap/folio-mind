@@ -334,26 +334,29 @@ export function DocumentPresentationPanel({
     setDirty(true);
   }, []);
 
-  const addMediaSlide = useCallback((mediaAssetId: string) => {
-    setSlides((prev) =>
-      renumber([
-        ...prev,
-        {
-          position: prev.length,
-          title: null,
-          subtitle: null,
-          body: null,
-          notes: null,
-          layoutVariant: 'image_right',
-          background: null,
-          sourcePage: null,
-          mediaAssetId,
-        },
-      ]),
-    );
-    setSelectedIndex(slides.length);
-    setDirty(true);
-  }, [slides.length]);
+  const addMediaSlide = useCallback(
+    (mediaAssetId: string) => {
+      setSlides((prev) =>
+        renumber([
+          ...prev,
+          {
+            position: prev.length,
+            title: null,
+            subtitle: null,
+            body: null,
+            notes: null,
+            layoutVariant: 'image_right',
+            background: null,
+            sourcePage: null,
+            mediaAssetId,
+          },
+        ]),
+      );
+      setSelectedIndex(slides.length);
+      setDirty(true);
+    },
+    [slides.length],
+  );
 
   const selectSlide = useCallback((index: number) => {
     setSelectedIndex(index);
@@ -519,7 +522,7 @@ export function DocumentPresentationPanel({
         </button>
         <button
           type="button"
-          className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          className="rounded-md bg-folio-600 px-3 py-1.5 text-sm text-white hover:bg-folio-700 disabled:opacity-50"
           onClick={() => onPresent({ title, slides })}
           disabled={slides.length === 0}
         >
@@ -558,7 +561,9 @@ export function DocumentPresentationPanel({
                 <label
                   key={option.mode}
                   className={`flex cursor-pointer items-start gap-2 rounded border p-2 ${
-                    isChosen ? 'border-slate-900 bg-white' : 'border-slate-200 bg-white/60'
+                    isChosen
+                      ? 'border-folio-500 bg-folio-50'
+                      : 'border-slate-200 bg-white hover:border-folio-300'
                   } ${blocked ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
                   <input
@@ -583,7 +588,7 @@ export function DocumentPresentationPanel({
           </div>
           <button
             type="button"
-            className="mt-2 rounded-md border border-slate-400 bg-white px-3 py-1.5 text-sm disabled:opacity-50"
+            className="mt-2 rounded-md border border-folio-600 bg-folio-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-folio-700 disabled:opacity-50"
             onClick={() => void handleAi(aiChoice)}
             disabled={aiBusy || (aiChoice === 'advise' && slides.length === 0)}
           >
@@ -609,7 +614,7 @@ export function DocumentPresentationPanel({
                   key={page}
                   type="button"
                   title={`Добавить слайд со страницей ${page}`}
-                  className="flex aspect-[3/4] flex-col items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:border-slate-900"
+                  className="flex aspect-[3/4] flex-col items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 text-xs text-slate-600 transition-colors hover:border-folio-500 hover:bg-folio-50"
                   onClick={() => addSlide(page)}
                   disabled={!canEdit}
                 >
@@ -629,7 +634,7 @@ export function DocumentPresentationPanel({
                     key={asset.id}
                     type="button"
                     title={`Добавить слайд с файлом «${asset.title}»`}
-                    className="overflow-hidden rounded border border-slate-200 bg-slate-50 hover:border-slate-900"
+                    className="overflow-hidden rounded border border-slate-200 bg-slate-50 transition-colors hover:border-folio-500 hover:bg-folio-50"
                     onClick={() => addMediaSlide(asset.id)}
                     disabled={!canEdit}
                   >
@@ -642,6 +647,9 @@ export function DocumentPresentationPanel({
         </div>
 
         <div className="space-y-2">
+          <p className="hidden text-xs font-medium text-slate-700 lg:block">
+            Шаг 2. Нажмите на слайд, чтобы выбрать его
+          </p>
           {slides.map((slide, index) => (
             <div
               key={slide.id ?? `new-${index}`}
@@ -657,13 +665,13 @@ export function DocumentPresentationPanel({
               }}
               className={`flex cursor-pointer gap-3 rounded-md border-2 p-2 transition-colors ${
                 index === selectedIndex
-                  ? 'border-slate-900 bg-slate-50'
-                  : 'border-slate-200 hover:border-slate-400'
+                  ? 'border-folio-500 bg-folio-50'
+                  : 'border-slate-200 hover:border-folio-300 hover:bg-folio-50/40'
               }`}
             >
               <span
                 className={`w-6 shrink-0 pt-2 text-center text-xs font-semibold ${
-                  index === selectedIndex ? 'text-slate-900' : 'text-slate-500'
+                  index === selectedIndex ? 'text-folio-700' : 'text-slate-500'
                 }`}
               >
                 {index + 1}
@@ -739,7 +747,7 @@ export function DocumentPresentationPanel({
       ) : null}
 
       {selected ? (
-        <div className="space-y-3 rounded-md border-2 border-slate-900 p-3">
+        <div className="space-y-3 rounded-md border-2 border-folio-500 bg-folio-50/40 p-3">
           <p className="text-sm font-semibold text-slate-800">
             Шаг 2. Слайд {selectedIndex != null ? selectedIndex + 1 : ''} — оформление и текст
           </p>
@@ -753,10 +761,10 @@ export function DocumentPresentationPanel({
                 <button
                   key={layout}
                   type="button"
-                  className={`rounded border px-2 py-1 text-xs ${
+                  className={`rounded border px-2 py-1 text-xs transition-colors ${
                     selected.layoutVariant === layout
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-300'
+                      ? 'border-folio-600 bg-folio-600 text-white'
+                      : 'border-slate-300 hover:border-folio-300 hover:bg-folio-50'
                   }`}
                   title={LAYOUT_HINTS[layout]}
                   onClick={() => patchSelected({ layoutVariant: layout })}

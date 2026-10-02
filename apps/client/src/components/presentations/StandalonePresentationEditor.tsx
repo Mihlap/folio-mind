@@ -210,15 +210,21 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
     );
   }, []);
 
-  const patchSelected = useCallback((patch: Partial<PresentationSlideDraft>) => {
-    setSelectedIndex((index) => {
-      if (index == null) return index;
-      setSlides((prev) =>
-        prev.map((slide, i) => (i === index ? { ...slide, ...patch, position: i } : slide)),
-      );
-      return index;
-    });
+  const selectSlide = useCallback((index: number) => {
+    setSelectedIndex(index);
   }, []);
+
+  const patchSlide = useCallback((index: number, patch: Partial<PresentationSlideDraft>) => {
+    setSlides((prev) => prev.map((slide, i) => (i === index ? { ...slide, ...patch } : slide)));
+  }, []);
+
+  const patchSelected = useCallback(
+    (patch: Partial<PresentationSlideDraft>) => {
+      if (selectedIndex == null) return;
+      patchSlide(selectedIndex, patch);
+    },
+    [patchSlide, selectedIndex],
+  );
 
   const move = useCallback((from: number, to: number) => {
     setSlides((prev) => {
@@ -322,7 +328,7 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
         </button>
         <button
           type="button"
-          className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          className="rounded-md bg-folio-600 px-3 py-1.5 text-sm text-white hover:bg-folio-700 disabled:opacity-50"
           onClick={() => {
             setPresentPage(1);
             setPresented(true);
@@ -333,13 +339,16 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
         </button>
       </div>
 
-      {status ? <p className="text-xs text-slate-600">{status}</p> : null}
+      <p className="text-xs font-medium text-slate-700">
+        Шаг 2. Нажмите на слайд справа, чтобы выбрать его
+      </p>
+      {status ? <p className="text-xs text-slate-700">{status}</p> : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
         <div className="space-y-3">
           <button
             type="button"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm hover:border-slate-400"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm transition-colors hover:border-folio-500 hover:bg-folio-50"
             onClick={addBlankSlide}
           >
             + Пустой слайд
@@ -347,14 +356,14 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
 
           {mediaAssets.length > 0 ? (
             <div>
-              <p className="mb-1 text-xs font-medium text-slate-600">Медиатека</p>
+              <p className="text-xs font-medium text-slate-700">Или возьмите файл из медиатеки</p>
               <div className="grid grid-cols-3 gap-1.5">
                 {mediaAssets.map((asset) => (
                   <button
                     key={asset.id}
                     type="button"
                     title={asset.title}
-                    className="overflow-hidden rounded border border-slate-200 bg-slate-50 hover:border-slate-400"
+                    className="overflow-hidden rounded border border-slate-200 bg-slate-50 transition-colors hover:border-folio-500 hover:bg-folio-50"
                     onClick={() => addMediaSlide(asset.id)}
                   >
                     <MiniMediaThumb asset={asset} token={token ?? null} />
@@ -367,20 +376,39 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
 
         <div className="space-y-2">
           {slides.length === 0 ? (
-            <p className="rounded-md border border-dashed border-slate-300 p-3 text-sm leading-relaxed text-slate-500">
-              Соберите слайды: пустой слайд или файл из медиатеки.
-              <span className="mt-1 block">Порядок редактируется стрелками ↑ ↓.</span>
-            </p>
+            <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm leading-relaxed text-slate-600">
+              <p className="font-medium text-slate-800">Здесь появятся слайды</p>
+              <p className="mt-1">
+                Слайд — это одна страница презентации. Слева нажмите «+ Пустой слайд» или картинку
+                из медиатеки, и здесь появится первый слайд.
+              </p>
+            </div>
           ) : null}
 
           {slides.map((slide, index) => (
             <div
               key={slide.id ?? `new-${index}`}
-              className={`flex gap-3 rounded-md border p-2 ${
-                index === selectedIndex ? 'border-slate-900' : 'border-slate-200'
+              role="button"
+              tabIndex={0}
+              aria-pressed={index === selectedIndex}
+              onClick={() => selectSlide(index)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  selectSlide(index);
+                }
+              }}
+              className={`flex cursor-pointer gap-3 rounded-md border-2 p-2 transition-colors ${
+                index === selectedIndex
+                  ? 'border-folio-500 bg-folio-50'
+                  : 'border-slate-200 hover:border-folio-300 hover:bg-folio-50/40'
               }`}
             >
-              <span className="w-6 shrink-0 pt-2 text-center text-xs text-slate-500">
+              <span
+                className={`w-6 shrink-0 pt-2 text-center text-xs font-semibold ${
+                  index === selectedIndex ? 'text-folio-700' : 'text-slate-500'
+                }`}
+              >
                 {index + 1}
               </span>
               <div className="min-w-0 flex-1">
@@ -396,15 +424,18 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
                   placeholder="Заголовок"
                   value={slide.title ?? ''}
                   maxLength={200}
-                  onChange={(event) => patchSelected({ title: event.target.value })}
-                  onFocus={() => setSelectedIndex(index)}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => patchSlide(index, { title: event.target.value })}
                 />
               </div>
-              <div className="flex shrink-0 flex-col gap-1">
+              <div
+                className="flex shrink-0 flex-col gap-1"
+                onClick={(event) => event.stopPropagation()}
+              >
                 <button
                   type="button"
                   className="rounded border border-slate-200 px-1.5 text-xs disabled:opacity-40"
-                  title="Выше"
+                  title="Поднять выше"
                   onClick={() => move(index, index - 1)}
                   disabled={index === 0}
                 >
@@ -413,7 +444,7 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
                 <button
                   type="button"
                   className="rounded border border-slate-200 px-1.5 text-xs disabled:opacity-40"
-                  title="Ниже"
+                  title="Опустить ниже"
                   onClick={() => move(index, index + 1)}
                   disabled={index === slides.length - 1}
                 >
@@ -422,7 +453,7 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
                 <button
                   type="button"
                   className="rounded border border-red-200 px-1.5 text-xs text-red-600 disabled:opacity-40"
-                  title="Удалить"
+                  title="Удалить слайд"
                   onClick={() => removeSlide(index)}
                 >
                   ✕
@@ -434,8 +465,8 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
       </div>
 
       {selected ? (
-        <div className="space-y-2 rounded-md border border-slate-200 p-3">
-          <p className="text-xs font-medium text-slate-600">
+        <div className="space-y-2 rounded-md border-2 border-folio-500 bg-folio-50/40 p-3">
+          <p className="text-xs font-medium text-folio-800">
             Слайд {selectedIndex != null ? selectedIndex + 1 : ''}: оформление и текст
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -443,10 +474,10 @@ export function StandalonePresentationEditor({ presentationId }: Props) {
               <button
                 key={layout}
                 type="button"
-                className={`rounded border px-2 py-1 text-xs ${
+                className={`rounded border px-2 py-1 text-xs transition-colors ${
                   selected.layoutVariant === layout
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-300'
+                    ? 'border-folio-600 bg-folio-600 text-white'
+                    : 'border-slate-300 hover:border-folio-300 hover:bg-white'
                 }`}
                 onClick={() => patchSelected({ layoutVariant: layout })}
               >
