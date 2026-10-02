@@ -318,7 +318,7 @@ describe.skipIf(!runDbIntegration)('API /presentations', () => {
     expect(slides).toBe(0);
   });
 
-  it('keeps the presentation when the document is deleted', async () => {
+  it('deletes the presentation together with its document', async () => {
     const created = await createUserWithDocument(`present-cascade-${Date.now()}@folio-mind.test`);
     const save = await app.inject({
       method: 'PUT',
@@ -338,16 +338,42 @@ describe.skipIf(!runDbIntegration)('API /presentations', () => {
     const prisma = app.prisma;
     await prisma.document.delete({ where: { id: created.documentId } });
 
-    const kept = await prisma.presentation.findUnique({
+    const removed = await prisma.presentation.findUnique({
       where: { id: presentationId },
-      select: { documentId: true, versionId: true, slides: { select: { id: true } } },
+      select: { id: true },
     });
-    expect(kept).not.toBeNull();
-    expect(kept?.documentId).toBeNull();
-    expect(kept?.versionId).toBeNull();
-    expect(kept?.slides.length).toBe(1);
+    expect(removed).toBeNull();
 
-    await prisma.presentation.delete({ where: { id: presentationId } });
+    const orphanSlides = await prisma.presentationSlide.count({ where: { presentationId } });
+    expect(orphanSlides).toBe(0);
+  });
+
+  it('does not leak a deleted document presentation into the standalone list', async () => {
+    const created = await createUserWithDocument(`present-orphan-${Date.now()}@folio-mind.test`);
+    const save = await app.inject({
+      method: 'PUT',
+      url: '/presentations',
+      headers: { authorization: `Bearer ${created.token}` },
+      payload: {
+        documentId: created.documentId,
+        versionId: created.versionId,
+        title: 'Осиротевшая',
+        aiMode: 'none',
+        slides: [{ position: 0, title: 'Слайд', sourcePage: 1 }],
+      },
+    });
+    expect(save.statusCode).toBe(200);
+
+    await app.prisma.document.delete({ where: { id: created.documentId } });
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/presentations?standalone=1',
+      headers: { authorization: `Bearer ${created.token}` },
+    });
+    expect(list.statusCode).toBe(200);
+    const titles = (list.json() as { items: Presentation[] }).items.map((item) => item.title);
+    expect(titles).not.toContain('Осиротевшая');
   });
 });
 

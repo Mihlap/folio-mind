@@ -324,6 +324,7 @@ export const documentsApi = baseApi.injectEndpoints({
         { type: 'Documents', id: 'LIST' },
         { type: 'Projects', id: 'LIST' },
         { type: 'Projects' },
+        { type: 'Presentations', id: 'standalone:LIST' },
       ],
     }),
     deleteDocumentVersion: build.mutation<

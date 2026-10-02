@@ -205,9 +205,9 @@ model Presentation {
   tenantId   String
   tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   documentId String?
-  document   Document?           @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  document   Document?           @relation(fields: [documentId], references: [id], onDelete: Cascade)
   versionId  String?
-  version    DocumentVersion?    @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  version    DocumentVersion?    @relation(fields: [versionId], references: [id], onDelete: Cascade)
   title      String
   aiMode     String              @default("none")
   createdById String
