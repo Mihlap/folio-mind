@@ -27,6 +27,41 @@ const LAYOUT_LABELS: Record<PresentationSlideLayout, string> = {
   section: 'Разделитель',
 };
 
+const LAYOUT_HINTS: Record<PresentationSlideLayout, string> = {
+  title_only: 'Слайд без картинки: заголовок и тезисы.',
+  image_right: 'Картинка справа, текст слева.',
+  image_top: 'Картинка сверху, тезисы под ней.',
+  image_full: 'Картинка во весь слайд, текст поверх неё.',
+  section: 'Крупный заголовок без тезисов. Для перехода между частями.',
+};
+
+type AiModeOption = {
+  mode: PresentationAiRequestMode;
+  title: string;
+  description: string;
+};
+
+const AI_MODE_OPTIONS: AiModeOption[] = [
+  {
+    mode: 'author',
+    title: 'Написать с нуля',
+    description:
+      'ИИ сам прочитает документ и медиатеку и придумает слайды с заголовками и тезисами. Ваши слайды заменятся.',
+  },
+  {
+    mode: 'assemble',
+    title: 'Собрать из страниц',
+    description:
+      'ИИ разберёт текст документа и подберёт к нему страницы. Картинки будут из самого документа.',
+  },
+  {
+    mode: 'advise',
+    title: 'Улучшить текущие',
+    description:
+      'ИИ улучшит заголовки и тезисы уже собранных слайдов. Их количество и картинки не изменятся.',
+  },
+];
+
 const STORAGE_PREFIX = 'folio-presentation-draft:';
 
 type Props = {
@@ -139,9 +174,11 @@ export function DocumentPresentationPanel({
   const [exporting, setExporting] = useState(false);
   const [loadedVersion, setLoadedVersion] = useState<string | null>(null);
   const [aiMode, setAiMode] = useState<'none' | PresentationAiRequestMode>('none');
+  const [aiChoice, setAiChoice] = useState<PresentationAiRequestMode>('author');
   const [aiJobId, setAiJobId] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   const { data: aiJob } = useGetJobQuery(aiJobId!, {
     skip: !aiJobId,
@@ -241,6 +278,10 @@ export function DocumentPresentationPanel({
     if (draft) {
       setTitle(draft.title || documentTitle);
       setSlides(draft.slides);
+      setDirty(true);
+      setStatus(
+        'Показан черновик из этой вкладки браузера. Нажмите «Сохранить», чтобы он не пропал.',
+      );
       setLoadedVersion(versionId);
       return;
     }
@@ -253,6 +294,7 @@ export function DocumentPresentationPanel({
       setTitle(documentTitle);
       setSlides([]);
     }
+    setDirty(false);
     setLoadedVersion(versionId);
   }, [documentTitle, loadedVersion, query.data?.item, query.isLoading, versionId]);
 
@@ -289,6 +331,7 @@ export function DocumentPresentationPanel({
       ]),
     );
     setSelectedIndex((prev) => Math.max(0, prev ?? -1) + 1);
+    setDirty(true);
   }, []);
 
   const addMediaSlide = useCallback((mediaAssetId: string) => {
@@ -308,17 +351,26 @@ export function DocumentPresentationPanel({
         },
       ]),
     );
+    setSelectedIndex(slides.length);
+    setDirty(true);
+  }, [slides.length]);
+
+  const selectSlide = useCallback((index: number) => {
+    setSelectedIndex(index);
   }, []);
 
-  const patchSelected = useCallback((patch: Partial<PresentationSlideDraft>) => {
-    setSelectedIndex((index) => {
-      if (index == null) return index;
-      setSlides((prev) =>
-        prev.map((slide, i) => (i === index ? { ...slide, ...patch, position: i } : slide)),
-      );
-      return index;
-    });
+  const patchSlide = useCallback((index: number, patch: Partial<PresentationSlideDraft>) => {
+    setSlides((prev) => prev.map((slide, i) => (i === index ? { ...slide, ...patch } : slide)));
+    setDirty(true);
   }, []);
+
+  const patchSelected = useCallback(
+    (patch: Partial<PresentationSlideDraft>) => {
+      if (selectedIndex == null) return;
+      patchSlide(selectedIndex, patch);
+    },
+    [patchSlide, selectedIndex],
+  );
 
   const move = useCallback((from: number, to: number) => {
     setSlides((prev) => {
@@ -337,6 +389,7 @@ export function DocumentPresentationPanel({
       if (from > prev && to <= prev) return prev + 1;
       return prev;
     });
+    setDirty(true);
   }, []);
 
   const removeSlide = useCallback((index: number) => {
@@ -346,6 +399,7 @@ export function DocumentPresentationPanel({
       if (prev === index) return null;
       return prev > index ? prev - 1 : prev;
     });
+    setDirty(true);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -361,7 +415,8 @@ export function DocumentPresentationPanel({
         slides: renumber(slides),
       }).unwrap();
       clearDraft(versionId);
-      setStatus('Презентация сохранена');
+      setDirty(false);
+      setStatus('Презентация сохранена. Теперь её не потеряете при закрытии вкладки.');
     } catch {
       setStatus('Не удалось сохранить презентацию');
     } finally {
@@ -380,7 +435,11 @@ export function DocumentPresentationPanel({
         slides: renumber(slides),
       }).unwrap();
       const result = await exportPresentation({ documentId, versionId }).unwrap();
-      setStatus(`PDF создаётся в отдельном документе: ${result.documentId}`);
+      setDirty(false);
+      setStatus(
+        `Готово. PDF создаётся отдельным документом — найдите его в списке «Документы», он называется «${(title.trim() || documentTitle).slice(0, 40)} — PDF». Через минуту-две он будет готов.`,
+      );
+      void result;
     } catch {
       setStatus('Не удалось запустить экспорт в PDF');
     } finally {
@@ -409,6 +468,24 @@ export function DocumentPresentationPanel({
 
   return (
     <div className="space-y-4">
+      <ol className="space-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+        <li className="flex gap-2">
+          <span className="font-semibold">1.</span>
+          <span>Слева нажмите на страницу или файл — она добавится слайдом справа.</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-semibold">2.</span>
+          <span>Нажмите на слайд справа, чтобы выбрать его, и впишите заголовок и тезисы.</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-semibold">3.</span>
+          <span>
+            Нажмите «Сохранить». «Показать» — посмотреть на весь экран, «Экспорт в PDF» — получить
+            файл отдельным документом.
+          </span>
+        </li>
+      </ol>
+
       <div className="flex flex-wrap items-end gap-2">
         <label className="min-w-[200px] flex-1 text-sm">
           <span className="mb-1 block text-xs text-slate-500">Название презентации</span>
@@ -416,7 +493,10 @@ export function DocumentPresentationPanel({
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             value={title}
             maxLength={200}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) => {
+              setTitle(event.target.value);
+              setDirty(true);
+            }}
             disabled={!canEdit}
           />
         </label>
@@ -433,6 +513,7 @@ export function DocumentPresentationPanel({
           className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
           onClick={handleExport}
           disabled={!canEdit || exporting}
+          title="Создаёт отдельный документ с PDF-версией презентации"
         >
           {exporting ? 'Готовим PDF…' : 'Экспорт в PDF'}
         </button>
@@ -446,7 +527,13 @@ export function DocumentPresentationPanel({
         </button>
       </div>
 
-      {status ? <p className="text-xs text-slate-600">{status}</p> : null}
+      <p className="text-xs text-slate-600">
+        {slides.length === 0 ? 'Слайдов пока нет.' : `Слайдов: ${slides.length}.`}
+        {dirty
+          ? ' Есть несохранённые изменения — нажмите «Сохранить».'
+          : ' Все изменения сохранены.'}
+      </p>
+      {status ? <p className="text-xs text-slate-700">{status}</p> : null}
       {!canEdit ? (
         <p className="text-xs text-slate-500">У вас доступ только для просмотра.</p>
       ) : null}
@@ -455,59 +542,79 @@ export function DocumentPresentationPanel({
       ) : null}
 
       {canEdit ? (
-        <div className="space-y-2 rounded-md border border-slate-200 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-slate-600">ИИ-помощник</span>
-            <button
-              type="button"
-              className="rounded border border-slate-300 px-2.5 py-1 text-xs disabled:opacity-50"
-              title="Улучшить заголовки и тезисы готовых слайдов"
-              onClick={() => void handleAi('advise')}
-              disabled={aiBusy || slides.length === 0}
-            >
-              Совет
-            </button>
-            <button
-              type="button"
-              className="rounded border border-slate-300 px-2.5 py-1 text-xs disabled:opacity-50"
-              title="Собрать презентацию из страниц документа"
-              onClick={() => void handleAi('assemble')}
-              disabled={aiBusy}
-            >
-              Собрать
-            </button>
-            <button
-              type="button"
-              className="rounded border border-slate-300 px-2.5 py-1 text-xs disabled:opacity-50"
-              title="Написать презентацию по документу и медиатеке"
-              onClick={() => void handleAi('author')}
-              disabled={aiBusy}
-            >
-              Написать
-            </button>
-          </div>
-          <p className="text-[11px] text-slate-500">
-            Черновик ИИ применяется к слайдам — проверьте и нажмите «Сохранить».
+        <details className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-slate-700">
+            Не хочу собирать вручную — пусть сделает ИИ
+          </summary>
+          <p className="mt-1 mb-2 text-xs text-slate-600">
+            ИИ прочитает документ и подготовит черновик за 20–60 секунд. Слайды он заменит на свои —
+            поэтому сначала сохраните то, что уже собрали вручную.
           </p>
-          {aiError ? <p className="text-xs text-red-600">{aiError}</p> : null}
-        </div>
+          <div className="space-y-1.5">
+            {AI_MODE_OPTIONS.map((option) => {
+              const isChosen = aiChoice === option.mode;
+              const blocked = aiBusy || (option.mode === 'advise' && slides.length === 0);
+              return (
+                <label
+                  key={option.mode}
+                  className={`flex cursor-pointer items-start gap-2 rounded border p-2 ${
+                    isChosen ? 'border-slate-900 bg-white' : 'border-slate-200 bg-white/60'
+                  } ${blocked ? 'cursor-not-allowed opacity-50' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="presentation-ai-mode"
+                    className="mt-0.5"
+                    checked={isChosen}
+                    disabled={blocked}
+                    onChange={() => setAiChoice(option.mode)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium text-slate-800">{option.title}</span>
+                    <span className="block text-[11px] text-slate-600">
+                      {option.mode === 'advise' && slides.length === 0
+                        ? 'Сначала добавьте хотя бы один слайд вручную — этот режим улучшает готовые.'
+                        : option.description}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="mt-2 rounded-md border border-slate-400 bg-white px-3 py-1.5 text-sm disabled:opacity-50"
+            onClick={() => void handleAi(aiChoice)}
+            disabled={aiBusy || (aiChoice === 'advise' && slides.length === 0)}
+          >
+            {aiBusy ? 'ИИ работает…' : 'Собрать черновик'}
+          </button>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Черновик сразу заменит слайды. Посмотрите его и нажмите «Сохранить», если понравилось.
+          </p>
+          {aiError ? <p className="mt-1 text-xs text-red-600">{aiError}</p> : null}
+        </details>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
         <div className="space-y-3">
           <div>
-            <p className="mb-1 text-xs font-medium text-slate-600">Страницы документа</p>
+            <p className="text-xs font-medium text-slate-700">Шаг 1. Нажмите на страницу</p>
+            <p className="mb-1 text-[11px] text-slate-500">
+              Каждая страница станет отдельным слайдом. Нажимать можно сколько угодно раз.
+            </p>
             <div className="grid grid-cols-3 gap-1.5">
               {pageNumbers.map((page) => (
                 <button
                   key={page}
                   type="button"
-                  title={`Добавить страницу ${page}`}
-                  className="flex aspect-[3/4] flex-col items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:border-slate-400"
+                  title={`Добавить слайд со страницей ${page}`}
+                  className="flex aspect-[3/4] flex-col items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 text-xs text-slate-600 hover:border-slate-900"
                   onClick={() => addSlide(page)}
                   disabled={!canEdit}
                 >
                   <PageThumb page={page} url={previewUrlByPage.get(page)} />
+                  <span className="sr-only">Страница {page}</span>
                 </button>
               ))}
             </div>
@@ -515,14 +622,14 @@ export function DocumentPresentationPanel({
 
           {mediaAssets.length > 0 ? (
             <div>
-              <p className="mb-1 text-xs font-medium text-slate-600">Медиатека</p>
-              <div className="grid grid-cols-3 gap-1.5">
+              <p className="text-xs font-medium text-slate-700">Или возьмите файл из медиатеки</p>
+              <div className="mt-1 grid grid-cols-3 gap-1.5">
                 {mediaAssets.map((asset) => (
                   <button
                     key={asset.id}
                     type="button"
-                    title={asset.title}
-                    className="overflow-hidden rounded border border-slate-200 bg-slate-50 hover:border-slate-400"
+                    title={`Добавить слайд с файлом «${asset.title}»`}
+                    className="overflow-hidden rounded border border-slate-200 bg-slate-50 hover:border-slate-900"
                     onClick={() => addMediaSlide(asset.id)}
                     disabled={!canEdit}
                   >
@@ -538,11 +645,27 @@ export function DocumentPresentationPanel({
           {slides.map((slide, index) => (
             <div
               key={slide.id ?? `new-${index}`}
-              className={`flex gap-3 rounded-md border p-2 ${
-                index === selectedIndex ? 'border-slate-900' : 'border-slate-200'
+              role="button"
+              tabIndex={0}
+              aria-pressed={index === selectedIndex}
+              onClick={() => selectSlide(index)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  selectSlide(index);
+                }
+              }}
+              className={`flex cursor-pointer gap-3 rounded-md border-2 p-2 transition-colors ${
+                index === selectedIndex
+                  ? 'border-slate-900 bg-slate-50'
+                  : 'border-slate-200 hover:border-slate-400'
               }`}
             >
-              <span className="w-6 shrink-0 pt-2 text-center text-xs text-slate-500">
+              <span
+                className={`w-6 shrink-0 pt-2 text-center text-xs font-semibold ${
+                  index === selectedIndex ? 'text-slate-900' : 'text-slate-500'
+                }`}
+              >
                 {index + 1}
               </span>
               <div className="min-w-0 flex-1">
@@ -562,16 +685,19 @@ export function DocumentPresentationPanel({
                   placeholder="Заголовок"
                   value={slide.title ?? ''}
                   maxLength={200}
-                  onChange={(event) => patchSelected({ title: event.target.value })}
-                  onFocus={() => setSelectedIndex(index)}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => patchSlide(index, { title: event.target.value })}
                   disabled={!canEdit}
                 />
               </div>
-              <div className="flex shrink-0 flex-col gap-1">
+              <div
+                className="flex shrink-0 flex-col gap-1"
+                onClick={(event) => event.stopPropagation()}
+              >
                 <button
                   type="button"
                   className="rounded border border-slate-200 px-1.5 text-xs disabled:opacity-40"
-                  title="Выше"
+                  title="Поднять выше"
                   onClick={() => move(index, index - 1)}
                   disabled={!canEdit || index === 0}
                 >
@@ -580,7 +706,7 @@ export function DocumentPresentationPanel({
                 <button
                   type="button"
                   className="rounded border border-slate-200 px-1.5 text-xs disabled:opacity-40"
-                  title="Ниже"
+                  title="Опустить ниже"
                   onClick={() => move(index, index + 1)}
                   disabled={!canEdit || index === slides.length - 1}
                 >
@@ -589,7 +715,7 @@ export function DocumentPresentationPanel({
                 <button
                   type="button"
                   className="rounded border border-red-200 px-1.5 text-xs text-red-600 disabled:opacity-40"
-                  title="Удалить"
+                  title="Удалить слайд"
                   onClick={() => removeSlide(index)}
                   disabled={!canEdit}
                 >
@@ -602,34 +728,50 @@ export function DocumentPresentationPanel({
       </div>
 
       {slides.length === 0 ? (
-        <p className="rounded-md border border-dashed border-slate-300 p-3 text-sm leading-relaxed text-slate-500">
-          Соберите слайды: выберите страницу слева или файл из медиатеки.
-          <span className="mt-1 block">Порядок редактируется стрелками ↑ ↓.</span>
-        </p>
+        <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm leading-relaxed text-slate-600">
+          <p className="font-medium text-slate-800">Здесь появятся слайды</p>
+          <p className="mt-1">
+            Слайд — это одна страница презентации. Начните слева: нажмите на любую страницу
+            документа, и здесь появится первый слайд.
+          </p>
+          <p className="mt-1">Не хотите вручную? Ниже есть кнопка, где ИИ соберёт черновик сам.</p>
+        </div>
       ) : null}
 
       {selected ? (
-        <div className="space-y-2 rounded-md border border-slate-200 p-3">
-          <p className="text-xs font-medium text-slate-600">
-            Слайд {selectedIndex != null ? selectedIndex + 1 : ''}: оформление и текст
+        <div className="space-y-3 rounded-md border-2 border-slate-900 p-3">
+          <p className="text-sm font-semibold text-slate-800">
+            Шаг 2. Слайд {selectedIndex != null ? selectedIndex + 1 : ''} — оформление и текст
           </p>
-          <div className="flex flex-wrap gap-1.5">
-            {PRESENTATION_SLIDE_LAYOUTS.map((layout) => (
-              <button
-                key={layout}
-                type="button"
-                className={`rounded border px-2 py-1 text-xs ${
-                  selected.layoutVariant === layout
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-300'
-                }`}
-                onClick={() => patchSelected({ layoutVariant: layout })}
-                disabled={!canEdit}
-              >
-                {LAYOUT_LABELS[layout]}
-              </button>
-            ))}
+          <p className="text-[11px] text-slate-500">
+            Это выбранный вами слайд. Что вы напишете здесь, попадёт только в него.
+          </p>
+          <div>
+            <p className="mb-1 text-xs font-medium text-slate-700">Как выглядит слайд</p>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESENTATION_SLIDE_LAYOUTS.map((layout) => (
+                <button
+                  key={layout}
+                  type="button"
+                  className={`rounded border px-2 py-1 text-xs ${
+                    selected.layoutVariant === layout
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-300'
+                  }`}
+                  title={LAYOUT_HINTS[layout]}
+                  onClick={() => patchSelected({ layoutVariant: layout })}
+                  disabled={!canEdit}
+                >
+                  {LAYOUT_LABELS[layout]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {LAYOUT_HINTS[selected.layoutVariant as PresentationSlideLayout] ??
+                LAYOUT_HINTS.image_top}
+            </p>
           </div>
+          <p className="text-xs font-medium text-slate-700">Текст слайда</p>
           <input
             className="w-full rounded border border-slate-200 px-2 py-1 text-sm"
             placeholder="Подзаголовок"
